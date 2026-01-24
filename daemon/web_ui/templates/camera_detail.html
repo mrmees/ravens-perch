@@ -162,7 +162,7 @@
                 <!-- Encoder -->
                 <div class="form-group">
                     <label for="encoder">Encoder</label>
-                    <select id="encoder" name="encoder">
+                    <select id="encoder" name="encoder" onchange="updateEncoderWarning(this)">
                         <option value="libx264"
                                 {% if camera.settings and camera.settings.encoder == 'libx264' %}selected{% endif %}>
                             Software (libx264)
@@ -176,7 +176,7 @@
                         {% if encoders.rkmpp %}
                         <option value="h264_rkmpp"
                                 {% if camera.settings and camera.settings.encoder == 'h264_rkmpp' %}selected{% endif %}>
-                            RKMPP (Rockchip)
+                            RKMPP (Rockchip) - Experimental
                         </option>
                         {% endif %}
                         {% if encoders.v4l2m2m %}
@@ -186,6 +186,10 @@
                         </option>
                         {% endif %}
                     </select>
+                    <p class="form-help encoder-warning" id="rkmpp-warning" style="display: none; color: var(--warning);">
+                        Warning: Rockchip RKMPP encoding has limited support and may not work reliably.
+                        If you experience issues, switch to Software (libx264).
+                    </p>
                 </div>
 
                 <!-- Bitrate -->
@@ -307,5 +311,21 @@
             previewImage.src = src + '?t=' + Date.now();
         }, 2000);
     }
+
+    // Show/hide RKMPP warning based on encoder selection
+    function updateEncoderWarning(select) {
+        const warning = document.getElementById('rkmpp-warning');
+        if (warning) {
+            warning.style.display = select.value === 'h264_rkmpp' ? 'block' : 'none';
+        }
+    }
+
+    // Check initial encoder selection on page load
+    document.addEventListener('DOMContentLoaded', function() {
+        const encoderSelect = document.getElementById('encoder');
+        if (encoderSelect) {
+            updateEncoderWarning(encoderSelect);
+        }
+    });
 </script>
 {% endblock %}

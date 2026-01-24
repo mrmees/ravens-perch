@@ -1084,3 +1084,27 @@ a:hover {
     display: inline-block;
     width: 1em;
 }
+
+.recommendation-note {
+    margin-top: 0.75rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--border-color);
+    font-size: 0.85rem;
+    color: var(--warning);
+    font-style: italic;
+}
+
+/* Help warning box */
+.help-warning {
+    background-color: rgba(255, 152, 0, 0.1);
+    border: 1px solid var(--warning);
+    border-radius: var(--radius-sm);
+    padding: 1rem;
+    margin-top: 1rem;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.help-warning strong {
+    color: var(--warning);
+}

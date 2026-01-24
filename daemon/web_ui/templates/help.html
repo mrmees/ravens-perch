@@ -224,10 +224,10 @@
                             <td>Intel/AMD GPUs</td>
                         </tr>
                         <tr>
-                            <td><strong>RKMPP</strong></td>
+                            <td><strong>RKMPP</strong> <span class="impact-medium">(Experimental)</span></td>
                             <td class="impact-low">Very Low</td>
                             <td>Good</td>
-                            <td>Rockchip SoCs</td>
+                            <td>Rockchip SoCs (limited support)</td>
                         </tr>
                         <tr>
                             <td><strong>V4L2M2M</strong></td>
@@ -255,6 +255,15 @@
                     slightly lower than software encoding but usually imperceptible for
                     monitoring. <strong>Strongly recommended</strong> if your hardware supports it.
                 </p>
+            </div>
+
+            <div class="help-warning">
+                <strong>Warning - Rockchip RKMPP:</strong> Hardware encoding on Rockchip SoCs
+                (RKMPP) has limited support in FFmpeg and may not work reliably. Common issues
+                include streams failing to start, color problems, or crashes. If you're using
+                a Rockchip device (like Orange Pi, Rock Pi, etc.) and experience issues with
+                RKMPP, switch to Software (libx264) encoding instead. While software encoding
+                uses more CPU, it is significantly more reliable on these platforms.
             </div>
 
             <div class="help-tip">
@@ -350,11 +359,15 @@
                 <h4>Rockchip SBC (RK3588, etc.)</h4>
                 <ul>
                     <li>Format: MJPEG</li>
-                    <li>Resolution: 1920x1080</li>
+                    <li>Resolution: 1280x720 or 1920x1080</li>
                     <li>Frame Rate: 30 fps</li>
-                    <li>Encoder: RKMPP</li>
+                    <li>Encoder: libx264 (recommended) - RKMPP has poor support</li>
                     <li>Bitrate: 4-6 Mbps</li>
                 </ul>
+                <p class="recommendation-note">
+                    Note: RKMPP hardware encoding is experimental and may not work.
+                    Use software encoding (libx264) for reliable operation.
+                </p>
             </div>
 
             <div class="recommendation-card">
