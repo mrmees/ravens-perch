@@ -33,12 +33,15 @@ except (ImportError, OSError):
     TURBOJPEG_AVAILABLE = False
     logger.warning("TurboJPEG not available - using PIL for JPEG encoding")
 
+# Try PIL as fallback for JPEG encoding
+PIL_AVAILABLE = False
 if not TURBOJPEG_AVAILABLE:
     try:
         from PIL import Image
         PIL_AVAILABLE = True
     except ImportError:
         PIL_AVAILABLE = False
+        logger.warning("PIL not available - placeholder images will be minimal")
 
 
 @dataclass
