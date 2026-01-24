@@ -143,18 +143,24 @@ create_directories() {
     mkdir -p "${INSTALL_DIR}/mediamtx"
     mkdir -p "${INSTALL_DIR}/data"
     mkdir -p "${INSTALL_DIR}/logs"
-    mkdir -p "${INSTALL_DIR}/daemon"
 
     log_success "Directories created"
 }
 
-# Copy source files
+# Copy source files (only if running from different location)
 copy_source_files() {
-    log_info "Copying source files..."
-
     local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
+    # Skip if already in install directory
+    if [ "${script_dir}" = "${INSTALL_DIR}" ]; then
+        log_info "Running from install directory, skipping file copy"
+        return
+    fi
+
+    log_info "Copying source files..."
+
     # Copy daemon module
+    mkdir -p "${INSTALL_DIR}/daemon"
     cp -r "${script_dir}/daemon"/* "${INSTALL_DIR}/daemon/"
 
     # Copy requirements
