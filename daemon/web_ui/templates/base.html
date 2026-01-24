@@ -11,7 +11,10 @@
 <body>
     <nav class="navbar">
         <div class="nav-brand">
-            <a href="{{ url_for('cameras.dashboard') }}">Ravens Perch</a>
+            <a href="{{ url_for('cameras.dashboard') }}">
+                <img src="{{ url_for('static', filename='img/logo.png') }}" alt="Ravens Perch" class="nav-logo">
+                <span>Ravens Perch</span>
+            </a>
         </div>
         <div class="nav-links">
             <a href="{{ url_for('cameras.dashboard') }}" class="{% if request.endpoint == 'cameras.dashboard' %}active{% endif %}">Cameras</a>
