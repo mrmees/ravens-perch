@@ -252,6 +252,45 @@ def is_stream_active(camera_id: str) -> bool:
     return status.get('ready', False)
 
 
+def scale_bitrate(resolution: str, base_bitrate: str) -> str:
+    """
+    Scale bitrate based on actual resolution to avoid wasting bandwidth.
+
+    Base bitrates are calibrated for 1080p. Scale down proportionally.
+    """
+    try:
+        width, height = map(int, resolution.split('x'))
+        pixels = width * height
+
+        # Reference: 1080p = 1920x1080 = 2,073,600 pixels
+        reference_pixels = 1920 * 1080
+
+        # Parse base bitrate (e.g., "6M" -> 6.0, "500K" -> 0.5)
+        base = base_bitrate.upper().strip()
+        if base.endswith('M'):
+            base_value = float(base[:-1])
+        elif base.endswith('K'):
+            base_value = float(base[:-1]) / 1000
+        else:
+            base_value = float(base) / 1000000
+
+        # Scale proportionally with a minimum floor
+        scale = pixels / reference_pixels
+        scaled_value = base_value * scale
+
+        # Minimum 500K, maximum is the base bitrate
+        scaled_value = max(0.5, min(scaled_value, base_value))
+
+        # Format output
+        if scaled_value >= 1.0:
+            return f"{scaled_value:.1f}M".replace('.0M', 'M')
+        else:
+            return f"{int(scaled_value * 1000)}K"
+
+    except (ValueError, ZeroDivisionError):
+        return base_bitrate
+
+
 def build_ffmpeg_command(
     device_path: str,
     settings: Dict,
@@ -300,12 +339,12 @@ def build_ffmpeg_command(
     elif rotation == 270:
         filters.append("transpose=2")
 
-    # Pixel format conversion for hardware encoders
+    # Pixel format conversion
     if encoder_type == 'h264_vaapi':
         filters.append("format=nv12")
         filters.append("hwupload")
-    elif input_format == 'mjpeg':
-        # MJPEG needs format conversion
+    else:
+        # Convert to yuv420p for compatibility - most players can't decode 4:2:2
         filters.append("format=yuv420p")
 
     if filters:
@@ -322,7 +361,8 @@ def build_ffmpeg_command(
         )
 
     # Encoder settings - use 'or' to handle None values
-    bitrate = settings.get('bitrate') or '4M'
+    base_bitrate = settings.get('bitrate') or '4M'
+    bitrate = scale_bitrate(resolution, base_bitrate)
 
     if encoder_type == 'libx264':
         preset = settings.get('preset') or 'ultrafast'
