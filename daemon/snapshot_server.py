@@ -26,11 +26,12 @@ except ImportError:
     logger.warning("PyAV not available - snapshots will use fallback method")
 
 try:
-    from turbojpeg import TurboJPEG
+    from turbojpeg import TurboJPEG, TJPF_RGB
     jpeg = TurboJPEG()
     TURBOJPEG_AVAILABLE = True
 except (ImportError, OSError):
     TURBOJPEG_AVAILABLE = False
+    TJPF_RGB = None
     logger.warning("TurboJPEG not available - using PIL for JPEG encoding")
 
 # Try PIL as fallback for JPEG encoding
@@ -158,8 +159,7 @@ def encode_jpeg(rgb_array, width: int, height: int, quality: int = 85) -> Option
     """Encode RGB array to JPEG bytes."""
     try:
         if TURBOJPEG_AVAILABLE:
-            # TurboJPEG expects BGR, but we have RGB - it handles this
-            return jpeg.encode(rgb_array, quality=quality)
+            return jpeg.encode(rgb_array, quality=quality, pixel_format=TJPF_RGB)
 
         elif PIL_AVAILABLE:
             from PIL import Image
