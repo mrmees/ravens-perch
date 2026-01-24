@@ -658,27 +658,34 @@ def api_get_controls(camera_id: int):
             return '<p class="form-help">Camera not connected</p>'
         return jsonify({'error': 'Camera not connected'}), 400
 
-    # Get available controls from the camera
-    controls = get_v4l2_controls(camera['device_path'])
+    try:
+        # Get available controls from the camera
+        controls = get_v4l2_controls(camera['device_path'])
 
-    # Get saved control values from database
-    settings = get_camera_settings(camera_id)
-    saved_controls = settings.get('v4l2_controls', {}) if settings else {}
+        # Get saved control values from database
+        settings = get_camera_settings(camera_id)
+        saved_controls = settings.get('v4l2_controls', {}) if settings else {}
 
-    # Merge saved values with available controls
-    for name, info in controls.items():
-        if name in saved_controls:
-            info['saved'] = saved_controls[name]
+        # Merge saved values with available controls
+        for name, info in controls.items():
+            if name in saved_controls:
+                info['saved'] = saved_controls[name]
 
-    # Return HTML for HTMX requests
-    if request.headers.get('HX-Request'):
-        if not controls:
-            return '<p class="form-help">No adjustable controls available for this camera.</p>'
-        return render_template('partials/v4l2_controls.html',
-                             camera_id=camera_id,
-                             controls=controls)
+        # Return HTML for HTMX requests
+        if request.headers.get('HX-Request'):
+            if not controls:
+                return '<p class="form-help">No adjustable controls available for this camera.</p>'
+            return render_template('partials/v4l2_controls.html',
+                                 camera_id=camera_id,
+                                 controls=controls)
 
-    return jsonify(controls)
+        return jsonify(controls)
+
+    except Exception as e:
+        logger.error(f"Error getting V4L2 controls: {e}")
+        if request.headers.get('HX-Request'):
+            return f'<p class="form-help" style="color: var(--error);">Error loading controls: {e}</p>'
+        return jsonify({'error': str(e)}), 500
 
 
 @bp.route('/api/controls/<int:camera_id>/<control_name>', methods=['POST'])

@@ -234,7 +234,7 @@
             </p>
             <div id="v4l2-controls"
                  hx-get="{{ url_for('cameras.api_get_controls', camera_id=camera.id) }}"
-                 hx-trigger="revealed"
+                 hx-trigger="load"
                  hx-swap="innerHTML">
                 <div class="loading-controls">Loading camera controls...</div>
             </div>
