@@ -271,10 +271,10 @@ def build_ffmpeg_command(
     """
     cmd_parts = ["ffmpeg", "-hide_banner", "-loglevel", "warning"]
 
-    # Input format
-    input_format = settings.get('format', 'mjpeg')
-    resolution = settings.get('resolution', '1280x720')
-    framerate = settings.get('framerate', 30)
+    # Input format - use 'or' to handle None values
+    input_format = settings.get('format') or 'mjpeg'
+    resolution = settings.get('resolution') or '1280x720'
+    framerate = settings.get('framerate') or 30
 
     # V4L2 input options
     cmd_parts.extend([
@@ -288,8 +288,8 @@ def build_ffmpeg_command(
     # Video filters
     filters = []
 
-    # Rotation
-    rotation = settings.get('rotation', 0)
+    # Rotation - use 'or' to handle None values
+    rotation = settings.get('rotation') or 0
     if rotation == 90:
         filters.append("transpose=1")
     elif rotation == 180:
@@ -318,11 +318,11 @@ def build_ffmpeg_command(
             cmd_parts[4:]  # Skip the initial ffmpeg command
         )
 
-    # Encoder settings
-    bitrate = settings.get('bitrate', '4M')
+    # Encoder settings - use 'or' to handle None values
+    bitrate = settings.get('bitrate') or '4M'
 
     if encoder_type == 'libx264':
-        preset = settings.get('preset', 'ultrafast')
+        preset = settings.get('preset') or 'ultrafast'
         cmd_parts.extend([
             "-c:v", "libx264",
             "-preset", preset,
