@@ -7,7 +7,10 @@ from typing import Optional, Dict, List, Tuple, Any
 
 import requests
 
-from .config import MOONRAKER_DEFAULT_URL, MOONRAKER_FALLBACK_URLS, MEDIAMTX_WEBRTC_PORT
+from .config import (
+    MOONRAKER_DEFAULT_URL, MOONRAKER_FALLBACK_URLS,
+    MEDIAMTX_WEBRTC_PORT, WEB_UI_PORT
+)
 
 logger = logging.getLogger(__name__)
 
@@ -373,12 +376,12 @@ def build_snapshot_url(camera_id: str, host: Optional[str] = None) -> str:
     Build snapshot URL for a camera.
 
     Uses the system IP if host is not provided.
+    Connects directly to the Flask app port to avoid nginx dependency.
     """
     if host is None:
         host = get_system_ip()
 
-    # This goes through nginx at /cameras/snapshot/
-    return f"http://{host}/cameras/snapshot/{camera_id}.jpg"
+    return f"http://{host}:{WEB_UI_PORT}/cameras/snapshot/{camera_id}.jpg"
 
 
 # ============ Server Info ============
