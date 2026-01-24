@@ -9,7 +9,7 @@ import requests
 
 from .config import (
     MEDIAMTX_API_BASE, MEDIAMTX_RTSP_PORT, MEDIAMTX_WEBRTC_PORT,
-    ENCODER_DEFAULTS, FFMPEG_INPUT_FORMATS
+    ENCODER_DEFAULTS, FFMPEG_INPUT_FORMATS, WEB_UI_PORT
 )
 
 logger = logging.getLogger(__name__)
@@ -368,7 +368,8 @@ def get_stream_urls(camera_id: str, host: str = "127.0.0.1") -> Dict[str, str]:
     Returns: {
         'rtsp': 'rtsp://...',
         'webrtc': 'http://...',
-        'hls': 'http://...'
+        'hls': 'http://...',
+        'snapshot': 'http://...'
     }
     """
     path_name = camera_id.replace(' ', '_').lower()
@@ -377,6 +378,7 @@ def get_stream_urls(camera_id: str, host: str = "127.0.0.1") -> Dict[str, str]:
         'rtsp': f"rtsp://{host}:{MEDIAMTX_RTSP_PORT}/{path_name}",
         'webrtc': f"http://{host}:{MEDIAMTX_WEBRTC_PORT}/{path_name}/",
         'hls': f"http://{host}:8888/{path_name}/",
+        'snapshot': f"http://{host}:{WEB_UI_PORT}/cameras/snapshot/{camera_id}.jpg",
     }
 
 
