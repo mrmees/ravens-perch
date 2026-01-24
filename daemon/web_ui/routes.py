@@ -99,6 +99,15 @@ def scan_cameras():
             save_camera_settings(camera_id, settings)
             save_camera_capabilities(camera_id, capabilities)
 
+            # Start the stream
+            ffmpeg_cmd = build_ffmpeg_command(
+                device_path,
+                settings,
+                str(camera_id),
+                settings.get('encoder', 'libx264')
+            )
+            add_or_update_stream(str(camera_id), ffmpeg_cmd)
+
             # Register with Moonraker
             if moonraker_available():
                 camera = get_camera_by_id(camera_id)
