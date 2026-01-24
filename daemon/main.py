@@ -260,6 +260,11 @@ class RavensPerchDaemon:
         logger.info(f"Camera connected: {device_info.hardware_name} at {device_info.path}")
 
         try:
+            # Check if camera is on the ignore list
+            if db.is_camera_ignored(device_info.hardware_id):
+                logger.info(f"Camera {device_info.hardware_name} is ignored, skipping")
+                return
+
             # Check if camera exists in database
             camera = db.get_camera_by_hardware_id(device_info.hardware_id)
 

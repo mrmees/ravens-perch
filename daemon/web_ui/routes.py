@@ -12,15 +12,17 @@ from ..db import (
     get_camera_with_settings, get_camera_by_id,
     update_camera, save_camera_settings, get_camera_settings,
     get_camera_capabilities, get_logs, get_all_settings,
-    set_setting, add_log
+    set_setting, add_log, delete_camera_completely,
+    ignore_camera, unignore_camera, get_ignored_cameras, is_camera_ignored
 )
 from ..snapshot_server import grab_snapshot, get_placeholder_image
 from ..stream_manager import (
     build_ffmpeg_command, add_or_update_stream, get_stream_urls,
-    is_stream_active, restart_stream
+    is_stream_active, restart_stream, remove_stream
 )
 from ..moonraker_client import (
     register_camera, update_camera as update_moonraker_camera,
+    unregister_camera as unregister_moonraker_camera,
     build_stream_url, build_snapshot_url, get_system_ip, is_available as moonraker_available
 )
 from ..hardware import estimate_cpu_capability, detect_encoders, get_platform_info
@@ -237,6 +239,80 @@ def restart_camera_stream(camera_id: int):
 
     flash(message, "success" if success else "error")
     return redirect(url_for('cameras.camera_detail', camera_id=camera_id))
+
+
+@bp.route('/<int:camera_id>/delete', methods=['POST'])
+def delete_camera(camera_id: int):
+    """Delete a camera from the database."""
+    camera = get_camera_by_id(camera_id)
+    if not camera:
+        flash("Camera not found", "error")
+        return redirect(url_for('cameras.dashboard'))
+
+    camera_name = camera['friendly_name']
+    hardware_id = camera.get('hardware_id')
+
+    # Stop stream if running
+    if camera['connected']:
+        remove_stream(str(camera_id))
+
+    # Unregister from Moonraker
+    if camera.get('moonraker_uid'):
+        unregister_moonraker_camera(camera['moonraker_uid'])
+
+    # Check if we should also ignore
+    also_ignore = request.form.get('also_ignore') == 'true'
+
+    # Delete from database
+    success, deleted_hardware_id = delete_camera_completely(camera_id)
+
+    if success:
+        add_log("INFO", f"Deleted camera: {camera_name}")
+
+        if also_ignore and deleted_hardware_id:
+            ignore_camera(deleted_hardware_id, camera_name, "Deleted by user")
+            flash(f"Camera '{camera_name}' deleted and added to ignore list", "success")
+        else:
+            flash(f"Camera '{camera_name}' deleted", "success")
+    else:
+        flash("Failed to delete camera", "error")
+
+    return redirect(url_for('cameras.dashboard'))
+
+
+@bp.route('/<int:camera_id>/ignore', methods=['POST'])
+def ignore_camera_route(camera_id: int):
+    """Delete a camera and add it to the ignore list."""
+    camera = get_camera_by_id(camera_id)
+    if not camera:
+        flash("Camera not found", "error")
+        return redirect(url_for('cameras.dashboard'))
+
+    camera_name = camera['friendly_name']
+    hardware_id = camera.get('hardware_id')
+
+    # Stop stream if running
+    if camera['connected']:
+        remove_stream(str(camera_id))
+
+    # Unregister from Moonraker
+    if camera.get('moonraker_uid'):
+        unregister_moonraker_camera(camera['moonraker_uid'])
+
+    # Add to ignore list first
+    if hardware_id:
+        ignore_camera(hardware_id, camera_name, "Ignored by user")
+
+    # Delete from database
+    success, _ = delete_camera_completely(camera_id)
+
+    if success:
+        add_log("INFO", f"Ignored camera: {camera_name}")
+        flash(f"Camera '{camera_name}' will now be ignored", "success")
+    else:
+        flash("Failed to ignore camera", "error")
+
+    return redirect(url_for('cameras.dashboard'))
 
 
 # ============ Snapshots ============

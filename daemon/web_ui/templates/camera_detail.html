@@ -251,6 +251,32 @@
                 <dd>{{ camera.last_seen }}</dd>
             </dl>
         </div>
+
+        <!-- Danger Zone -->
+        <div class="settings-card danger-zone">
+            <h3>Danger Zone</h3>
+            <p class="danger-text">These actions cannot be undone.</p>
+
+            <div class="danger-actions">
+                <form action="{{ url_for('cameras.delete_camera', camera_id=camera.id) }}"
+                      method="POST"
+                      onsubmit="return confirm('Are you sure you want to delete this camera? This cannot be undone.');">
+                    <button type="submit" class="btn btn-danger">
+                        Delete Camera
+                    </button>
+                    <span class="action-help">Remove camera from database. It will be re-added if reconnected.</span>
+                </form>
+
+                <form action="{{ url_for('cameras.ignore_camera_route', camera_id=camera.id) }}"
+                      method="POST"
+                      onsubmit="return confirm('Are you sure you want to ignore this camera? It will never be detected again until removed from the ignore list.');">
+                    <button type="submit" class="btn btn-danger">
+                        Ignore Camera
+                    </button>
+                    <span class="action-help">Delete and add to ignore list. Camera will not be auto-detected again.</span>
+                </form>
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}

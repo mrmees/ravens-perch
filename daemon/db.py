@@ -6,7 +6,7 @@ import json
 import logging
 from datetime import datetime
 from pathlib import Path
-from typing import Optional, Dict, List, Any
+from typing import Optional, Dict, List, Any, Tuple
 from contextlib import contextmanager
 
 from .config import DATABASE_PATH, DATA_DIR
@@ -99,6 +99,17 @@ def init_db():
                 level TEXT,
                 message TEXT,
                 camera_id INTEGER REFERENCES cameras(id) ON DELETE SET NULL
+            )
+        """)
+
+        # Ignored cameras table (blacklist)
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS ignored_cameras (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                hardware_id TEXT UNIQUE NOT NULL,
+                hardware_name TEXT,
+                reason TEXT,
+                ignored_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         """)
 
@@ -460,3 +471,77 @@ def get_all_cameras_with_settings(connected_only: bool = False) -> List[Dict]:
     for camera in cameras:
         camera['settings'] = get_camera_settings(camera['id'])
     return cameras
+
+
+# ============ Ignored Cameras Functions ============
+
+def is_camera_ignored(hardware_id: str) -> bool:
+    """Check if a hardware ID is in the ignore list."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "SELECT id FROM ignored_cameras WHERE hardware_id = ?",
+            (hardware_id,)
+        )
+        return cursor.fetchone() is not None
+
+
+def ignore_camera(hardware_id: str, hardware_name: str = None, reason: str = None) -> bool:
+    """Add a camera to the ignore list."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        try:
+            cursor.execute("""
+                INSERT INTO ignored_cameras (hardware_id, hardware_name, reason)
+                VALUES (?, ?, ?)
+            """, (hardware_id, hardware_name, reason))
+            conn.commit()
+            logger.info(f"Added camera to ignore list: {hardware_id}")
+            return True
+        except sqlite3.IntegrityError:
+            # Already ignored
+            return True
+
+
+def unignore_camera(hardware_id: str) -> bool:
+    """Remove a camera from the ignore list."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute(
+            "DELETE FROM ignored_cameras WHERE hardware_id = ?",
+            (hardware_id,)
+        )
+        conn.commit()
+        return cursor.rowcount > 0
+
+
+def get_ignored_cameras() -> List[Dict]:
+    """Get all ignored cameras."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM ignored_cameras ORDER BY ignored_at DESC")
+        return [dict(row) for row in cursor.fetchall()]
+
+
+def delete_camera_completely(camera_id: int) -> Tuple[bool, Optional[str]]:
+    """
+    Delete a camera and all related data completely.
+
+    Returns: (success, hardware_id) - hardware_id for optional ignore list
+    """
+    camera = get_camera_by_id(camera_id)
+    if not camera:
+        return False, None
+
+    hardware_id = camera.get('hardware_id')
+
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        # Delete camera (cascades to settings and capabilities)
+        cursor.execute("DELETE FROM cameras WHERE id = ?", (camera_id,))
+        conn.commit()
+
+        if cursor.rowcount > 0:
+            logger.info(f"Deleted camera {camera_id} ({hardware_id})")
+            return True, hardware_id
+        return False, None
