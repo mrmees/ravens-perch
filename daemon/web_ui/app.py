@@ -2,19 +2,26 @@
 Ravens Perch - Flask Web Application
 """
 import logging
+import os
+import traceback
 from flask import Flask
 
 from ..config import WEB_UI_HOST, WEB_UI_PORT
 
 logger = logging.getLogger(__name__)
 
+# Get absolute paths for templates and static files
+_THIS_DIR = os.path.dirname(os.path.abspath(__file__))
+_TEMPLATE_DIR = os.path.join(_THIS_DIR, 'templates')
+_STATIC_DIR = os.path.join(_THIS_DIR, 'static')
+
 
 def create_app():
     """Create and configure the Flask application."""
     app = Flask(
         __name__,
-        template_folder='templates',
-        static_folder='static',
+        template_folder=_TEMPLATE_DIR,
+        static_folder=_STATIC_DIR,
         static_url_path='/cameras/static'
     )
 
@@ -34,6 +41,7 @@ def create_app():
     @app.errorhandler(500)
     def server_error(e):
         logger.error(f"Server error: {e}")
+        logger.error(traceback.format_exc())
         return {"error": "Internal server error"}, 500
 
     return app
