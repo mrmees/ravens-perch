@@ -75,6 +75,7 @@ FORMAT_ALIASES = {
 # These are the actual format names FFmpeg expects for V4L2 input
 FFMPEG_INPUT_FORMATS = {
     "mjpeg": "mjpeg",
+    "mjpg": "mjpeg",        # Alias in case FourCC wasn't normalized
     "h264": "h264",
     "yuyv": "yuyv422",      # FFmpeg uses yuyv422, not yuyv
     "nv12": "nv12",

@@ -183,8 +183,12 @@ def probe_capabilities(device_path: str) -> Dict:
                 raw_format = format_match.group(1)
                 format_desc = format_match.group(2)
 
-                # Normalize format name
-                current_format = FORMAT_ALIASES.get(format_desc, raw_format.lower())
+                # Normalize format name - check description first, then FourCC code
+                current_format = (
+                    FORMAT_ALIASES.get(format_desc) or
+                    FORMAT_ALIASES.get(raw_format) or
+                    raw_format.lower()
+                )
                 if current_format not in capabilities:
                     capabilities[current_format] = {}
                 continue
