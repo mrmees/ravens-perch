@@ -444,8 +444,11 @@ def add_or_update_stream(camera_id: str, ffmpeg_command: str) -> Tuple[bool, Opt
     success, error = add_stream(camera_id, ffmpeg_command)
 
     if not success and error and "already exists" in error.lower():
-        # Stream exists, update it
-        return update_stream(camera_id, ffmpeg_command)
+        # Stream exists - remove and re-add to restart with new settings
+        # Just patching the config doesn't restart the running FFmpeg process
+        remove_stream(camera_id)
+        time.sleep(0.3)  # Brief delay to ensure cleanup
+        return add_stream(camera_id, ffmpeg_command)
 
     return success, error
 
