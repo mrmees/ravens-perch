@@ -347,14 +347,25 @@
     // Handle selection changed warnings
     function showSelectionWarning(elementId) {
         const warning = document.getElementById(elementId + '-warning');
-        if (warning) {
-            warning.style.display = 'block';
-            // Highlight the dropdown briefly
-            const select = document.getElementById(elementId);
-            if (select) {
-                select.classList.add('selection-changed');
-                setTimeout(() => select.classList.remove('selection-changed'), 3000);
+        const select = document.getElementById(elementId);
+
+        if (warning && select) {
+            // First, expand the parent details element if collapsed
+            const parentDetails = select.closest('details');
+            if (parentDetails && !parentDetails.open) {
+                parentDetails.open = true;
             }
+
+            // Show warning and highlight
+            warning.style.display = 'block';
+            select.classList.add('selection-changed');
+
+            // Scroll the select into view
+            select.scrollIntoView({ behavior: 'smooth', block: 'center' });
+
+            // Remove highlight after 3 seconds
+            setTimeout(() => select.classList.remove('selection-changed'), 3000);
+
             // Auto-hide warning after 5 seconds
             setTimeout(() => {
                 warning.style.display = 'none';
