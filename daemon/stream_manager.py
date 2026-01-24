@@ -209,6 +209,23 @@ def list_streams() -> Dict[str, Dict]:
     return streams
 
 
+def remove_all_streams() -> int:
+    """
+    Remove all streams from MediaMTX.
+
+    Returns: count of streams removed
+    """
+    streams = list_streams()
+    count = 0
+
+    for path_name in streams.keys():
+        success, _ = remove_stream(path_name)
+        if success:
+            count += 1
+
+    return count
+
+
 def get_stream_status(camera_id: str) -> Optional[Dict]:
     """
     Get status for a specific stream.

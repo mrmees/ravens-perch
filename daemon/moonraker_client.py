@@ -122,6 +122,15 @@ def is_available() -> bool:
 
 # ============ Webcam API ============
 
+def get_ravens_camera_by_name(webcam_name: str) -> Optional[Dict]:
+    """Find an existing Ravens Perch webcam by name."""
+    webcams = list_cameras()
+    for webcam in webcams:
+        if webcam.get('name') == webcam_name:
+            return webcam
+    return None
+
+
 def register_camera(
     camera_id: str,
     friendly_name: str,
@@ -134,12 +143,37 @@ def register_camera(
     """
     Register a camera with Moonraker.
 
+    If a camera with the same name already exists, it will be updated.
     Returns: (success, moonraker_uid, error_message)
     """
     client = get_client()
 
     # Create unique name for Moonraker
     webcam_name = f"ravens_{camera_id}".replace(' ', '_').lower()
+
+    # Check if this camera already exists
+    existing = get_ravens_camera_by_name(webcam_name)
+    if existing:
+        existing_uid = existing.get('uid')
+        logger.info(f"Camera {webcam_name} already exists (uid: {existing_uid}), updating...")
+
+        # Update existing camera
+        success, error = update_camera(
+            existing_uid,
+            stream_url=stream_url,
+            snapshot_url=snapshot_url,
+            flip_horizontal=flip_horizontal,
+            flip_vertical=flip_vertical,
+            rotation=rotation,
+            enabled=True
+        )
+
+        if success:
+            return True, existing_uid, None
+        else:
+            # If update fails, try to delete and recreate
+            logger.warning(f"Update failed, removing and re-registering: {error}")
+            unregister_camera(existing_uid)
 
     data = {
         "name": webcam_name,

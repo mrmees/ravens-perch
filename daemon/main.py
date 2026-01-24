@@ -31,11 +31,13 @@ from .camera_manager import (
 )
 from .stream_manager import (
     wait_for_available as wait_for_mediamtx,
-    build_ffmpeg_command, add_or_update_stream, remove_stream
+    build_ffmpeg_command, add_or_update_stream, remove_stream,
+    remove_all_streams
 )
 from .moonraker_client import (
     detect_moonraker_url, register_camera, unregister_camera,
-    build_stream_url, build_snapshot_url, get_system_ip
+    unregister_all_ravens_cameras, build_stream_url, build_snapshot_url,
+    get_system_ip
 )
 from . import db
 
@@ -130,12 +132,24 @@ class RavensPerchDaemon:
             else:
                 logger.info("MediaMTX is available")
 
+                # Step 4b: Clean up stale MediaMTX streams
+                logger.info("Cleaning up stale MediaMTX streams...")
+                removed = remove_all_streams()
+                if removed > 0:
+                    logger.info(f"Removed {removed} stale stream(s)")
+
             # Step 5: Detect Moonraker
             logger.info("Detecting Moonraker...")
             self.moonraker_url = detect_moonraker_url()
             if self.moonraker_url:
                 logger.info(f"Moonraker found at: {self.moonraker_url}")
                 add_log("INFO", f"Moonraker found at: {self.moonraker_url}")
+
+                # Step 5b: Clean up stale Moonraker webcam registrations
+                logger.info("Cleaning up stale Moonraker webcam registrations...")
+                cleaned = unregister_all_ravens_cameras()
+                if cleaned > 0:
+                    logger.info(f"Removed {cleaned} stale webcam registration(s)")
             else:
                 logger.warning("Moonraker not found - webcam registration disabled")
                 add_log("WARNING", "Moonraker not found")
