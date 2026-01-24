@@ -139,8 +139,6 @@ def grab_frame_av(rtsp_url: str, timeout: float = SNAPSHOT_TIMEOUT) -> Optional[
 
             break  # Only need one frame
 
-    except av.AVError as e:
-        logger.debug(f"AV error grabbing frame: {e}")
     except Exception as e:
         logger.debug(f"Error grabbing frame: {e}")
     finally:
