@@ -56,10 +56,9 @@ def detect_encoders() -> Dict[str, bool]:
     except Exception as e:
         logger.debug(f"RKMPP detection failed: {e}")
 
-    # Check V4L2M2M (Raspberry Pi)
+    # Check V4L2M2M (Raspberry Pi only - not Rockchip)
     try:
-        v4l2m2m_devices = list(Path("/dev").glob("video1*"))
-        if v4l2m2m_devices or is_raspberry_pi():
+        if is_raspberry_pi() and not is_rockchip():
             if "h264_v4l2m2m" in ffmpeg_encoders:
                 encoders['v4l2m2m'] = True
                 logger.info("V4L2M2M hardware encoder detected (Raspberry Pi)")
