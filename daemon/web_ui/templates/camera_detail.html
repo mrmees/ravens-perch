@@ -173,6 +173,12 @@
                             VAAPI (Intel/AMD GPU)
                         </option>
                         {% endif %}
+                        {% if encoders.rkmpp %}
+                        <option value="h264_rkmpp"
+                                {% if camera.settings and camera.settings.encoder == 'h264_rkmpp' %}selected{% endif %}>
+                            RKMPP (Rockchip)
+                        </option>
+                        {% endif %}
                         {% if encoders.v4l2m2m %}
                         <option value="h264_v4l2m2m"
                                 {% if camera.settings and camera.settings.encoder == 'h264_v4l2m2m' %}selected{% endif %}>

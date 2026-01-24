@@ -20,40 +20,50 @@ def detect_encoders() -> Dict[str, bool]:
     encoders = {
         'vaapi': False,
         'v4l2m2m': False,
+        'rkmpp': False,
         'software': True,  # Always available
     }
 
+    # Get FFmpeg encoder list once
+    ffmpeg_encoders = ""
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-hide_banner", "-encoders"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        ffmpeg_encoders = result.stdout
+    except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
+        logger.debug(f"FFmpeg encoder list failed: {e}")
+        return encoders
+
     # Check VAAPI (Intel/AMD GPU)
     try:
-        # Check for render device
         if Path("/dev/dri/renderD128").exists():
-            result = subprocess.run(
-                ["ffmpeg", "-hide_banner", "-encoders"],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            if "h264_vaapi" in result.stdout:
+            if "h264_vaapi" in ffmpeg_encoders:
                 encoders['vaapi'] = True
                 logger.info("VAAPI hardware encoder detected")
-    except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
+    except Exception as e:
         logger.debug(f"VAAPI detection failed: {e}")
+
+    # Check Rockchip RKMPP (Rockchip SoCs - RK3588, RK3399, etc.)
+    try:
+        if is_rockchip() or "h264_rkmpp" in ffmpeg_encoders:
+            if "h264_rkmpp" in ffmpeg_encoders:
+                encoders['rkmpp'] = True
+                logger.info("Rockchip RKMPP hardware encoder detected")
+    except Exception as e:
+        logger.debug(f"RKMPP detection failed: {e}")
 
     # Check V4L2M2M (Raspberry Pi)
     try:
-        # Check for video encoder device
         v4l2m2m_devices = list(Path("/dev").glob("video1*"))
         if v4l2m2m_devices or is_raspberry_pi():
-            result = subprocess.run(
-                ["ffmpeg", "-hide_banner", "-encoders"],
-                capture_output=True,
-                text=True,
-                timeout=10
-            )
-            if "h264_v4l2m2m" in result.stdout:
+            if "h264_v4l2m2m" in ffmpeg_encoders:
                 encoders['v4l2m2m'] = True
                 logger.info("V4L2M2M hardware encoder detected (Raspberry Pi)")
-    except (subprocess.TimeoutExpired, FileNotFoundError, Exception) as e:
+    except Exception as e:
         logger.debug(f"V4L2M2M detection failed: {e}")
 
     return encoders
@@ -62,12 +72,14 @@ def detect_encoders() -> Dict[str, bool]:
 def get_best_encoder(encoders: Optional[Dict[str, bool]] = None) -> str:
     """
     Get the best available encoder.
-    Priority: vaapi > v4l2m2m > libx264
+    Priority: rkmpp > vaapi > v4l2m2m > libx264
     """
     if encoders is None:
         encoders = detect_encoders()
 
-    if encoders.get('vaapi'):
+    if encoders.get('rkmpp'):
+        return 'h264_rkmpp'
+    elif encoders.get('vaapi'):
         return 'h264_vaapi'
     elif encoders.get('v4l2m2m'):
         return 'h264_v4l2m2m'
@@ -98,6 +110,35 @@ def is_raspberry_pi() -> bool:
     return False
 
 
+def is_rockchip() -> bool:
+    """Check if running on a Rockchip SoC (RK3588, RK3399, etc.)."""
+    try:
+        # Check device tree compatible
+        compatible_path = Path("/proc/device-tree/compatible")
+        if compatible_path.exists():
+            content = compatible_path.read_bytes().decode('utf-8', errors='ignore')
+            if "rockchip" in content.lower():
+                return True
+
+        # Check device tree model
+        model_path = Path("/proc/device-tree/model")
+        if model_path.exists():
+            model = model_path.read_text()
+            rockchip_models = ["RK3588", "RK3399", "RK3328", "RK3568", "RK3566", "Orange Pi", "Radxa"]
+            for m in rockchip_models:
+                if m in model:
+                    return True
+
+        # Check for Rockchip video devices
+        if Path("/dev/mpp_service").exists() or Path("/dev/rkvdec").exists():
+            return True
+
+    except Exception as e:
+        logger.debug(f"Rockchip detection error: {e}")
+
+    return False
+
+
 def get_platform_info() -> Dict[str, str]:
     """Get platform information."""
     import platform
@@ -111,6 +152,14 @@ def get_platform_info() -> Dict[str, str]:
 
     if is_raspberry_pi():
         info['platform'] = 'raspberry_pi'
+        try:
+            model_path = Path("/proc/device-tree/model")
+            if model_path.exists():
+                info['model'] = model_path.read_text().strip('\x00')
+        except Exception:
+            pass
+    elif is_rockchip():
+        info['platform'] = 'rockchip'
         try:
             model_path = Path("/proc/device-tree/model")
             if model_path.exists():
@@ -158,7 +207,7 @@ def estimate_cpu_capability() -> int:
         # Bonus for hardware encoders
         encoders = detect_encoders()
         encoder_bonus = 0
-        if encoders.get('vaapi') or encoders.get('v4l2m2m'):
+        if encoders.get('vaapi') or encoders.get('v4l2m2m') or encoders.get('rkmpp'):
             encoder_bonus = 2
 
         # Calculate final score

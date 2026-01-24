@@ -66,6 +66,17 @@ FORMAT_ALIASES = {
     "RGB3": "rgb24",
 }
 
+# FFmpeg input format names (internal name -> FFmpeg -input_format value)
+# These are the actual format names FFmpeg expects for V4L2 input
+FFMPEG_INPUT_FORMATS = {
+    "mjpeg": "mjpeg",
+    "h264": "h264",
+    "yuyv": "yuyv422",      # FFmpeg uses yuyv422, not yuyv
+    "nv12": "nv12",
+    "rgb24": "rgb24",
+    "yuyv422": "yuyv422",   # Already correct
+}
+
 # Encoder settings
 ENCODER_DEFAULTS = {
     "libx264": {
@@ -74,6 +85,9 @@ ENCODER_DEFAULTS = {
     },
     "h264_vaapi": {
         "quality": 25,
+    },
+    "h264_rkmpp": {
+        # Rockchip MPP typically doesn't need extra options
     },
     "h264_v4l2m2m": {
         # V4L2M2M typically doesn't need extra options

@@ -9,7 +9,7 @@ import requests
 
 from .config import (
     MEDIAMTX_API_BASE, MEDIAMTX_RTSP_PORT, MEDIAMTX_WEBRTC_PORT,
-    ENCODER_DEFAULTS
+    ENCODER_DEFAULTS, FFMPEG_INPUT_FORMATS
 )
 
 logger = logging.getLogger(__name__)
@@ -276,10 +276,13 @@ def build_ffmpeg_command(
     resolution = settings.get('resolution') or '1280x720'
     framerate = settings.get('framerate') or 30
 
+    # Convert internal format name to FFmpeg format name
+    ffmpeg_format = FFMPEG_INPUT_FORMATS.get(input_format, input_format)
+
     # V4L2 input options
     cmd_parts.extend([
         "-f", "v4l2",
-        "-input_format", input_format,
+        "-input_format", ffmpeg_format,
         "-video_size", resolution,
         "-framerate", str(framerate),
         "-i", device_path
@@ -334,6 +337,11 @@ def build_ffmpeg_command(
     elif encoder_type == 'h264_vaapi':
         cmd_parts.extend([
             "-c:v", "h264_vaapi",
+            "-b:v", bitrate,
+        ])
+    elif encoder_type == 'h264_rkmpp':
+        cmd_parts.extend([
+            "-c:v", "h264_rkmpp",
             "-b:v", bitrate,
         ])
     elif encoder_type == 'h264_v4l2m2m':
