@@ -698,9 +698,11 @@ def api_set_control(camera_id: int, control_name: str):
     if not camera['connected'] or not camera['device_path']:
         return jsonify({'error': 'Camera not connected'}), 400
 
-    # Get value from request
-    data = request.get_json() or {}
-    value = data.get('value')
+    # Get value from request (try form data first, then JSON)
+    value = request.form.get('value')
+    if value is None:
+        data = request.get_json() or {}
+        value = data.get('value')
 
     if value is None:
         return jsonify({'error': 'Value required'}), 400
