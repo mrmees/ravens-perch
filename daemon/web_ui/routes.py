@@ -99,6 +99,25 @@ def scan_cameras():
             save_camera_settings(camera_id, settings)
             save_camera_capabilities(camera_id, capabilities)
 
+            # Register with Moonraker
+            if moonraker_available():
+                camera = get_camera_by_id(camera_id)
+                if camera:
+                    host = get_system_ip()
+                    stream_url = build_stream_url(str(camera_id), host)
+                    snapshot_url = build_snapshot_url(str(camera_id), host)
+                    rotation = settings.get('rotation', 0)
+
+                    success, uid, _ = register_camera(
+                        str(camera_id),
+                        camera['friendly_name'],
+                        stream_url,
+                        snapshot_url,
+                        rotation=rotation
+                    )
+                    if success and uid:
+                        update_camera(camera_id, moonraker_uid=uid)
+
             added += 1
             add_log("INFO", f"Added camera: {device_info.hardware_name}", camera_id)
 
