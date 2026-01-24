@@ -9,11 +9,12 @@ from flask import (
 
 from ..db import (
     get_all_cameras, get_all_cameras_with_settings,
-    get_camera_with_settings, get_camera_by_id,
+    get_camera_with_settings, get_camera_by_id, get_camera_by_hardware_id,
     update_camera, save_camera_settings, get_camera_settings,
     get_camera_capabilities, get_logs, get_all_settings,
     set_setting, add_log, delete_camera_completely, delete_all_cameras,
-    ignore_camera, unignore_camera, get_ignored_cameras, is_camera_ignored
+    ignore_camera, unignore_camera, get_ignored_cameras, is_camera_ignored,
+    create_camera, save_camera_capabilities, mark_camera_connected
 )
 from ..snapshot_server import grab_snapshot, get_placeholder_image
 from ..stream_manager import (
@@ -26,6 +27,7 @@ from ..moonraker_client import (
     build_stream_url, build_snapshot_url, get_system_ip, is_available as moonraker_available
 )
 from ..hardware import estimate_cpu_capability, detect_encoders, get_platform_info
+from ..camera_manager import find_video_devices, get_device_info, probe_capabilities, auto_configure
 from ..config import COMMON_RESOLUTIONS, COMMON_FRAMERATES
 
 logger = logging.getLogger(__name__)
@@ -50,6 +52,66 @@ def dashboard():
         cameras=cameras,
         system_ip=get_system_ip()
     )
+
+
+@bp.route('/scan', methods=['POST'])
+def scan_cameras():
+    """Scan for and add connected cameras."""
+    try:
+        devices = find_video_devices()
+        added = 0
+        updated = 0
+
+        for device_path in devices:
+            device_info = get_device_info(device_path)
+            if not device_info:
+                continue
+
+            # Check if camera is ignored
+            if is_camera_ignored(device_info.hardware_id):
+                continue
+
+            # Check if camera already exists
+            existing = get_camera_by_hardware_id(device_info.hardware_id)
+            if existing:
+                # Update connection status
+                mark_camera_connected(existing['id'], device_path)
+                updated += 1
+                continue
+
+            # Probe capabilities
+            capabilities = probe_capabilities(device_path)
+            if not capabilities:
+                continue
+
+            # Auto-configure settings
+            current_count = len(get_all_cameras())
+            settings = auto_configure(capabilities, current_count + 1)
+
+            # Create camera
+            camera_id = create_camera(
+                hardware_name=device_info.hardware_name,
+                serial_number=device_info.serial_number,
+                device_path=device_path
+            )
+
+            # Save settings and capabilities
+            save_camera_settings(camera_id, settings)
+            save_camera_capabilities(camera_id, capabilities)
+
+            added += 1
+            add_log("INFO", f"Added camera: {device_info.hardware_name}", camera_id)
+
+        if added > 0 or updated > 0:
+            flash(f"Found {added} new camera(s), updated {updated} existing", "success")
+        else:
+            flash("No new cameras found", "info")
+
+    except Exception as e:
+        logger.error(f"Error scanning for cameras: {e}")
+        flash(f"Error scanning: {e}", "error")
+
+    return redirect(url_for('cameras.dashboard'))
 
 
 @bp.route('/api/status')
