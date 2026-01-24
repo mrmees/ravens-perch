@@ -224,6 +224,23 @@
             </form>
         </details>
 
+        <!-- Camera Controls (V4L2) -->
+        {% if camera.connected %}
+        <details class="settings-card advanced-settings">
+            <summary>Camera Controls</summary>
+            <p class="form-help" style="margin-bottom: 1rem;">
+                Adjust brightness, contrast, exposure, and other camera-specific settings.
+                Changes are applied immediately and saved for stream restarts.
+            </p>
+            <div id="v4l2-controls"
+                 hx-get="{{ url_for('cameras.api_get_controls', camera_id=camera.id) }}"
+                 hx-trigger="revealed"
+                 hx-swap="innerHTML">
+                <div class="loading-controls">Loading camera controls...</div>
+            </div>
+        </details>
+        {% endif %}
+
         <!-- Stream URLs -->
         <div class="settings-card">
             <h3>Stream URLs</h3>

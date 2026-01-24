@@ -27,7 +27,10 @@ from ..moonraker_client import (
     build_stream_url, build_snapshot_url, get_system_ip, is_available as moonraker_available
 )
 from ..hardware import estimate_cpu_capability, detect_encoders, get_platform_info
-from ..camera_manager import find_video_devices, get_device_info, probe_capabilities, auto_configure
+from ..camera_manager import (
+    find_video_devices, get_device_info, probe_capabilities, auto_configure,
+    get_v4l2_controls, set_v4l2_control, get_v4l2_control_value
+)
 from ..config import COMMON_RESOLUTIONS, COMMON_FRAMERATES
 
 logger = logging.getLogger(__name__)
@@ -208,11 +211,13 @@ def camera_detail(camera_id: int):
     if camera['connected'] and camera['device_path'] and camera['settings']:
         settings = camera['settings']
         encoder = settings.get('encoder') or 'libx264'
+        v4l2_controls = settings.get('v4l2_controls', {})
         ffmpeg_cmd = build_ffmpeg_command(
             camera['device_path'],
             settings,
             str(camera_id),
-            encoder
+            encoder,
+            v4l2_controls=v4l2_controls
         )
 
     return render_template(
@@ -258,11 +263,14 @@ def update_settings(camera_id: int):
     if camera['connected'] and camera['enabled']:
         current_settings = get_camera_settings(camera_id)
         if current_settings and camera['device_path']:
+            # Get V4L2 controls to apply at stream start
+            v4l2_controls = current_settings.get('v4l2_controls', {})
             ffmpeg_cmd = build_ffmpeg_command(
                 camera['device_path'],
                 current_settings,
                 str(camera_id),
-                current_settings.get('encoder', 'libx264')
+                current_settings.get('encoder', 'libx264'),
+                v4l2_controls=v4l2_controls
             )
             add_or_update_stream(str(camera_id), ffmpeg_cmd)
 
@@ -631,4 +639,131 @@ def api_system():
         'cpu_rating': estimate_cpu_capability(),
         'system_ip': get_system_ip(),
         'moonraker_available': moonraker_available(),
+    })
+
+
+# ============ V4L2 Controls API ============
+
+@bp.route('/api/controls/<int:camera_id>')
+def api_get_controls(camera_id: int):
+    """Get available V4L2 controls for a camera."""
+    camera = get_camera_by_id(camera_id)
+    if not camera:
+        if request.headers.get('HX-Request'):
+            return '<p class="form-help">Camera not found</p>'
+        return jsonify({'error': 'Camera not found'}), 404
+
+    if not camera['connected'] or not camera['device_path']:
+        if request.headers.get('HX-Request'):
+            return '<p class="form-help">Camera not connected</p>'
+        return jsonify({'error': 'Camera not connected'}), 400
+
+    # Get available controls from the camera
+    controls = get_v4l2_controls(camera['device_path'])
+
+    # Get saved control values from database
+    settings = get_camera_settings(camera_id)
+    saved_controls = settings.get('v4l2_controls', {}) if settings else {}
+
+    # Merge saved values with available controls
+    for name, info in controls.items():
+        if name in saved_controls:
+            info['saved'] = saved_controls[name]
+
+    # Return HTML for HTMX requests
+    if request.headers.get('HX-Request'):
+        if not controls:
+            return '<p class="form-help">No adjustable controls available for this camera.</p>'
+        return render_template('partials/v4l2_controls.html',
+                             camera_id=camera_id,
+                             controls=controls)
+
+    return jsonify(controls)
+
+
+@bp.route('/api/controls/<int:camera_id>/<control_name>', methods=['POST'])
+def api_set_control(camera_id: int, control_name: str):
+    """Set a V4L2 control value and apply it immediately."""
+    camera = get_camera_by_id(camera_id)
+    if not camera:
+        return jsonify({'error': 'Camera not found'}), 404
+
+    if not camera['connected'] or not camera['device_path']:
+        return jsonify({'error': 'Camera not connected'}), 400
+
+    # Get value from request
+    data = request.get_json() or {}
+    value = data.get('value')
+
+    if value is None:
+        return jsonify({'error': 'Value required'}), 400
+
+    try:
+        value = int(value)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Invalid value'}), 400
+
+    # Apply immediately to camera
+    success = set_v4l2_control(camera['device_path'], control_name, value)
+
+    if not success:
+        return jsonify({'error': 'Failed to apply control'}), 500
+
+    # Save to database
+    settings = get_camera_settings(camera_id) or {}
+    v4l2_controls = settings.get('v4l2_controls', {}) or {}
+    v4l2_controls[control_name] = value
+    save_camera_settings(camera_id, {'v4l2_controls': v4l2_controls})
+
+    # Get the actual current value from camera to confirm
+    actual_value = get_v4l2_control_value(camera['device_path'], control_name)
+
+    add_log("INFO", f"Set {control_name}={value} for camera {camera['friendly_name']}", camera_id)
+
+    return jsonify({
+        'success': True,
+        'control': control_name,
+        'value': value,
+        'actual': actual_value
+    })
+
+
+@bp.route('/api/controls/<int:camera_id>/<control_name>/reset', methods=['POST'])
+def api_reset_control(camera_id: int, control_name: str):
+    """Reset a V4L2 control to its default value."""
+    camera = get_camera_by_id(camera_id)
+    if not camera:
+        return jsonify({'error': 'Camera not found'}), 404
+
+    if not camera['connected'] or not camera['device_path']:
+        return jsonify({'error': 'Camera not connected'}), 400
+
+    # Get control info to find default value
+    controls = get_v4l2_controls(camera['device_path'])
+    if control_name not in controls:
+        return jsonify({'error': 'Control not found'}), 404
+
+    default_value = controls[control_name].get('default')
+    if default_value is None:
+        return jsonify({'error': 'No default value available'}), 400
+
+    # Apply default value
+    success = set_v4l2_control(camera['device_path'], control_name, default_value)
+
+    if not success:
+        return jsonify({'error': 'Failed to reset control'}), 500
+
+    # Remove from saved settings
+    settings = get_camera_settings(camera_id) or {}
+    v4l2_controls = settings.get('v4l2_controls', {}) or {}
+    if control_name in v4l2_controls:
+        del v4l2_controls[control_name]
+        save_camera_settings(camera_id, {'v4l2_controls': v4l2_controls})
+
+    add_log("INFO", f"Reset {control_name} to default for camera {camera['friendly_name']}", camera_id)
+
+    return jsonify({
+        'success': True,
+        'control': control_name,
+        'value': default_value
     })

@@ -486,15 +486,15 @@ class CameraMonitor:
 
 def get_v4l2_controls(device_path: str) -> Dict[str, Dict]:
     """
-    Get available V4L2 controls for a device.
+    Get available V4L2 controls for a device, including menu options.
 
-    Returns: {control_name: {'min': x, 'max': y, 'default': z, 'value': v}}
+    Returns: {control_name: {'type': str, 'min': int, 'max': int, 'default': int, 'value': int, 'options': {}}}
     """
     controls = {}
 
     try:
         result = subprocess.run(
-            ["v4l2-ctl", "--device", device_path, "--list-ctrls-menus"],
+            ["v4l2-ctl", "--device", device_path, "-L"],
             capture_output=True,
             text=True,
             timeout=5
@@ -503,9 +503,12 @@ def get_v4l2_controls(device_path: str) -> Dict[str, Dict]:
         if result.returncode != 0:
             return controls
 
+        current_control = None
+
         for line in result.stdout.split('\n'):
             # Parse control lines like:
             # brightness 0x00980900 (int)    : min=0 max=255 step=1 default=128 value=128
+            # exposure_auto 0x009a0901 (menu)   : min=0 max=3 default=3 value=3
             match = re.match(
                 r'\s*(\w+)\s+0x[0-9a-f]+\s+\((\w+)\)\s*:\s*(.+)',
                 line
@@ -515,19 +518,92 @@ def get_v4l2_controls(device_path: str) -> Dict[str, Dict]:
                 ctrl_type = match.group(2)
                 attrs_str = match.group(3)
 
-                attrs = {}
+                # Skip button and unknown types
+                if ctrl_type not in ('int', 'bool', 'menu'):
+                    current_control = None
+                    continue
+
+                attrs = {'type': ctrl_type, 'options': {}}
                 for attr_match in re.finditer(r'(\w+)=(-?\d+)', attrs_str):
                     attrs[attr_match.group(1)] = int(attr_match.group(2))
 
-                controls[name] = {
-                    'type': ctrl_type,
-                    **attrs
-                }
+                controls[name] = attrs
+                current_control = name if ctrl_type == 'menu' else None
+                continue
+
+            # Parse menu option lines like:
+            #                 0: Manual Mode
+            #                 1: Auto Mode
+            if current_control and line.strip():
+                menu_match = re.match(r'\s*(\d+):\s*(.+)', line)
+                if menu_match:
+                    option_value = int(menu_match.group(1))
+                    option_name = menu_match.group(2).strip()
+                    controls[current_control]['options'][option_value] = option_name
 
     except Exception as e:
         logger.debug(f"Error getting V4L2 controls: {e}")
 
     return controls
+
+
+def get_v4l2_control_value(device_path: str, control: str) -> Optional[int]:
+    """Get current value of a V4L2 control."""
+    try:
+        result = subprocess.run(
+            ["v4l2-ctl", "--device", device_path, f"--get-ctrl={control}"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+        match = re.search(rf"{control}:\s*(-?\d+)", result.stdout)
+        if match:
+            return int(match.group(1))
+    except Exception as e:
+        logger.debug(f"Error getting V4L2 control value: {e}")
+    return None
+
+
+def apply_v4l2_controls(device_path: str, controls: Dict[str, int]) -> bool:
+    """
+    Apply multiple V4L2 controls to a device.
+
+    Args:
+        device_path: V4L2 device path
+        controls: Dict of {control_name: value}
+
+    Returns: True if successful
+    """
+    if not controls:
+        return True
+
+    try:
+        # Build comma-separated control string
+        ctrl_parts = []
+        for name, value in controls.items():
+            if value is not None:
+                ctrl_parts.append(f"{name}={value}")
+
+        if not ctrl_parts:
+            return True
+
+        ctrl_str = ",".join(ctrl_parts)
+        result = subprocess.run(
+            ["v4l2-ctl", "--device", device_path, f"--set-ctrl={ctrl_str}"],
+            capture_output=True,
+            timeout=5
+        )
+
+        if result.returncode == 0:
+            logger.debug(f"Applied V4L2 controls to {device_path}: {ctrl_str}")
+            return True
+        else:
+            logger.warning(f"Failed to apply V4L2 controls: {result.stderr.decode()}")
+            return False
+
+    except Exception as e:
+        logger.error(f"Error applying V4L2 controls: {e}")
+        return False
 
 
 def set_v4l2_control(device_path: str, control: str, value: int) -> bool:

@@ -11,6 +11,7 @@ from .config import (
     MEDIAMTX_API_BASE, MEDIAMTX_RTSP_PORT, MEDIAMTX_WEBRTC_PORT,
     ENCODER_DEFAULTS, FFMPEG_INPUT_FORMATS, WEB_UI_PORT
 )
+from .camera_manager import apply_v4l2_controls
 
 logger = logging.getLogger(__name__)
 
@@ -295,7 +296,8 @@ def build_ffmpeg_command(
     device_path: str,
     settings: Dict,
     stream_name: str,
-    encoder_type: str = 'libx264'
+    encoder_type: str = 'libx264',
+    v4l2_controls: Optional[Dict[str, int]] = None
 ) -> str:
     """
     Build complete FFmpeg command string for streaming.
@@ -305,8 +307,9 @@ def build_ffmpeg_command(
         settings: Camera settings dict
         stream_name: Name for the RTSP stream
         encoder_type: Encoder to use (libx264, h264_vaapi, h264_v4l2m2m)
+        v4l2_controls: Optional dict of V4L2 controls to apply before streaming
 
-    Returns: Complete FFmpeg command string
+    Returns: Complete FFmpeg command string (may be wrapped in shell for V4L2 controls)
     """
     cmd_parts = ["ffmpeg", "-hide_banner", "-loglevel", "warning"]
 
@@ -414,7 +417,22 @@ def build_ffmpeg_command(
         f"rtsp://127.0.0.1:{MEDIAMTX_RTSP_PORT}/{stream_name}"
     ])
 
-    return " ".join(cmd_parts)
+    ffmpeg_cmd = " ".join(cmd_parts)
+
+    # If V4L2 controls are provided, wrap command to apply them first
+    if v4l2_controls:
+        ctrl_parts = []
+        for name, value in v4l2_controls.items():
+            if value is not None:
+                ctrl_parts.append(f"{name}={value}")
+
+        if ctrl_parts:
+            ctrl_str = ",".join(ctrl_parts)
+            v4l2_cmd = f"v4l2-ctl -d {device_path} --set-ctrl={ctrl_str}"
+            # Wrap in shell to run v4l2-ctl before ffmpeg
+            ffmpeg_cmd = f"sh -c '{v4l2_cmd}; {ffmpeg_cmd}'"
+
+    return ffmpeg_cmd
 
 
 def get_stream_urls(camera_id: str, host: str = "127.0.0.1") -> Dict[str, str]:

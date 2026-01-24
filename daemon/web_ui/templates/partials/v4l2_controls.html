@@ -1,0 +1,91 @@
+<div class="v4l2-controls-list">
+    {% for name, info in controls.items() %}
+    <div class="control-item" data-control="{{ name }}">
+        <div class="control-header">
+            <label for="ctrl-{{ name }}">{{ name.replace('_', ' ').title() }}</label>
+            {% if info.saved is defined %}
+            <span class="control-saved" title="Saved value">Saved: {{ info.saved }}</span>
+            {% endif %}
+        </div>
+
+        {% if info.type == 'menu' and info.options %}
+        <!-- Menu control -->
+        <div class="control-input">
+            <select id="ctrl-{{ name }}"
+                    class="control-select"
+                    hx-post="{{ url_for('cameras.api_set_control', camera_id=camera_id, control_name=name) }}"
+                    hx-trigger="change"
+                    hx-swap="none"
+                    hx-vals='js:{"value": document.getElementById("ctrl-{{ name }}").value}'
+                    hx-headers='{"Content-Type": "application/json"}'>
+                {% for opt_value, opt_label in info.options.items()|sort %}
+                <option value="{{ opt_value }}"
+                        {% if info.value == opt_value %}selected{% endif %}>
+                    {{ opt_label }}
+                </option>
+                {% endfor %}
+            </select>
+            <button type="button" class="btn btn-sm btn-secondary control-reset"
+                    hx-post="{{ url_for('cameras.api_reset_control', camera_id=camera_id, control_name=name) }}"
+                    hx-swap="none"
+                    title="Reset to default ({{ info.default }})">
+                Reset
+            </button>
+        </div>
+
+        {% elif info.type == 'bool' %}
+        <!-- Boolean control -->
+        <div class="control-input">
+            <label class="toggle-switch">
+                <input type="checkbox"
+                       id="ctrl-{{ name }}"
+                       {% if info.value == 1 %}checked{% endif %}
+                       hx-post="{{ url_for('cameras.api_set_control', camera_id=camera_id, control_name=name) }}"
+                       hx-trigger="change"
+                       hx-swap="none"
+                       hx-vals='js:{"value": document.getElementById("ctrl-{{ name }}").checked ? 1 : 0}'
+                       hx-headers='{"Content-Type": "application/json"}'>
+                <span class="toggle-slider"></span>
+            </label>
+            <button type="button" class="btn btn-sm btn-secondary control-reset"
+                    hx-post="{{ url_for('cameras.api_reset_control', camera_id=camera_id, control_name=name) }}"
+                    hx-swap="none"
+                    title="Reset to default ({{ info.default }})">
+                Reset
+            </button>
+        </div>
+
+        {% else %}
+        <!-- Integer control (slider) -->
+        <div class="control-input">
+            <input type="range"
+                   id="ctrl-{{ name }}"
+                   min="{{ info.min }}"
+                   max="{{ info.max }}"
+                   step="{{ info.step|default(1) }}"
+                   value="{{ info.value }}"
+                   class="control-range"
+                   oninput="document.getElementById('val-{{ name }}').textContent = this.value"
+                   hx-post="{{ url_for('cameras.api_set_control', camera_id=camera_id, control_name=name) }}"
+                   hx-trigger="change"
+                   hx-swap="none"
+                   hx-vals='js:{"value": document.getElementById("ctrl-{{ name }}").value}'
+                   hx-headers='{"Content-Type": "application/json"}'>
+            <span id="val-{{ name }}" class="control-value">{{ info.value }}</span>
+            <button type="button" class="btn btn-sm btn-secondary control-reset"
+                    hx-post="{{ url_for('cameras.api_reset_control', camera_id=camera_id, control_name=name) }}"
+                    hx-swap="none"
+                    onclick="document.getElementById('ctrl-{{ name }}').value = {{ info.default }}; document.getElementById('val-{{ name }}').textContent = {{ info.default }};"
+                    title="Reset to default ({{ info.default }})">
+                Reset
+            </button>
+        </div>
+        <div class="control-range-labels">
+            <span>{{ info.min }}</span>
+            <span class="control-default">Default: {{ info.default }}</span>
+            <span>{{ info.max }}</span>
+        </div>
+        {% endif %}
+    </div>
+    {% endfor %}
+</div>

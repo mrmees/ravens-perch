@@ -1108,3 +1108,127 @@ a:hover {
 .help-warning strong {
     color: var(--warning);
 }
+
+/* V4L2 Camera Controls */
+.v4l2-controls-list {
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.control-item {
+    padding-bottom: 1rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.control-item:last-child {
+    border-bottom: none;
+    padding-bottom: 0;
+}
+
+.control-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+
+.control-header label {
+    font-size: 0.9rem;
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.control-saved {
+    font-size: 0.75rem;
+    color: var(--accent-primary);
+    background-color: rgba(74, 158, 255, 0.1);
+    padding: 0.125rem 0.5rem;
+    border-radius: var(--radius-sm);
+}
+
+.control-input {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.control-range {
+    flex: 1;
+    height: 6px;
+    -webkit-appearance: none;
+    appearance: none;
+    background: var(--bg-tertiary);
+    border-radius: 3px;
+    outline: none;
+}
+
+.control-range::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--accent-primary);
+    cursor: pointer;
+    transition: background-color 0.2s;
+}
+
+.control-range::-webkit-slider-thumb:hover {
+    background: var(--accent-hover);
+}
+
+.control-range::-moz-range-thumb {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    background: var(--accent-primary);
+    cursor: pointer;
+    border: none;
+}
+
+.control-value {
+    min-width: 40px;
+    text-align: center;
+    font-family: monospace;
+    font-size: 0.9rem;
+    color: var(--accent-primary);
+    font-weight: 500;
+}
+
+.control-range-labels {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-top: 0.25rem;
+}
+
+.control-default {
+    color: var(--text-secondary);
+}
+
+.control-select {
+    flex: 1;
+    padding: 0.5rem 0.75rem;
+    background-color: var(--bg-tertiary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    color: var(--text-primary);
+    font-size: 0.875rem;
+}
+
+.control-select:focus {
+    outline: none;
+    border-color: var(--accent-primary);
+}
+
+.control-reset {
+    flex-shrink: 0;
+}
+
+.loading-controls {
+    color: var(--text-muted);
+    font-style: italic;
+    padding: 1rem 0;
+}
