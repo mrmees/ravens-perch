@@ -1,5 +1,5 @@
 """
-Ravens Perch v3 - Web UI Route Handlers
+Ravens Perch - Web UI Route Handlers
 """
 import logging
 from flask import (

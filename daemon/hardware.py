@@ -1,5 +1,5 @@
 """
-Ravens Perch v3 - Hardware Detection (Encoders, Platform)
+Ravens Perch - Hardware Detection (Encoders, Platform)
 """
 import os
 import subprocess

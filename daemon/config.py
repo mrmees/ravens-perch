@@ -1,5 +1,5 @@
 """
-Ravens Perch v3 - Configuration Constants and Defaults
+Ravens Perch - Configuration Constants and Defaults
 """
 import os
 from pathlib import Path

@@ -1,4 +1,4 @@
-# Ravens Perch v3
+# Ravens Perch
 
 **Zero-touch camera management for Klipper-based 3D printers**
 

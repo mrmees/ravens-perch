@@ -1,4 +1,4 @@
-# Ravens Perch v3 - Dependencies
+# Ravens Perch - Dependencies
 flask>=2.0
 pyudev>=0.24
 av>=10.0

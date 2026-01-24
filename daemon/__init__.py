@@ -1,2 +1,2 @@
-# Ravens Perch v3 - Camera Management Daemon
-__version__ = "3.0.0"
+# Ravens Perch - Camera Management Daemon
+__version__ = "1.0.0"

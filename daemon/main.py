@@ -1,5 +1,5 @@
 """
-Ravens Perch v3 - Main Daemon Entry Point
+Ravens Perch - Main Daemon Entry Point
 
 This module orchestrates all components:
 - Database initialization
@@ -97,7 +97,7 @@ class RavensPerchDaemon:
     def start(self):
         """Start the daemon and all components."""
         logger.info("=" * 50)
-        logger.info("Ravens Perch v3.0 starting...")
+        logger.info("Ravens Perch starting...")
         logger.info("=" * 50)
 
         self.running = True

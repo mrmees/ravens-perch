@@ -1,5 +1,5 @@
 """
-Ravens Perch v3 - Moonraker API Client
+Ravens Perch - Moonraker API Client
 """
 import socket
 import logging

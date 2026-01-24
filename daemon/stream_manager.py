@@ -1,5 +1,5 @@
 """
-Ravens Perch v3 - MediaMTX Stream Manager
+Ravens Perch - MediaMTX Stream Manager
 """
 import time
 import logging

@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Ravens Perch v3 Uninstall Script
+# Ravens Perch Uninstall Script
 # Removes all components installed by install.sh
 #
 
@@ -30,7 +30,7 @@ log_warn() {
 
 echo ""
 echo -e "${YELLOW}╔════════════════════════════════════════════════════════════╗${NC}"
-echo -e "${YELLOW}║            Ravens Perch v3.0 Uninstaller                   ║${NC}"
+echo -e "${YELLOW}║              Ravens Perch Uninstaller                      ║${NC}"
 echo -e "${YELLOW}╚════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 

@@ -1,5 +1,5 @@
 """
-Ravens Perch v3 - Camera Detection and Management
+Ravens Perch - Camera Detection and Management
 """
 import os
 import re

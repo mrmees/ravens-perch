@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Ravens Perch v3 Installation Script
+# Ravens Perch Installation Script
 # Zero-touch camera management for Klipper-based 3D printers
 #
 
@@ -436,7 +436,7 @@ print_success() {
 
     echo ""
     echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${GREEN}║         Ravens Perch v3.0 Installed Successfully!          ║${NC}"
+    echo -e "${GREEN}║         Ravens Perch Installed Successfully!               ║${NC}"
     echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
     echo ""
     echo -e "Web UI:        ${BLUE}http://${ip}/cameras/${NC}"
@@ -456,7 +456,7 @@ print_success() {
 main() {
     echo ""
     echo -e "${BLUE}╔════════════════════════════════════════════════════════════╗${NC}"
-    echo -e "${BLUE}║            Ravens Perch v3.0 Installation                  ║${NC}"
+    echo -e "${BLUE}║              Ravens Perch Installation                     ║${NC}"
     echo -e "${BLUE}╚════════════════════════════════════════════════════════════╝${NC}"
     echo ""
 

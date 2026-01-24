@@ -1,5 +1,5 @@
 """
-Ravens Perch v3 - Flask Web Application
+Ravens Perch - Flask Web Application
 """
 import logging
 from flask import Flask

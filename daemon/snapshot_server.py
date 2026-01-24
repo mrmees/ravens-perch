@@ -1,5 +1,5 @@
 """
-Ravens Perch v3 - Snapshot Server
+Ravens Perch - Snapshot Server
 
 Provides JPEG snapshot endpoints by grabbing frames from RTSP streams.
 """

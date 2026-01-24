@@ -1,5 +1,5 @@
 """
-Ravens Perch v3 - SQLite Database Layer
+Ravens Perch - SQLite Database Layer
 """
 import sqlite3
 import json

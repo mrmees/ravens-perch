@@ -1,5 +1,5 @@
 /**
- * Ravens Perch v3 - Minimal JavaScript for HTMX enhancements
+ * Ravens Perch - Minimal JavaScript for HTMX enhancements
  */
 
 // Auto-dismiss flash messages after 5 seconds
