@@ -151,8 +151,8 @@ def register_camera(
     """
     client = get_client()
 
-    # Create webcam name from friendly name (with ravens_ prefix for identification)
-    webcam_name = f"ravens_{friendly_name}".replace(' ', '_').lower()
+    # Create webcam name from friendly name
+    webcam_name = friendly_name.replace(' ', '_').lower()
 
     # Check if this camera already exists
     existing = get_ravens_camera_by_name(webcam_name)
@@ -291,25 +291,6 @@ def get_camera_by_ravens_id(camera_id: str) -> Optional[Dict]:
     return None
 
 
-def unregister_all_ravens_cameras() -> int:
-    """
-    Unregister all cameras that were created by Ravens Perch.
-
-    Returns count of cameras unregistered.
-    """
-    webcams = list_cameras()
-    count = 0
-
-    for webcam in webcams:
-        name = webcam.get('name', '')
-        if name.startswith('ravens_'):
-            uid = webcam.get('uid')
-            if uid:
-                success, _ = unregister_camera(uid)
-                if success:
-                    count += 1
-
-    return count
 
 
 # ============ Notifications ============

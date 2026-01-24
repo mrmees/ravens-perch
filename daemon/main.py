@@ -36,8 +36,7 @@ from .stream_manager import (
 )
 from .moonraker_client import (
     detect_moonraker_url, register_camera, unregister_camera,
-    unregister_all_ravens_cameras, build_stream_url, build_snapshot_url,
-    get_system_ip
+    build_stream_url, build_snapshot_url, get_system_ip
 )
 from . import db
 
@@ -147,7 +146,12 @@ class RavensPerchDaemon:
 
                 # Step 5b: Clean up stale Moonraker webcam registrations
                 logger.info("Cleaning up stale Moonraker webcam registrations...")
-                cleaned = unregister_all_ravens_cameras()
+                cleaned = 0
+                for camera in db.get_all_cameras():
+                    if camera.get('moonraker_uid'):
+                        unregister_camera(camera['moonraker_uid'])
+                        db.update_camera(camera['id'], moonraker_uid=None)
+                        cleaned += 1
                 if cleaned > 0:
                     logger.info(f"Removed {cleaned} stale webcam registration(s)")
             else:
