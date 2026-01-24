@@ -12,13 +12,13 @@ from ..db import (
     get_camera_with_settings, get_camera_by_id,
     update_camera, save_camera_settings, get_camera_settings,
     get_camera_capabilities, get_logs, get_all_settings,
-    set_setting, add_log, delete_camera_completely,
+    set_setting, add_log, delete_camera_completely, delete_all_cameras,
     ignore_camera, unignore_camera, get_ignored_cameras, is_camera_ignored
 )
 from ..snapshot_server import grab_snapshot, get_placeholder_image
 from ..stream_manager import (
     build_ffmpeg_command, add_or_update_stream, get_stream_urls,
-    is_stream_active, restart_stream, remove_stream
+    is_stream_active, restart_stream, remove_stream, remove_all_streams
 )
 from ..moonraker_client import (
     register_camera, update_camera as update_moonraker_camera,
@@ -409,6 +409,36 @@ def update_global_settings():
         return render_template('partials/settings_success.html')
 
     flash("Settings saved", "success")
+    return redirect(url_for('cameras.settings_page'))
+
+
+@bp.route('/start-fresh', methods=['POST'])
+def start_fresh():
+    """Remove all cameras and settings, re-detect connected cameras."""
+    try:
+        # Remove all streams from MediaMTX
+        streams_removed = remove_all_streams()
+        logger.info(f"Removed {streams_removed} streams from MediaMTX")
+
+        # Unregister all cameras from Moonraker
+        if moonraker_available():
+            for camera in get_all_cameras():
+                if camera.get('moonraker_uid'):
+                    unregister_moonraker_camera(camera['moonraker_uid'])
+
+        # Delete all cameras from database
+        cameras_deleted = delete_all_cameras()
+        logger.info(f"Deleted {cameras_deleted} cameras from database")
+
+        add_log("INFO", f"Start Fresh: Removed {cameras_deleted} cameras. Restart service to re-detect.")
+
+        flash(f"Removed {cameras_deleted} cameras. Restart the service to re-detect connected cameras.", "success")
+
+    except Exception as e:
+        logger.error(f"Error during Start Fresh: {e}")
+        add_log("ERROR", f"Start Fresh failed: {e}")
+        flash(f"Error: {e}", "error")
+
     return redirect(url_for('cameras.settings_page'))
 
 

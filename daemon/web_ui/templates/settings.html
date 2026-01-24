@@ -131,5 +131,17 @@
             <a href="https://github.com/USER/ravens-perch" target="_blank">GitHub Repository</a>
         </p>
     </div>
+
+    <div class="settings-card danger-zone">
+        <h3>Danger Zone</h3>
+        <p class="text-muted">
+            Remove all camera configurations and re-detect connected cameras.
+            This will reset all camera settings to defaults.
+        </p>
+        <form action="{{ url_for('cameras.start_fresh') }}" method="POST"
+              onsubmit="return confirm('Are you sure? This will delete all camera settings and re-detect cameras.');">
+            <button type="submit" class="btn btn-danger">Start Fresh</button>
+        </form>
+    </div>
 </div>
 {% endblock %}

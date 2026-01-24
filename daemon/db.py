@@ -564,3 +564,22 @@ def delete_camera_completely(camera_id: int) -> Tuple[bool, Optional[str]]:
             logger.info(f"Deleted camera {camera_id} ({hardware_id})")
             return True, hardware_id
         return False, None
+
+
+def delete_all_cameras() -> int:
+    """
+    Delete all cameras and their settings.
+
+    Returns: count of cameras deleted
+    """
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT COUNT(*) FROM cameras")
+        count = cursor.fetchone()[0]
+
+        # Delete all cameras (cascades to settings and capabilities)
+        cursor.execute("DELETE FROM cameras")
+        conn.commit()
+
+        logger.info(f"Deleted all cameras ({count} total)")
+        return count
