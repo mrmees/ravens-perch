@@ -28,7 +28,7 @@
                     <img src="{{ url_for('cameras.snapshot', camera_id=camera.id) }}"
                          alt="{{ camera.friendly_name }}"
                          loading="lazy"
-                         onerror="this.src='{{ url_for('cameras.static', filename='img/no-signal.svg') }}'">
+                         onerror="this.onerror=null; this.style.background='#333'; this.alt='No Signal'">
                     <div class="camera-status">
                         {% if camera.connected %}
                             {% if camera.stream_active %}
