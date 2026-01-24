@@ -106,6 +106,12 @@
                     {% if encoders.vaapi %}Available{% else %}Not available{% endif %}
                 </span>
             </li>
+            <li class="{% if encoders.rkmpp %}available{% else %}unavailable{% endif %}">
+                <span class="encoder-name">RKMPP (Rockchip)</span>
+                <span class="encoder-status">
+                    {% if encoders.rkmpp %}Available{% else %}Not available{% endif %}
+                </span>
+            </li>
             <li class="{% if encoders.v4l2m2m %}available{% else %}unavailable{% endif %}">
                 <span class="encoder-name">V4L2M2M (Raspberry Pi)</span>
                 <span class="encoder-status">
