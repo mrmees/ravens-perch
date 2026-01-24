@@ -1,0 +1,74 @@
+#!/usr/bin/env bash
+
+# ==============================================================================
+# Ravens Perch - Camera Configuration Tool
+# Wrapper script to launch the configuration interface
+#
+# Last modified: 2026-01-11 18:21 CST
+# ==============================================================================
+
+BASE_DIR="$(dirname $(realpath $0))"
+VENV_PYTHON="$BASE_DIR/venv/bin/python"
+CONFIG_SCRIPT="$BASE_DIR/scripts/generate_mediamtx_config.py"
+
+# Check if venv exists
+if [ ! -f "$VENV_PYTHON" ]; then
+    echo "❌ Virtual environment not found!"
+    echo "   Please run ./install.sh first"
+    exit 1
+fi
+
+# Check if config script exists
+if [ ! -f "$CONFIG_SCRIPT" ]; then
+    echo "❌ Configuration script not found at $CONFIG_SCRIPT"
+    exit 1
+fi
+
+# Clear screen
+clear
+
+# Display banner in cyan (same as menu headings)
+echo -e "\e[36m"
+cat << 'BANNER'
+                                                                                
+                                                              .+++++++-          
+                                                      -++++++++++++++++++++++++  
+                                                 .++++++++++++++++++++++++++++++++
+                                            +++++++++++++++++++++++++++++++++++++
+                         +++++++++++++++++++++++++++++++++++++++++++++++++++++++-
+                      +++++++++++++++++++++++++++++    +++++++++++++++++++++++++++
+               +++++++++++++++++++++++++++++++++ .+++  +++++++++++++++++++++++++
+            ++++++++++++++++++++++++++++++++++++. ++++  +++++++++++++++++++++++++
+         ++++++++++++++++++++++++++++++++++++++++      ++++++++++++++++++++++++++
+       ++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+     +++++++++++++-       .-+++++++++++.    +++++++++++++++++++++++++++++++++++++
+    +++++++  .+++++++++++++++++++++++++++++++ +++++++++++++++++++++++++++++++++++
+   +++.++++++++++++++++++++++++++++++++++++  ++++++++++++++++++++++++++++++++++++
+  +      .+++++++++++++++++++-.          -+++++++++++++++++++++++++++++++++++++++
+                           ++++++++++++++++++++++++++++++++++++++++++++++++++++++
+                           + ++++++++++++++++++++++++++++++++++++++++++++++++++++
+                                +-+++++++++++++++++++++++++++++++++++++++++++++++
+                                   ++++++++++++++++++++++++++++++++++++++++++++++
+                                    +++++++++++++++++++++++++++++++++++++++++++++
+                                    +++++++++++++++++++++++++++++++++++++++++++++
+                                    -  ++++++++++++++++++++++++++++++++++++++++++
+BANNER
+echo -e "\e[0m"
+
+# Disclaimer
+echo -e "\e[33mDISCLAIMER:\e[0m"
+echo "This software is 100% built by AI, with a not insignificant amount of debugging "
+echo "and edge-testing by myself, mrmees. I have no idea why it doesn't work for you, "
+echo "but if you're polite and willing to expend a 3/10 level of effort, I'm happy to "
+echo "feed your problems into the machine and see if we can come up with a solution   "
+echo "together.                                                                       "
+echo "                                                                                "
+echo "Hopefully you backed up crowsnest.                                              "
+echo "                                                                                "
+
+# Wait for keypress
+read -n 1 -s -r -p $'\e[36mPress any key to continue...\e[0m'
+echo ""
+
+# Launch the configuration tool
+"$VENV_PYTHON" "$CONFIG_SCRIPT" "$@"

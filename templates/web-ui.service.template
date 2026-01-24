@@ -1,0 +1,31 @@
+[Unit]
+Description=Ravens Perch Web UI
+Documentation=https://github.com/mrmees/ravens-perch
+After=network.target mediamtx.service
+Wants=mediamtx.service
+
+[Service]
+Type=simple
+User=root
+Group=root
+WorkingDirectory=__BASE_DIR__
+ExecStart=__VENV_DIR__/bin/python __BASE_DIR__/scripts/web_ui.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Environment
+Environment="WEB_UI_PORT=80"
+Environment="WEB_UI_HOST=0.0.0.0"
+Environment="PYTHONUNBUFFERED=1"
+
+# Security hardening (while still allowing port 80)
+NoNewPrivileges=false
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=__BASE_DIR__
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

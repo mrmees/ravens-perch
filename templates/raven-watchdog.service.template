@@ -1,0 +1,29 @@
+[Unit]
+Description=Raven Watchdog - MediaMTX Config Sync & Override API
+After=network.target mediamtx.service
+Wants=mediamtx.service
+
+[Service]
+Type=simple
+User=__USERNAME__
+WorkingDirectory=__BASE_DIR__/scripts
+
+# Environment variables
+Environment="WATCHDOG_PORT=5051"
+Environment="SYNC_INTERVAL=30"
+
+# Wait for MediaMTX to be ready
+ExecStartPre=/bin/sleep 3
+ExecStart=__VENV_DIR__/bin/python __BASE_DIR__/scripts/raven-watchdog.py
+
+# Restart on failure
+Restart=on-failure
+RestartSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=raven-watchdog
+
+[Install]
+WantedBy=multi-user.target

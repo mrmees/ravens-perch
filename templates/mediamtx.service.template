@@ -1,0 +1,27 @@
+[Unit]
+Description=MediaMTX RTSP/WebRTC/HLS Server
+Documentation=https://github.com/bluenviron/mediamtx
+After=network.target
+
+[Service]
+Type=simple
+User=__USERNAME__
+WorkingDirectory=__BASE_DIR__/mediamtx
+
+# Run MediaMTX with our config
+ExecStart=__BASE_DIR__/mediamtx/mediamtx __BASE_DIR__/mediamtx/mediamtx.yml
+
+# Restart on failure
+Restart=on-failure
+RestartSec=5
+
+# Give time for graceful shutdown
+TimeoutStopSec=10
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=mediamtx
+
+[Install]
+WantedBy=multi-user.target

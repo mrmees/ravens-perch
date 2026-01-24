@@ -1,0 +1,20 @@
+# Ravens Perch Python Dependencies
+# Install with: pip install -r venv-requirements.txt
+
+# Core dependencies
+ruamel.yaml>=0.17        # YAML parsing with comments preservation
+flask>=2.0               # HTTP server for snapfeeder and web UI
+
+# Video capture and encoding
+av>=10.0                 # PyAV - FFmpeg wrapper for RTSP capture
+pyturbojpeg>=1.7         # TurboJPEG - Fast JPEG encoding
+
+# Device monitoring
+pyudev>=0.24             # Linux udev bindings for hotplug detection (optional but recommended)
+
+# Optional dependencies (for dashboard - not currently used in main flow)
+# textual>=0.40          # Terminal UI framework
+# rich>=13.0             # Rich text formatting
+
+# Note: numpy may be required by pyturbojpeg on some systems
+# numpy>=1.20

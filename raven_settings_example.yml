@@ -1,0 +1,116 @@
+# Ravens Perch Camera Configuration
+# This file stores user preferences for camera setup
+# MediaMTX and Moonraker are configured via API from these settings
+#
+# NOTE: Each camera must have a unique combination of hardware_name AND serial_number.
+# Cameras that share both values are considered non-compliant with USB standards
+# and cannot be reliably distinguished - they will be rejected by the configuration tool.
+
+version: 2
+
+# MediaMTX streaming server connection
+mediamtx:
+  api_port: 9997
+  rtsp_port: 8554
+  webrtc_port: 8889
+  hls_port: 8888
+  snapshot_port: 5050
+
+# Moonraker API connection
+moonraker:
+  url: http://localhost:7125
+  api_key: null
+
+# Camera configurations
+cameras:
+  # Camera that HAS been added to Moonraker
+  - uid: a1b2
+    hardware_name: LifeCam HD-3000
+    serial_number: null
+    friendly_name: Bed Camera
+    
+    mediamtx:
+      enabled: true
+      
+      ffmpeg:
+        capture:
+          format: mjpeg
+          resolution: 1280x720
+          framerate: 30
+        encoding:
+          encoder: libx264  # libx264, vaapi, v4l2m2m (Pi only)
+          bitrate: 4M
+          preset: ultrafast
+          gop: 15
+          output_fps: 30  # Matches capture framerate
+          rotation: 0
+        audio:
+          enabled: false
+          device: null
+          codec: aac
+    
+    # Moonraker webcam settings - synced from/to Moonraker API
+    # moonraker_uid is assigned by Moonraker when we add the webcam
+    moonraker:
+      enabled: true
+      moonraker_uid: 341778f9-387f-455b-8b69-ff68442d41d9
+      flip_horizontal: false
+      flip_vertical: false
+      rotation: 0
+    
+    v4l2-ctl: {}
+    
+    # Device capabilities - auto-populated by querying the camera
+    # format → resolution → [available framerates]
+    capabilities:
+      mjpeg:
+        1920x1080: [30, 24, 20, 15, 10, 5]
+        1280x720: [30, 24, 20, 15, 10, 5]
+        640x480: [30, 24, 20, 15, 10, 5]
+      yuyv422:
+        640x480: [30, 15, 10]
+        320x240: [30]
+    capabilities_updated: "2026-01-13"
+
+  # Camera that has NOT been added to Moonraker yet
+  - uid: c3d4
+    hardware_name: C270 HD WEBCAM
+    serial_number: ABC123
+    friendly_name: Nozzle Cam
+    
+    mediamtx:
+      enabled: true
+      
+      ffmpeg:
+        capture:
+          format: mjpeg
+          resolution: 640x480
+          framerate: 15
+        encoding:
+          encoder: libx264
+          bitrate: 2M
+          preset: ultrafast
+          gop: 15
+          output_fps: 15  # Matches capture framerate
+          rotation: 0
+        audio:
+          enabled: false
+          device: null
+          codec: aac
+    
+    # Moonraker section - camera not yet added to Moonraker
+    moonraker:
+      enabled: false
+      moonraker_uid: null
+      flip_horizontal: false
+      flip_vertical: false
+      rotation: 0
+    
+    v4l2-ctl:
+      brightness: 128
+      contrast: 32
+      saturation: 64
+    
+    # Capabilities not yet captured for this camera
+    capabilities: {}
+    capabilities_updated: null

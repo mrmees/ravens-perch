@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ravens Perch - Camera Configuration</title>
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <header>
+        <div class="header-content">
+            <h1>🦅 Ravens Perch</h1>
+            <div class="status-bar">
+                <span id="mediamtx-status" class="status-indicator">MediaMTX: --</span>
+                <span id="moonraker-status" class="status-indicator">Moonraker: --</span>
+                <span id="camera-count">Cameras: --</span>
+            </div>
+        </div>
+    </header>
+
+    <main>
+        <!-- Configured Cameras Section -->
+        <section id="configured-cameras">
+            <div class="section-header">
+                <h2>📹 Configured Cameras</h2>
+                <button id="sync-all-btn" class="btn btn-secondary" title="Sync all cameras to MediaMTX/Moonraker">
+                    🔄 Sync All
+                </button>
+            </div>
+            <div id="camera-grid" class="camera-grid">
+                <!-- Camera cards will be inserted here -->
+                <div class="loading">Loading cameras...</div>
+            </div>
+        </section>
+
+        <!-- Unconfigured Devices Section -->
+        <section id="unconfigured-devices">
+            <h2>🔌 Available Devices</h2>
+            <div id="device-list" class="device-list">
+                <!-- Unconfigured devices will be listed here -->
+            </div>
+        </section>
+    </main>
+
+    <!-- Camera Settings Modal -->
+    <div id="settings-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>⚙️ Camera Settings</h3>
+                <button class="close-btn" onclick="closeModal()">&times;</button>
+            </div>
+            <form id="camera-settings-form">
+                <input type="hidden" id="settings-uid" name="uid">
+                
+                <div class="form-group">
+                    <label for="settings-name">Camera Name</label>
+                    <input type="text" id="settings-name" name="friendly_name" required>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="settings-format">Format</label>
+                        <select id="settings-format" name="format">
+                            <!-- Options populated dynamically -->
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="settings-resolution">Resolution</label>
+                        <select id="settings-resolution" name="resolution">
+                            <!-- Options populated dynamically -->
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="settings-fps">Frame Rate</label>
+                        <select id="settings-framerate" name="framerate">
+                            <!-- Options populated dynamically -->
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="settings-bitrate">Bitrate</label>
+                        <select id="settings-bitrate" name="bitrate">
+                            <option value="500K">500 Kbps (Very Low)</option>
+                            <option value="1M">1 Mbps (Low)</option>
+                            <option value="2M">2 Mbps (Medium)</option>
+                            <option value="4M" selected>4 Mbps (High)</option>
+                            <option value="6M">6 Mbps (Very High)</option>
+                            <option value="8M">8 Mbps (Maximum)</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="settings-rotation">Rotation</label>
+                        <select id="settings-rotation" name="rotation">
+                            <option value="0">0° (Normal)</option>
+                            <option value="90">90° (Clockwise)</option>
+                            <option value="180">180° (Upside Down)</option>
+                            <option value="270">270° (Counter-Clockwise)</option>
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="settings-moonraker" name="moonraker_enabled">
+                        Enable Moonraker Integration (Fluidd/Mainsail)
+                    </label>
+                </div>
+                
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-danger" onclick="deleteCamera()">🗑️ Delete</button>
+                    <div class="spacer"></div>
+                    <button type="button" class="btn btn-secondary" onclick="closeModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">💾 Save</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Add Device Modal -->
+    <div id="add-device-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h3>➕ Add Camera</h3>
+                <button class="close-btn" onclick="closeAddModal()">&times;</button>
+            </div>
+            <form id="add-device-form">
+                <input type="hidden" id="add-device-path" name="device_path">
+                
+                <div class="device-info">
+                    <p><strong>Device:</strong> <span id="add-device-name">--</span></p>
+                    <p><strong>Path:</strong> <span id="add-device-path-display">--</span></p>
+                </div>
+                
+                <div class="form-group">
+                    <label for="add-friendly-name">Camera Name</label>
+                    <input type="text" id="add-friendly-name" name="friendly_name" placeholder="e.g., Toolhead Cam">
+                </div>
+                
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="add-format">Format</label>
+                        <select id="add-format" name="format">
+                            <!-- Options populated dynamically -->
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="add-resolution">Resolution</label>
+                        <select id="add-resolution" name="resolution">
+                            <!-- Options populated dynamically -->
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label for="add-framerate">Frame Rate</label>
+                        <select id="add-framerate" name="framerate">
+                            <!-- Options populated dynamically -->
+                        </select>
+                    </div>
+                </div>
+                
+                <div class="form-group checkbox-group">
+                    <label>
+                        <input type="checkbox" id="add-moonraker" name="moonraker_enabled" checked>
+                        Add to Moonraker (Fluidd/Mainsail)
+                    </label>
+                </div>
+                
+                <div class="modal-actions">
+                    <button type="button" class="btn btn-secondary" onclick="closeAddModal()">Cancel</button>
+                    <button type="submit" class="btn btn-primary">➕ Add Camera</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Toast Notifications -->
+    <div id="toast-container"></div>
+
+    <script src="/static/js/cameras.js"></script>
+</body>
+</html>

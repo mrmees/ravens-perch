@@ -1,0 +1,32 @@
+[Unit]
+Description=Ravens Perch Camera Hotplug Daemon
+Documentation=https://github.com/mrmees/ravens-perch
+After=network.target mediamtx.service
+Wants=mediamtx.service
+
+[Service]
+Type=simple
+User=__USERNAME__
+Group=video
+WorkingDirectory=__BASE_DIR__
+ExecStart=__VENV_DIR__/bin/python __BASE_DIR__/scripts/camera_hotplug.py
+Restart=always
+RestartSec=5
+StandardOutput=journal
+StandardError=journal
+
+# Environment
+Environment="HOTPLUG_POLL_INTERVAL=3"
+Environment="HOTPLUG_DEBOUNCE=2"
+Environment="AUTO_ADD_MOONRAKER=true"
+Environment="PYTHONUNBUFFERED=1"
+
+# Security hardening
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=__BASE_DIR__
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target
