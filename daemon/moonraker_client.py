@@ -151,8 +151,8 @@ def register_camera(
     """
     client = get_client()
 
-    # Create unique name for Moonraker
-    webcam_name = f"ravens_{camera_id}".replace(' ', '_').lower()
+    # Create webcam name from friendly name (with ravens_ prefix for identification)
+    webcam_name = f"ravens_{friendly_name}".replace(' ', '_').lower()
 
     # Check if this camera already exists
     existing = get_ravens_camera_by_name(webcam_name)

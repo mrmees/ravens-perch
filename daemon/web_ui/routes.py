@@ -224,6 +224,26 @@ def rename_camera(camera_id: int):
     update_camera(camera_id, friendly_name=new_name)
     add_log("INFO", f"Camera renamed from '{old_name}' to '{new_name}'", camera_id)
 
+    # Update Moonraker webcam name if registered
+    if camera.get('moonraker_uid') and moonraker_available():
+        # Unregister old webcam and re-register with new name
+        unregister_moonraker_camera(camera['moonraker_uid'])
+        host = get_system_ip()
+        stream_url = build_stream_url(str(camera_id), host)
+        snapshot_url = build_snapshot_url(str(camera_id), host)
+        settings = get_camera_settings(camera_id) or {}
+        rotation = settings.get('rotation', 0)
+
+        success, new_uid, _ = register_camera(
+            str(camera_id),
+            new_name,
+            stream_url,
+            snapshot_url,
+            rotation=rotation
+        )
+        if success and new_uid:
+            update_camera(camera_id, moonraker_uid=new_uid)
+
     if request.headers.get('HX-Request'):
         return new_name
 
