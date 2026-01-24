@@ -664,7 +664,7 @@ def api_get_controls(camera_id: int):
 
         # Get saved control values from database
         settings = get_camera_settings(camera_id)
-        saved_controls = settings.get('v4l2_controls', {}) if settings else {}
+        saved_controls = (settings.get('v4l2_controls') or {}) if settings else {}
 
         # Merge saved values with available controls
         for name, info in controls.items():
