@@ -51,6 +51,22 @@
                             {{ camera.settings.resolution }} @ {{ camera.settings.framerate }}fps
                         </span>
                     {% endif %}
+                    {% if camera.connected %}
+                    <div class="camera-bandwidth" id="bandwidth-{{ camera.id }}">
+                        <span class="bandwidth-item" title="Estimated USB input bandwidth">
+                            <span class="bandwidth-label">USB:</span>
+                            <span class="bandwidth-value" data-type="usb">--</span>
+                        </span>
+                        <span class="bandwidth-item" title="Network output bandwidth (configured bitrate)">
+                            <span class="bandwidth-label">Net:</span>
+                            <span class="bandwidth-value" data-type="network">--</span>
+                        </span>
+                        <span class="bandwidth-item" title="Active viewers">
+                            <span class="bandwidth-label">Viewers:</span>
+                            <span class="bandwidth-value" data-type="viewers">--</span>
+                        </span>
+                    </div>
+                    {% endif %}
                 </div>
                 <div class="camera-actions">
                     <a href="{{ url_for('cameras.camera_detail', camera_id=camera.id) }}"
@@ -95,5 +111,45 @@
             img.src = src + '?t=' + Date.now();
         });
     }, 10000);
+
+    // Fetch and display bandwidth stats
+    function updateBandwidthStats() {
+        fetch('{{ url_for("cameras.api_bandwidth") }}')
+            .then(response => response.json())
+            .then(data => {
+                for (const [cameraId, stats] of Object.entries(data)) {
+                    const container = document.getElementById('bandwidth-' + cameraId);
+                    if (!container || !stats) continue;
+
+                    // Update USB bandwidth
+                    const usbEl = container.querySelector('[data-type="usb"]');
+                    if (usbEl && stats.usb) {
+                        const usbText = stats.usb.mb_per_second >= 1
+                            ? stats.usb.mb_per_second.toFixed(1) + ' MB/s'
+                            : (stats.usb.mb_per_second * 1000).toFixed(0) + ' KB/s';
+                        usbEl.textContent = (stats.usb.is_estimate ? '~' : '') + usbText;
+                    }
+
+                    // Update network bandwidth
+                    const netEl = container.querySelector('[data-type="network"]');
+                    if (netEl && stats.network) {
+                        netEl.textContent = stats.network.mbps + ' Mbps';
+                    }
+
+                    // Update viewers
+                    const viewersEl = container.querySelector('[data-type="viewers"]');
+                    if (viewersEl && stats.mediamtx) {
+                        viewersEl.textContent = stats.mediamtx.readers;
+                    } else if (viewersEl) {
+                        viewersEl.textContent = '-';
+                    }
+                }
+            })
+            .catch(err => console.error('Failed to fetch bandwidth stats:', err));
+    }
+
+    // Initial fetch and periodic updates
+    updateBandwidthStats();
+    setInterval(updateBandwidthStats, 5000);
 </script>
 {% endblock %}

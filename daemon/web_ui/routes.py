@@ -31,6 +31,7 @@ from ..camera_manager import (
     find_video_devices, get_device_info, probe_capabilities, auto_configure,
     get_v4l2_controls, set_v4l2_control, get_v4l2_control_value
 )
+from ..bandwidth import get_camera_bandwidth_stats
 from ..config import COMMON_RESOLUTIONS, COMMON_FRAMERATES
 
 logger = logging.getLogger(__name__)
@@ -750,6 +751,36 @@ def api_system():
         'system_ip': get_system_ip(),
         'moonraker_available': moonraker_available(),
     })
+
+
+@bp.route('/api/bandwidth')
+def api_bandwidth():
+    """Get bandwidth statistics for all cameras."""
+    cameras = get_all_cameras_with_settings()
+    stats = {}
+
+    for camera in cameras:
+        camera_id = str(camera['id'])
+        if camera['connected']:
+            stats[camera_id] = get_camera_bandwidth_stats(camera)
+        else:
+            stats[camera_id] = None
+
+    return jsonify(stats)
+
+
+@bp.route('/api/bandwidth/<int:camera_id>')
+def api_bandwidth_camera(camera_id: int):
+    """Get bandwidth statistics for a specific camera."""
+    camera = get_camera_with_settings(camera_id)
+    if not camera:
+        return jsonify({'error': 'Camera not found'}), 404
+
+    if not camera['connected']:
+        return jsonify({'error': 'Camera not connected'}), 400
+
+    stats = get_camera_bandwidth_stats(camera)
+    return jsonify(stats)
 
 
 # ============ V4L2 Controls API ============

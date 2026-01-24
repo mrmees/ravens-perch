@@ -254,6 +254,33 @@ a:hover {
     color: var(--text-secondary);
 }
 
+.camera-bandwidth {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+    padding-top: 0.5rem;
+    border-top: 1px solid var(--border-color);
+    font-size: 0.75rem;
+}
+
+.bandwidth-item {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    color: var(--text-secondary);
+}
+
+.bandwidth-label {
+    color: var(--text-muted);
+}
+
+.bandwidth-value {
+    font-family: monospace;
+    color: var(--accent-primary);
+    font-weight: 500;
+}
+
 .camera-actions {
     padding: 0 1rem 1rem;
     display: flex;
