@@ -327,10 +327,21 @@ def build_ffmpeg_command(
         "-i", device_path
     ])
 
-    # Video filters
+    # Video filters - order matters!
+    # 1. Pixel format conversion first (debayers Bayer input, converts YUV formats)
+    # 2. Then rotation (must operate on converted pixel data, not raw Bayer)
+    # 3. Then hardware upload (for VAAPI)
     filters = []
 
-    # Rotation - use 'or' to handle None values
+    # Pixel format conversion FIRST (critical for Bayer formats)
+    if encoder_type == 'h264_vaapi':
+        filters.append("format=nv12")
+    else:
+        # Convert to yuv420p for compatibility - most players can't decode 4:2:2
+        # Also debayers raw Bayer sensor data via libswscale
+        filters.append("format=yuv420p")
+
+    # Rotation AFTER format conversion
     rotation = settings.get('rotation') or 0
     if rotation == 90:
         filters.append("transpose=1")
@@ -339,13 +350,9 @@ def build_ffmpeg_command(
     elif rotation == 270:
         filters.append("transpose=2")
 
-    # Pixel format conversion
+    # Hardware upload last (for VAAPI)
     if encoder_type == 'h264_vaapi':
-        filters.append("format=nv12")
         filters.append("hwupload")
-    else:
-        # Convert to yuv420p for compatibility - most players can't decode 4:2:2
-        filters.append("format=yuv420p")
 
     if filters:
         cmd_parts.extend(["-vf", ",".join(filters)])
