@@ -233,6 +233,16 @@
             </div>
         </div>
 
+        <!-- FFmpeg Command -->
+        {% if ffmpeg_cmd %}
+        <div class="settings-card">
+            <h3>FFmpeg Command</h3>
+            <div class="ffmpeg-command">
+                <code>{{ ffmpeg_cmd }}</code>
+            </div>
+        </div>
+        {% endif %}
+
         <!-- Device Info -->
         <div class="settings-card">
             <h3>Device Information</h3>

@@ -113,6 +113,18 @@ def camera_detail(camera_id: int):
     # Get encoders
     encoders = detect_encoders()
 
+    # Build current FFmpeg command for display
+    ffmpeg_cmd = None
+    if camera['connected'] and camera['device_path'] and camera['settings']:
+        settings = camera['settings']
+        encoder = settings.get('encoder') or 'libx264'
+        ffmpeg_cmd = build_ffmpeg_command(
+            camera['device_path'],
+            settings,
+            str(camera_id),
+            encoder
+        )
+
     return render_template(
         'camera_detail.html',
         camera=camera,
@@ -120,7 +132,8 @@ def camera_detail(camera_id: int):
         resolutions=resolutions,
         framerates=COMMON_FRAMERATES,
         encoders=encoders,
-        system_ip=get_system_ip()
+        system_ip=get_system_ip(),
+        ffmpeg_cmd=ffmpeg_cmd
     )
 
 

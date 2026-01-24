@@ -850,3 +850,22 @@ a:hover {
     color: var(--text-secondary);
     font-size: 0.85rem;
 }
+
+/* FFmpeg Command Display */
+.ffmpeg-command {
+    background-color: var(--bg-primary);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    padding: 1rem;
+    overflow-x: auto;
+}
+
+.ffmpeg-command code {
+    display: block;
+    white-space: pre-wrap;
+    word-break: break-all;
+    font-family: 'Consolas', 'Monaco', 'Courier New', monospace;
+    font-size: 0.85rem;
+    color: var(--text-primary);
+    line-height: 1.5;
+}
