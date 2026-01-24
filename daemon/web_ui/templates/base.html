@@ -17,6 +17,7 @@
             <a href="{{ url_for('cameras.dashboard') }}" class="{% if request.endpoint == 'cameras.dashboard' %}active{% endif %}">Cameras</a>
             <a href="{{ url_for('cameras.settings_page') }}" class="{% if request.endpoint == 'cameras.settings_page' %}active{% endif %}">Settings</a>
             <a href="{{ url_for('cameras.logs_page') }}" class="{% if request.endpoint == 'cameras.logs_page' %}active{% endif %}">Logs</a>
+            <a href="{{ url_for('cameras.help_page') }}" class="{% if request.endpoint == 'cameras.help_page' %}active{% endif %}">Help</a>
         </div>
     </nav>
 

@@ -1,0 +1,380 @@
+{% extends "base.html" %}
+
+{% block title %}Help - Ravens Perch{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Camera Settings Guide</h1>
+</div>
+
+<div class="help-layout">
+    <nav class="help-nav">
+        <h4>Contents</h4>
+        <ul>
+            <li><a href="#overview">Overview</a></li>
+            <li><a href="#format">Video Format</a></li>
+            <li><a href="#resolution">Resolution</a></li>
+            <li><a href="#framerate">Frame Rate</a></li>
+            <li><a href="#encoder">Encoder</a></li>
+            <li><a href="#bitrate">Bitrate</a></li>
+            <li><a href="#recommendations">Recommendations</a></li>
+        </ul>
+    </nav>
+
+    <div class="help-content">
+        <section id="overview" class="help-section">
+            <h2>Overview</h2>
+            <p>
+                Camera streaming involves three main bottlenecks that affect performance:
+            </p>
+            <ol>
+                <li><strong>USB Bus</strong> - Data transfer from camera to computer</li>
+                <li><strong>CPU/GPU</strong> - Processing power to encode the video stream</li>
+                <li><strong>Network</strong> - Bandwidth to deliver the stream to viewers</li>
+            </ol>
+            <p>
+                Understanding how each setting affects these bottlenecks will help you
+                configure your cameras for optimal performance on your hardware.
+            </p>
+        </section>
+
+        <section id="format" class="help-section">
+            <h2>Video Format</h2>
+            <p>
+                The format determines how raw video data is sent from the camera over USB.
+            </p>
+
+            <div class="settings-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Format</th>
+                            <th>USB Bandwidth</th>
+                            <th>CPU Load</th>
+                            <th>Quality</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>MJPEG</strong></td>
+                            <td class="impact-low">Low</td>
+                            <td class="impact-low">Low</td>
+                            <td>Good (some compression artifacts)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>YUYV</strong></td>
+                            <td class="impact-high">Very High</td>
+                            <td class="impact-medium">Medium</td>
+                            <td>Excellent (uncompressed)</td>
+                        </tr>
+                        <tr>
+                            <td><strong>H.264</strong></td>
+                            <td class="impact-low">Very Low</td>
+                            <td class="impact-low">Very Low</td>
+                            <td>Good (camera encodes)</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="help-detail">
+                <h4>MJPEG (Recommended for most cameras)</h4>
+                <p>
+                    Each frame is compressed as a JPEG image. This significantly reduces USB
+                    bandwidth while maintaining good quality. The CPU only needs to decode
+                    the JPEG and re-encode for streaming. Best choice for USB 2.0 cameras
+                    and multi-camera setups.
+                </p>
+
+                <h4>YUYV (Raw/Uncompressed)</h4>
+                <p>
+                    Sends raw pixel data over USB. A 1080p@30fps stream uses approximately
+                    <strong>1.2 Gbps</strong> of USB bandwidth - nearly saturating a USB 2.0
+                    port. Only use this if you have USB 3.0 and need the absolute best
+                    quality, or if your camera doesn't support MJPEG.
+                </p>
+
+                <h4>H.264 (If supported by camera)</h4>
+                <p>
+                    The camera itself encodes the video, dramatically reducing both USB
+                    bandwidth and CPU load. Ideal if your camera supports it, though
+                    fewer USB cameras offer this option.
+                </p>
+            </div>
+        </section>
+
+        <section id="resolution" class="help-section">
+            <h2>Resolution</h2>
+            <p>
+                Resolution directly affects all three bottlenecks. Higher resolution means
+                more data to transfer, process, and stream.
+            </p>
+
+            <div class="settings-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Resolution</th>
+                            <th>Pixels</th>
+                            <th>YUYV Bandwidth</th>
+                            <th>Typical Use</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>640x480</strong></td>
+                            <td>0.3 MP</td>
+                            <td>~150 Mbps @ 30fps</td>
+                            <td>Low-power devices, monitoring</td>
+                        </tr>
+                        <tr>
+                            <td><strong>1280x720</strong></td>
+                            <td>0.9 MP</td>
+                            <td>~440 Mbps @ 30fps</td>
+                            <td>Good balance for most uses</td>
+                        </tr>
+                        <tr>
+                            <td><strong>1920x1080</strong></td>
+                            <td>2.1 MP</td>
+                            <td>~1 Gbps @ 30fps</td>
+                            <td>High quality, powerful hardware</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="help-tip">
+                <strong>Tip:</strong> For 3D printer monitoring, 720p is usually sufficient.
+                Higher resolutions don't add much value when watching layer lines, but
+                significantly increase resource usage.
+            </div>
+        </section>
+
+        <section id="framerate" class="help-section">
+            <h2>Frame Rate</h2>
+            <p>
+                Frame rate (fps) determines how smooth the video appears. Higher frame rates
+                require proportionally more resources.
+            </p>
+
+            <div class="settings-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Frame Rate</th>
+                            <th>Resource Usage</th>
+                            <th>Best For</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>15 fps</strong></td>
+                            <td class="impact-low">Low (50% of 30fps)</td>
+                            <td>Static monitoring, low-power devices</td>
+                        </tr>
+                        <tr>
+                            <td><strong>30 fps</strong></td>
+                            <td class="impact-medium">Moderate (baseline)</td>
+                            <td>General use, smooth motion</td>
+                        </tr>
+                        <tr>
+                            <td><strong>60 fps</strong></td>
+                            <td class="impact-high">High (2x of 30fps)</td>
+                            <td>Fast motion, unnecessary for printing</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="help-tip">
+                <strong>Tip:</strong> 15 fps is perfectly adequate for watching 3D prints.
+                The print head moves slowly enough that higher frame rates provide minimal
+                benefit while doubling resource usage.
+            </div>
+        </section>
+
+        <section id="encoder" class="help-section">
+            <h2>Encoder</h2>
+            <p>
+                The encoder converts the camera's video into a compressed H.264 stream for
+                network delivery. This is typically the largest CPU consumer.
+            </p>
+
+            <div class="settings-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Encoder</th>
+                            <th>CPU Load</th>
+                            <th>Quality</th>
+                            <th>Availability</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>Software (libx264)</strong></td>
+                            <td class="impact-high">High</td>
+                            <td>Excellent</td>
+                            <td>Always available</td>
+                        </tr>
+                        <tr>
+                            <td><strong>VAAPI</strong></td>
+                            <td class="impact-low">Very Low</td>
+                            <td>Good</td>
+                            <td>Intel/AMD GPUs</td>
+                        </tr>
+                        <tr>
+                            <td><strong>RKMPP</strong></td>
+                            <td class="impact-low">Very Low</td>
+                            <td>Good</td>
+                            <td>Rockchip SoCs</td>
+                        </tr>
+                        <tr>
+                            <td><strong>V4L2M2M</strong></td>
+                            <td class="impact-low">Very Low</td>
+                            <td>Good</td>
+                            <td>Raspberry Pi</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="help-detail">
+                <h4>Software Encoding (libx264)</h4>
+                <p>
+                    Uses the CPU to encode video. Provides the best quality and compatibility
+                    but can use 30-100% of a CPU core per stream at 1080p. On low-power
+                    devices like Raspberry Pi, this may limit you to one camera at lower
+                    settings.
+                </p>
+
+                <h4>Hardware Encoding (VAAPI, RKMPP, V4L2M2M)</h4>
+                <p>
+                    Uses dedicated hardware to encode video, freeing the CPU for other tasks.
+                    Typically uses less than 5% CPU regardless of resolution. Quality is
+                    slightly lower than software encoding but usually imperceptible for
+                    monitoring. <strong>Strongly recommended</strong> if your hardware supports it.
+                </p>
+            </div>
+
+            <div class="help-tip">
+                <strong>Tip:</strong> Check the Settings page to see which hardware encoders
+                are available on your system. If hardware encoding is available, use it!
+            </div>
+        </section>
+
+        <section id="bitrate" class="help-section">
+            <h2>Bitrate</h2>
+            <p>
+                Bitrate controls how much data is used to represent each second of video
+                in the output stream. This primarily affects network bandwidth and storage.
+            </p>
+
+            <div class="settings-table">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Bitrate</th>
+                            <th>Network Usage</th>
+                            <th>Quality</th>
+                            <th>Recommended For</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>1-2 Mbps</strong></td>
+                            <td>~0.5 MB/s</td>
+                            <td>Acceptable for 720p</td>
+                            <td>Slow networks, multiple cameras</td>
+                        </tr>
+                        <tr>
+                            <td><strong>2-4 Mbps</strong></td>
+                            <td>~0.5 MB/s</td>
+                            <td>Good for 720p-1080p</td>
+                            <td>Most home networks</td>
+                        </tr>
+                        <tr>
+                            <td><strong>4-8 Mbps</strong></td>
+                            <td>~1 MB/s</td>
+                            <td>Excellent for 1080p</td>
+                            <td>High quality, fast networks</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="help-detail">
+                <h4>How Bitrate Affects Quality</h4>
+                <p>
+                    Higher bitrates preserve more detail, especially in scenes with lots of
+                    motion or fine detail. Lower bitrates may show blocky artifacts during
+                    fast movements. For static scenes (like a 3D printer), lower bitrates
+                    work well.
+                </p>
+
+                <h4>Network Considerations</h4>
+                <p>
+                    A 4 Mbps stream uses about 1.8 GB per hour. If you're streaming multiple
+                    cameras or have limited bandwidth, lower bitrates reduce network
+                    congestion. Ravens Perch automatically scales bitrate based on resolution.
+                </p>
+            </div>
+        </section>
+
+        <section id="recommendations" class="help-section">
+            <h2>Recommended Settings</h2>
+
+            <div class="recommendation-card">
+                <h4>Raspberry Pi 3/4 (Single Camera)</h4>
+                <ul>
+                    <li>Format: MJPEG</li>
+                    <li>Resolution: 1280x720</li>
+                    <li>Frame Rate: 15-30 fps</li>
+                    <li>Encoder: V4L2M2M (if available) or libx264</li>
+                    <li>Bitrate: 2-3 Mbps</li>
+                </ul>
+            </div>
+
+            <div class="recommendation-card">
+                <h4>Raspberry Pi (Multiple Cameras)</h4>
+                <ul>
+                    <li>Format: MJPEG</li>
+                    <li>Resolution: 640x480 or 1280x720</li>
+                    <li>Frame Rate: 15 fps</li>
+                    <li>Encoder: V4L2M2M required for 2+ cameras</li>
+                    <li>Bitrate: 1-2 Mbps per camera</li>
+                </ul>
+            </div>
+
+            <div class="recommendation-card">
+                <h4>Rockchip SBC (RK3588, etc.)</h4>
+                <ul>
+                    <li>Format: MJPEG</li>
+                    <li>Resolution: 1920x1080</li>
+                    <li>Frame Rate: 30 fps</li>
+                    <li>Encoder: RKMPP</li>
+                    <li>Bitrate: 4-6 Mbps</li>
+                </ul>
+            </div>
+
+            <div class="recommendation-card">
+                <h4>Intel/AMD PC</h4>
+                <ul>
+                    <li>Format: MJPEG or YUYV</li>
+                    <li>Resolution: 1920x1080</li>
+                    <li>Frame Rate: 30 fps</li>
+                    <li>Encoder: VAAPI (if available) or libx264</li>
+                    <li>Bitrate: 4-8 Mbps</li>
+                </ul>
+            </div>
+
+            <div class="help-tip">
+                <strong>General Rule:</strong> Start with Ravens Perch's auto-configured
+                settings. If you experience dropped frames, high CPU usage, or choppy
+                video, try reducing resolution or frame rate first. If your device supports
+                hardware encoding, enabling it often solves performance issues entirely.
+            </div>
+        </section>
+    </div>
+</div>
+{% endblock %}

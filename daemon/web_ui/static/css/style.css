@@ -869,3 +869,218 @@ a:hover {
     color: var(--text-primary);
     line-height: 1.5;
 }
+
+/* Help Page */
+.help-layout {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 2rem;
+}
+
+@media (max-width: 800px) {
+    .help-layout {
+        grid-template-columns: 1fr;
+    }
+
+    .help-nav {
+        position: static;
+        margin-bottom: 1rem;
+    }
+}
+
+.help-nav {
+    position: sticky;
+    top: 1rem;
+    align-self: start;
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius);
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+}
+
+.help-nav h4 {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+}
+
+.help-nav ul {
+    list-style: none;
+}
+
+.help-nav li {
+    margin-bottom: 0.5rem;
+}
+
+.help-nav a {
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    transition: color 0.2s;
+}
+
+.help-nav a:hover {
+    color: var(--accent-primary);
+}
+
+.help-content {
+    max-width: 900px;
+}
+
+.help-section {
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius);
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+    border: 1px solid var(--border-color);
+}
+
+.help-section h2 {
+    font-size: 1.25rem;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.help-section p {
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+    line-height: 1.7;
+}
+
+.help-section ol,
+.help-section ul {
+    color: var(--text-secondary);
+    margin-bottom: 1rem;
+    padding-left: 1.5rem;
+}
+
+.help-section li {
+    margin-bottom: 0.5rem;
+    line-height: 1.6;
+}
+
+/* Settings Table */
+.settings-table {
+    margin: 1.5rem 0;
+    overflow-x: auto;
+}
+
+.settings-table table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.settings-table th,
+.settings-table td {
+    padding: 0.75rem 1rem;
+    text-align: left;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.settings-table th {
+    background-color: var(--bg-tertiary);
+    font-weight: 500;
+    color: var(--text-secondary);
+    white-space: nowrap;
+}
+
+.settings-table td {
+    color: var(--text-primary);
+}
+
+.settings-table tbody tr:hover {
+    background-color: var(--bg-tertiary);
+}
+
+/* Impact indicators */
+.impact-low {
+    color: var(--success);
+    font-weight: 500;
+}
+
+.impact-medium {
+    color: var(--warning);
+    font-weight: 500;
+}
+
+.impact-high {
+    color: var(--error);
+    font-weight: 500;
+}
+
+/* Help details */
+.help-detail {
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.help-detail h4 {
+    font-size: 1rem;
+    margin-bottom: 0.5rem;
+    color: var(--text-primary);
+}
+
+.help-detail p {
+    font-size: 0.9rem;
+    margin-bottom: 1rem;
+}
+
+.help-detail p:last-child {
+    margin-bottom: 0;
+}
+
+/* Help tip box */
+.help-tip {
+    background-color: rgba(74, 158, 255, 0.1);
+    border: 1px solid var(--accent-primary);
+    border-radius: var(--radius-sm);
+    padding: 1rem;
+    margin-top: 1rem;
+    font-size: 0.9rem;
+    color: var(--text-primary);
+}
+
+.help-tip strong {
+    color: var(--accent-primary);
+}
+
+/* Recommendation cards */
+.recommendation-card {
+    background-color: var(--bg-tertiary);
+    border-radius: var(--radius-sm);
+    padding: 1rem;
+    margin-bottom: 1rem;
+}
+
+.recommendation-card:last-child {
+    margin-bottom: 0;
+}
+
+.recommendation-card h4 {
+    font-size: 0.95rem;
+    margin-bottom: 0.75rem;
+    color: var(--accent-primary);
+}
+
+.recommendation-card ul {
+    list-style: none;
+    padding-left: 0;
+    margin-bottom: 0;
+}
+
+.recommendation-card li {
+    font-size: 0.9rem;
+    padding: 0.25rem 0;
+    color: var(--text-secondary);
+}
+
+.recommendation-card li::before {
+    content: '\2022';
+    color: var(--accent-primary);
+    display: inline-block;
+    width: 1em;
+}

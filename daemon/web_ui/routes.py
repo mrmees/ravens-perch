@@ -565,6 +565,14 @@ def api_logs():
     return jsonify(logs)
 
 
+# ============ Help ============
+
+@bp.route('/help')
+def help_page():
+    """Help and documentation page."""
+    return render_template('help.html')
+
+
 # ============ API Endpoints ============
 
 @bp.route('/api/resolutions/<int:camera_id>')
