@@ -114,6 +114,24 @@ def is_capture_device(device_path: str) -> bool:
                 logger.debug(f"Skipping codec device: {device_path}")
                 return False
 
+        # Use udevadm to check for capture capability - most reliable method
+        result = subprocess.run(
+            ["udevadm", "info", device_path],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+
+        if result.returncode == 0:
+            # Check for :capture: in CAPABILITIES
+            if ':capture:' in result.stdout:
+                return True
+            else:
+                logger.debug(f"No capture capability in udev: {device_path}")
+                return False
+
+        # Fallback to v4l2-ctl if udevadm fails
+        logger.debug(f"udevadm failed for {device_path}, falling back to v4l2-ctl")
         result = subprocess.run(
             ["v4l2-ctl", "--device", device_path, "--all"],
             capture_output=True,
@@ -140,8 +158,6 @@ def is_capture_device(device_path: str) -> bool:
 
         # Exclude mem2mem devices (they have both capture and output)
         if "Video Output" in output and "Video Capture" in output:
-            # This is likely a mem2mem device, not a camera
-            # Real cameras only have capture, not output
             logger.debug(f"Skipping mem2mem device: {device_path}")
             return False
 
