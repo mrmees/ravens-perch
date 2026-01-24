@@ -91,10 +91,6 @@ FFMPEG_INPUT_FORMATS = {
     "gbrg": "bayer_gbrg8",
 }
 
-# Bayer formats that require debayering filter
-BAYER_FORMATS = {"bayer_grbg", "bayer_rggb", "bayer_bggr", "bayer_gbrg",
-                 "grbg", "rggb", "bggr", "gbrg"}
-
 # Encoder settings
 ENCODER_DEFAULTS = {
     "libx264": {
