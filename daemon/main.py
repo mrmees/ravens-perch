@@ -313,12 +313,14 @@ class RavensPerchDaemon:
             # Build FFmpeg command and start stream
             settings = camera['settings'] or {}
             encoder = settings.get('encoder', 'libx264')
+            v4l2_controls = settings.get('v4l2_controls') or {}
 
             ffmpeg_cmd = build_ffmpeg_command(
                 device_info.path,
                 settings,
                 str(camera_id),
-                encoder
+                encoder,
+                v4l2_controls=v4l2_controls
             )
 
             # Register stream with MediaMTX

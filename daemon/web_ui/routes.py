@@ -353,11 +353,30 @@ def rename_camera(camera_id: int):
 @bp.route('/<int:camera_id>/restart', methods=['POST'])
 def restart_camera_stream(camera_id: int):
     """Restart camera stream."""
-    camera = get_camera_by_id(camera_id)
+    camera = get_camera_with_settings(camera_id)
     if not camera:
         return jsonify({'error': 'Camera not found'}), 404
 
-    success, error = restart_stream(str(camera_id))
+    if not camera['connected'] or not camera['device_path']:
+        message = "Camera not connected"
+        if request.headers.get('HX-Request'):
+            return message
+        flash(message, "error")
+        return redirect(url_for('cameras.camera_detail', camera_id=camera_id))
+
+    # Rebuild FFmpeg command with current settings including v4l2_controls
+    settings = camera['settings'] or {}
+    v4l2_controls = settings.get('v4l2_controls') or {}
+
+    ffmpeg_cmd = build_ffmpeg_command(
+        camera['device_path'],
+        settings,
+        str(camera_id),
+        settings.get('encoder', 'libx264'),
+        v4l2_controls=v4l2_controls
+    )
+
+    success, error = add_or_update_stream(str(camera_id), ffmpeg_cmd)
 
     if success:
         add_log("INFO", f"Stream restarted for camera {camera['friendly_name']}", camera_id)
