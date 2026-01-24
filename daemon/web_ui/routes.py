@@ -437,9 +437,17 @@ def api_resolutions(camera_id: int):
         capabilities = caps['capabilities']
         if fmt in capabilities:
             resolutions = list(capabilities[fmt].keys())
-            return jsonify(resolutions)
+        else:
+            resolutions = COMMON_RESOLUTIONS
+    else:
+        resolutions = COMMON_RESOLUTIONS
 
-    return jsonify(COMMON_RESOLUTIONS)
+    # Return HTML options for HTMX requests
+    if request.headers.get('HX-Request'):
+        options = ''.join(f'<option value="{res}">{res}</option>' for res in resolutions)
+        return options
+
+    return jsonify(resolutions)
 
 
 @bp.route('/api/framerates/<int:camera_id>')
@@ -452,10 +460,18 @@ def api_framerates(camera_id: int):
     if caps and caps['capabilities']:
         capabilities = caps['capabilities']
         if fmt in capabilities and resolution in capabilities[fmt]:
-            framerates = capabilities[fmt][resolution]
-            return jsonify(sorted(framerates))
+            framerates = sorted(capabilities[fmt][resolution])
+        else:
+            framerates = COMMON_FRAMERATES
+    else:
+        framerates = COMMON_FRAMERATES
 
-    return jsonify(COMMON_FRAMERATES)
+    # Return HTML options for HTMX requests
+    if request.headers.get('HX-Request'):
+        options = ''.join(f'<option value="{fps}">{fps} fps</option>' for fps in framerates)
+        return options
+
+    return jsonify(framerates)
 
 
 @bp.route('/api/system')
