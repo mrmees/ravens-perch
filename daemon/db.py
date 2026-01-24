@@ -158,23 +158,42 @@ def get_camera_by_device_path(device_path: str) -> Optional[Dict]:
 def create_camera(hardware_name: str, serial_number: Optional[str],
                   friendly_name: Optional[str] = None,
                   device_path: Optional[str] = None) -> int:
-    """Create a new camera record. Returns the camera ID."""
+    """Create a new camera record. Returns the camera ID.
+
+    If camera with same hardware_id already exists, returns existing ID.
+    """
     hardware_id = f"{hardware_name}-{serial_number}" if serial_number else hardware_name
     if not friendly_name:
         friendly_name = hardware_name
 
     with get_connection() as conn:
         cursor = conn.cursor()
+
+        # Use INSERT OR IGNORE to handle race conditions
         cursor.execute("""
-            INSERT INTO cameras (hardware_id, hardware_name, serial_number,
+            INSERT OR IGNORE INTO cameras (hardware_id, hardware_name, serial_number,
                                  friendly_name, device_path, connected, last_seen)
             VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
         """, (hardware_id, hardware_name, serial_number, friendly_name, device_path))
+
+        if cursor.rowcount == 0:
+            # Camera already exists, get its ID
+            cursor.execute("SELECT id FROM cameras WHERE hardware_id = ?", (hardware_id,))
+            camera_id = cursor.fetchone()[0]
+            # Update connection status
+            cursor.execute("""
+                UPDATE cameras SET connected = 1, device_path = ?, last_seen = CURRENT_TIMESTAMP
+                WHERE id = ?
+            """, (device_path, camera_id))
+            conn.commit()
+            logger.info(f"Camera already exists {camera_id}: {friendly_name} ({hardware_id})")
+            return camera_id
+
         camera_id = cursor.lastrowid
 
         # Create default settings for this camera
         cursor.execute("""
-            INSERT INTO camera_settings (camera_id) VALUES (?)
+            INSERT OR IGNORE INTO camera_settings (camera_id) VALUES (?)
         """, (camera_id,))
 
         conn.commit()
