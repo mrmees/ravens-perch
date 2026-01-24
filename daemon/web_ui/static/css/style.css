@@ -474,30 +474,37 @@ a:hover {
     background-color: white;
 }
 
-/* Advanced Settings */
-.advanced-settings {
+/* Collapsible Settings Cards */
+details.settings-card {
     cursor: pointer;
 }
 
-.advanced-settings summary {
+details.settings-card summary {
     list-style: none;
-    font-weight: 500;
+    font-size: 1rem;
+    font-weight: 600;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
     margin-bottom: 1rem;
 }
 
-.advanced-settings summary::-webkit-details-marker {
+details.settings-card summary::-webkit-details-marker {
     display: none;
 }
 
-.advanced-settings summary::after {
+details.settings-card summary::after {
     content: '+';
     float: right;
     font-size: 1.25rem;
     color: var(--text-secondary);
 }
 
-.advanced-settings[open] summary::after {
+details.settings-card[open] summary::after {
     content: '-';
+}
+
+details.settings-card > *:not(summary) {
+    cursor: default;
 }
 
 /* URL List */
@@ -816,7 +823,8 @@ a:hover {
     background-color: rgba(244, 67, 54, 0.05);
 }
 
-.danger-zone h3 {
+.danger-zone h3,
+.danger-zone summary {
     color: var(--error);
 }
 

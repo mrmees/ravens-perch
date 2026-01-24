@@ -56,8 +56,8 @@
     </div>
 
     <div class="settings-section">
-        <div class="settings-card">
-            <h3>Camera Settings</h3>
+        <details class="settings-card" open>
+            <summary>Camera Settings</summary>
 
             <form method="POST"
                   action="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
@@ -131,7 +131,7 @@
                     Save Settings
                 </button>
             </form>
-        </div>
+        </details>
 
         <!-- Advanced Settings (collapsed by default) -->
         <details class="settings-card advanced-settings">
@@ -242,8 +242,8 @@
         {% endif %}
 
         <!-- Stream URLs -->
-        <div class="settings-card">
-            <h3>Stream URLs</h3>
+        <details class="settings-card">
+            <summary>Stream URLs</summary>
             <div class="url-list">
                 <div class="url-item">
                     <label>WebRTC</label>
@@ -258,21 +258,21 @@
                     <code>{{ camera.stream_urls.snapshot }}</code>
                 </div>
             </div>
-        </div>
+        </details>
 
         <!-- FFmpeg Command -->
         {% if ffmpeg_cmd %}
-        <div class="settings-card">
-            <h3>FFmpeg Command</h3>
+        <details class="settings-card">
+            <summary>FFmpeg Command</summary>
             <div class="ffmpeg-command">
                 <code>{{ ffmpeg_cmd }}</code>
             </div>
-        </div>
+        </details>
         {% endif %}
 
         <!-- Device Info -->
-        <div class="settings-card">
-            <h3>Device Information</h3>
+        <details class="settings-card">
+            <summary>Device Information</summary>
             <dl class="info-list">
                 <dt>Hardware Name</dt>
                 <dd>{{ camera.hardware_name }}</dd>
@@ -287,11 +287,11 @@
                 <dt>Last Seen</dt>
                 <dd>{{ camera.last_seen }}</dd>
             </dl>
-        </div>
+        </details>
 
         <!-- Danger Zone -->
-        <div class="settings-card danger-zone">
-            <h3>Danger Zone</h3>
+        <details class="settings-card danger-zone">
+            <summary>Danger Zone</summary>
             <p class="danger-text">These actions cannot be undone.</p>
 
             <div class="danger-actions">
@@ -313,7 +313,7 @@
                     <span class="action-help">Delete and add to ignore list. Camera will not be auto-detected again.</span>
                 </form>
             </div>
-        </div>
+        </details>
     </div>
 </div>
 {% endblock %}
