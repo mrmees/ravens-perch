@@ -1,0 +1,404 @@
+{% extends "base.html" %}
+
+{% block title %}Troubleshooting - Ravens Perch{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Troubleshooting</h1>
+    <p class="page-description">Diagnose and resolve common issues with Ravens Perch.</p>
+</div>
+
+<div class="help-content">
+    <!-- Quick Diagnostic -->
+    <section class="help-section">
+        <h2>Quick Diagnostic</h2>
+        <p>Run this command to generate a complete diagnostic report that you can share when asking for help:</p>
+        <div class="diagnostic-command">
+            <code id="diagnostic-cmd">{{ diagnostic_command }}</code>
+            <button class="btn btn-sm btn-secondary" onclick="copyDiagnosticCommand()">Copy</button>
+        </div>
+        <p class="form-help">This creates a file called <code>ravens-perch-diagnostic.txt</code> in your home directory containing system information, device status, and logs.</p>
+    </section>
+
+    <!-- Common Issues -->
+    <section class="help-section">
+        <h2>Common Issues</h2>
+
+        <details class="troubleshoot-item">
+            <summary>Cameras not detected</summary>
+            <div class="troubleshoot-content">
+                <h4>Possible Causes:</h4>
+                <ul>
+                    <li>Camera not connected or powered</li>
+                    <li>User not in the <code>video</code> group</li>
+                    <li>Camera connected to unpowered USB hub</li>
+                    <li>Driver not loaded for the camera</li>
+                </ul>
+                <h4>Diagnostic Commands:</h4>
+                <pre><code># List all video devices
+v4l2-ctl --list-devices
+
+# Check if user is in video group
+groups $USER
+
+# Check USB devices
+lsusb
+
+# Check kernel messages for video devices
+dmesg | grep -i video | tail -20</code></pre>
+                <h4>Solutions:</h4>
+                <ul>
+                    <li>Add user to video group: <code>sudo usermod -aG video $USER</code> (requires logout/login)</li>
+                    <li>Try a different USB port, preferably directly on the device</li>
+                    <li>Check if the camera works with another application</li>
+                </ul>
+            </div>
+        </details>
+
+        <details class="troubleshoot-item">
+            <summary>Stream stuck on "Starting" or "Loading"</summary>
+            <div class="troubleshoot-content">
+                <h4>Possible Causes:</h4>
+                <ul>
+                    <li>FFmpeg process failed to start or crashed</li>
+                    <li>Invalid format/resolution combination</li>
+                    <li>MediaMTX server not running</li>
+                    <li>Camera already in use by another application</li>
+                </ul>
+                <h4>Diagnostic Commands:</h4>
+                <pre><code># Check if FFmpeg processes are running
+ps aux | grep ffmpeg
+
+# Check if MediaMTX is running
+ps aux | grep mediamtx
+
+# Check Ravens Perch service logs
+journalctl -u ravens-perch --no-pager -n 50
+
+# Check if device is busy
+fuser /dev/video0</code></pre>
+                <h4>Solutions:</h4>
+                <ul>
+                    <li>Click "Restart Stream" on the camera detail page</li>
+                    <li>Try a lower resolution or different format</li>
+                    <li>Close other applications using the camera</li>
+                    <li>Restart the Ravens Perch service: <code>sudo systemctl restart ravens-perch</code></li>
+                </ul>
+            </div>
+        </details>
+
+        <details class="troubleshoot-item">
+            <summary>FFmpeg encoding errors</summary>
+            <div class="troubleshoot-content">
+                <h4>Possible Causes:</h4>
+                <ul>
+                    <li>Unsupported input format for the camera</li>
+                    <li>Hardware encoder not available or misconfigured</li>
+                    <li>Insufficient system resources</li>
+                </ul>
+                <h4>Diagnostic Commands:</h4>
+                <pre><code># List supported formats for a camera
+v4l2-ctl -d /dev/video0 --list-formats-ext
+
+# Check available encoders
+ffmpeg -encoders 2>/dev/null | grep 264
+
+# Check hardware acceleration
+ffmpeg -hwaccels
+
+# Check VAAPI devices (Intel/AMD)
+ls -la /dev/dri/
+
+# Check system resources
+free -h
+top -bn1 | head -20</code></pre>
+                <h4>Solutions:</h4>
+                <ul>
+                    <li>Switch to Software (libx264) encoder in Advanced Settings</li>
+                    <li>Use MJPEG format instead of raw formats if available</li>
+                    <li>Lower the resolution to reduce CPU/GPU load</li>
+                </ul>
+            </div>
+        </details>
+
+        <details class="troubleshoot-item">
+            <summary>Hardware acceleration not working</summary>
+            <div class="troubleshoot-content">
+                <h4>Possible Causes:</h4>
+                <ul>
+                    <li>Hardware encoder not supported on your device</li>
+                    <li>Missing drivers or firmware</li>
+                    <li>Incorrect encoder selected for your hardware</li>
+                </ul>
+                <h4>Diagnostic Commands:</h4>
+                <pre><code># Check for VAAPI support (Intel/AMD)
+vainfo 2>&1
+
+# Check for V4L2 M2M devices (Raspberry Pi)
+ls -la /dev/video* | grep -E "video[0-9]+$"
+v4l2-ctl --list-devices | grep -A1 "bcm2835"
+
+# Check for Rockchip MPP
+ls -la /dev/mpp_service 2>/dev/null
+ls -la /dev/dri/renderD* 2>/dev/null
+
+# Test VAAPI encoding
+ffmpeg -vaapi_device /dev/dri/renderD128 -f lavfi -i testsrc=duration=1:size=640x480 -vf 'format=nv12,hwupload' -c:v h264_vaapi -f null - 2>&1</code></pre>
+                <h4>Solutions:</h4>
+                <ul>
+                    <li><strong>Intel/AMD:</strong> Install <code>intel-media-driver</code> or <code>mesa-va-drivers</code></li>
+                    <li><strong>Raspberry Pi:</strong> Ensure you're using the official OS with V4L2 M2M support</li>
+                    <li><strong>Rockchip:</strong> RKMPP support is experimental; use software encoding as fallback</li>
+                    <li>Fall back to Software (libx264) if hardware encoding is unreliable</li>
+                </ul>
+            </div>
+        </details>
+
+        <details class="troubleshoot-item">
+            <summary>Poor video quality or lag</summary>
+            <div class="troubleshoot-content">
+                <h4>Possible Causes:</h4>
+                <ul>
+                    <li>Bitrate too low for the resolution</li>
+                    <li>Network bandwidth insufficient for streaming</li>
+                    <li>USB bandwidth exhausted (multiple cameras)</li>
+                    <li>CPU overloaded with software encoding</li>
+                </ul>
+                <h4>Diagnostic Commands:</h4>
+                <pre><code># Check CPU usage
+top -bn1 | head -15
+
+# Check USB bandwidth
+lsusb -t
+
+# Check network interface speed
+cat /sys/class/net/eth0/speed 2>/dev/null || echo "Check wireless with: iwconfig"
+
+# Monitor FFmpeg output
+journalctl -u ravens-perch -f</code></pre>
+                <h4>Solutions:</h4>
+                <ul>
+                    <li>Increase bitrate in Advanced Settings (try 4M or higher for 1080p)</li>
+                    <li>Reduce resolution if CPU is overloaded</li>
+                    <li>Use MJPEG format to reduce USB bandwidth</li>
+                    <li>Connect cameras to different USB controllers</li>
+                    <li>Use hardware encoding to reduce CPU load</li>
+                </ul>
+            </div>
+        </details>
+
+        <details class="troubleshoot-item">
+            <summary>Camera controls not working</summary>
+            <div class="troubleshoot-content">
+                <h4>Possible Causes:</h4>
+                <ul>
+                    <li>Camera doesn't support V4L2 controls</li>
+                    <li>Control is read-only or inactive</li>
+                    <li>Stream needs restart for controls to take effect</li>
+                </ul>
+                <h4>Diagnostic Commands:</h4>
+                <pre><code># List all controls for a camera
+v4l2-ctl -d /dev/video0 -L
+
+# Get current control values
+v4l2-ctl -d /dev/video0 --all
+
+# Test setting a control manually
+v4l2-ctl -d /dev/video0 --set-ctrl=brightness=128</code></pre>
+                <h4>Solutions:</h4>
+                <ul>
+                    <li>Some controls only work with certain formats or resolutions</li>
+                    <li>Auto-exposure may override manual exposure settings</li>
+                    <li>Try restarting the stream after changing controls</li>
+                </ul>
+            </div>
+        </details>
+
+        <details class="troubleshoot-item">
+            <summary>MediaMTX connection issues</summary>
+            <div class="troubleshoot-content">
+                <h4>Possible Causes:</h4>
+                <ul>
+                    <li>MediaMTX server not running</li>
+                    <li>Port conflicts with other services</li>
+                    <li>Firewall blocking connections</li>
+                </ul>
+                <h4>Diagnostic Commands:</h4>
+                <pre><code># Check if MediaMTX is running
+ps aux | grep mediamtx
+
+# Check MediaMTX API
+curl -s http://localhost:9997/v3/paths/list | head -50
+
+# Check port usage
+ss -tlnp | grep -E "(8554|8889|9997)"
+
+# Check firewall (if using ufw)
+sudo ufw status</code></pre>
+                <h4>Solutions:</h4>
+                <ul>
+                    <li>Restart Ravens Perch service: <code>sudo systemctl restart ravens-perch</code></li>
+                    <li>Check if another service is using ports 8554, 8889, or 9997</li>
+                    <li>Allow ports through firewall if needed</li>
+                </ul>
+            </div>
+        </details>
+
+        <details class="troubleshoot-item">
+            <summary>Moonraker integration not working</summary>
+            <div class="troubleshoot-content">
+                <h4>Possible Causes:</h4>
+                <ul>
+                    <li>Moonraker not running or unreachable</li>
+                    <li>Incorrect Moonraker URL in settings</li>
+                    <li>Camera not registered with Moonraker</li>
+                </ul>
+                <h4>Diagnostic Commands:</h4>
+                <pre><code># Check Moonraker status
+curl -s http://localhost:7125/server/info | head -20
+
+# List registered webcams in Moonraker
+curl -s http://localhost:7125/server/webcams/list
+
+# Check Ravens Perch settings
+cat ~/.config/ravens-perch/config.json 2>/dev/null || cat /etc/ravens-perch/config.json 2>/dev/null</code></pre>
+                <h4>Solutions:</h4>
+                <ul>
+                    <li>Verify Moonraker URL in Settings page</li>
+                    <li>Use "Scan for Cameras" to re-register cameras</li>
+                    <li>Ensure Moonraker is running: <code>sudo systemctl status moonraker</code></li>
+                </ul>
+            </div>
+        </details>
+    </section>
+
+    <!-- Individual Diagnostic Commands -->
+    <section class="help-section">
+        <h2>Individual Diagnostic Commands</h2>
+        <p>Run these commands individually to diagnose specific issues:</p>
+
+        <div class="command-list">
+            <details class="command-item">
+                <summary>System Information</summary>
+                <pre><code># Operating system
+cat /etc/os-release
+
+# Kernel version
+uname -a
+
+# CPU information
+cat /proc/cpuinfo | grep -E "^(model name|Hardware)" | head -2
+
+# Memory
+free -h
+
+# Disk space
+df -h /</code></pre>
+            </details>
+
+            <details class="command-item">
+                <summary>Video Devices</summary>
+                <pre><code># List all video devices
+v4l2-ctl --list-devices
+
+# Detailed device info
+for dev in /dev/video*; do
+    echo "=== $dev ==="
+    udevadm info "$dev" 2>/dev/null | grep -E "(ID_MODEL|ID_SERIAL|CAPABILITIES)"
+done
+
+# Supported formats per device
+v4l2-ctl -d /dev/video0 --list-formats-ext</code></pre>
+            </details>
+
+            <details class="command-item">
+                <summary>FFmpeg Status</summary>
+                <pre><code># Running FFmpeg processes
+ps aux | grep ffmpeg
+
+# Available encoders
+ffmpeg -encoders 2>/dev/null | grep -E "264|265|hevc"
+
+# Hardware acceleration
+ffmpeg -hwaccels
+
+# FFmpeg version
+ffmpeg -version | head -3</code></pre>
+            </details>
+
+            <details class="command-item">
+                <summary>MediaMTX Status</summary>
+                <pre><code># MediaMTX process
+ps aux | grep mediamtx
+
+# Active paths/streams
+curl -s http://localhost:9997/v3/paths/list 2>/dev/null || echo "MediaMTX API not responding"
+
+# MediaMTX config
+curl -s http://localhost:9997/v3/config/global/get 2>/dev/null | head -30</code></pre>
+            </details>
+
+            <details class="command-item">
+                <summary>Service Logs</summary>
+                <pre><code># Ravens Perch logs (last 100 lines)
+journalctl -u ravens-perch --no-pager -n 100
+
+# Kernel video messages
+dmesg | grep -iE "(video|uvc|usb)" | tail -30
+
+# System messages
+journalctl -p err --no-pager -n 50</code></pre>
+            </details>
+
+            <details class="command-item">
+                <summary>USB Information</summary>
+                <pre><code># USB devices
+lsusb
+
+# USB tree with bandwidth
+lsusb -t
+
+# USB device details (replace 046d:0825 with your camera)
+lsusb -v -d 046d:0825 2>/dev/null | head -50</code></pre>
+            </details>
+
+            <details class="command-item">
+                <summary>Network Status</summary>
+                <pre><code># Network interfaces
+ip addr show
+
+# Listening ports
+ss -tlnp | grep -E "(8554|8889|9997|7125|5000)"
+
+# Test local connections
+curl -s -o /dev/null -w "%{http_code}" http://localhost:9997/v3/paths/list</code></pre>
+            </details>
+        </div>
+    </section>
+
+    <!-- Getting Help -->
+    <section class="help-section">
+        <h2>Getting Help</h2>
+        <p>If you're still experiencing issues after trying the above solutions:</p>
+        <ol>
+            <li>Run the Quick Diagnostic command at the top of this page</li>
+            <li>Upload the generated <code>ravens-perch-diagnostic.txt</code> file</li>
+            <li>Describe your issue and what you've already tried</li>
+            <li>Include any error messages you see in the web interface</li>
+        </ol>
+        <p>Report issues at: <a href="https://github.com/mrmees/ravens-perch/issues" target="_blank">GitHub Issues</a></p>
+    </section>
+</div>
+
+<script>
+function copyDiagnosticCommand() {
+    const cmd = document.getElementById('diagnostic-cmd').textContent;
+    navigator.clipboard.writeText(cmd).then(() => {
+        const btn = event.target;
+        const originalText = btn.textContent;
+        btn.textContent = 'Copied!';
+        setTimeout(() => btn.textContent = originalText, 2000);
+    });
+}
+</script>
+{% endblock %}

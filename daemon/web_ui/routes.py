@@ -581,6 +581,82 @@ def help_page():
     return render_template('help.html')
 
 
+@bp.route('/troubleshooting')
+def troubleshooting_page():
+    """Troubleshooting and diagnostics page."""
+    # Build the diagnostic command that outputs to a file
+    diagnostic_command = """(
+echo "=== Ravens Perch Diagnostic Report ==="
+echo "Generated: $(date)"
+echo ""
+echo "=== System Information ==="
+cat /etc/os-release 2>/dev/null || echo "OS info not available"
+echo ""
+uname -a
+echo ""
+echo "CPU:"
+cat /proc/cpuinfo | grep -E "^(model name|Hardware)" | head -2
+echo ""
+echo "Memory:"
+free -h
+echo ""
+echo "Disk:"
+df -h /
+echo ""
+echo "=== Video Devices ==="
+v4l2-ctl --list-devices 2>&1
+echo ""
+echo "=== Device Capabilities ==="
+for dev in /dev/video*; do
+    if udevadm info "$dev" 2>/dev/null | grep -q ':capture:'; then
+        echo "--- $dev ---"
+        udevadm info "$dev" 2>/dev/null | grep -E "(ID_MODEL|ID_SERIAL|ID_V4L_CAPABILITIES)"
+        v4l2-ctl -d "$dev" --list-formats-ext 2>&1 | head -30
+    fi
+done
+echo ""
+echo "=== FFmpeg ==="
+ffmpeg -version 2>&1 | head -3
+echo ""
+echo "Encoders:"
+ffmpeg -encoders 2>/dev/null | grep -E "264|265|hevc"
+echo ""
+echo "Hardware acceleration:"
+ffmpeg -hwaccels 2>&1
+echo ""
+echo "=== Running Processes ==="
+echo "FFmpeg:"
+ps aux | grep [f]fmpeg
+echo ""
+echo "MediaMTX:"
+ps aux | grep [m]ediamtx
+echo ""
+echo "=== MediaMTX Status ==="
+curl -s http://localhost:9997/v3/paths/list 2>/dev/null | head -50 || echo "MediaMTX API not responding"
+echo ""
+echo "=== Service Status ==="
+systemctl status ravens-perch --no-pager 2>&1 | head -20
+echo ""
+echo "=== Recent Logs ==="
+journalctl -u ravens-perch --no-pager -n 100 2>&1 || echo "No service logs available"
+echo ""
+echo "=== USB Devices ==="
+lsusb
+echo ""
+lsusb -t
+echo ""
+echo "=== Kernel Messages (video) ==="
+dmesg | grep -iE "(video|uvc|usb)" | tail -30
+echo ""
+echo "=== Network Ports ==="
+ss -tlnp 2>/dev/null | grep -E "(8554|8889|9997|7125|5000)" || netstat -tlnp 2>/dev/null | grep -E "(8554|8889|9997|7125|5000)"
+echo ""
+echo "=== End of Diagnostic Report ==="
+) > ~/ravens-perch-diagnostic.txt 2>&1 && echo "Diagnostic saved to ~/ravens-perch-diagnostic.txt\""""
+
+    return render_template('troubleshooting.html', diagnostic_command=diagnostic_command)
+
+
 # ============ API Endpoints ============
 
 @bp.route('/api/resolutions/<int:camera_id>')
