@@ -663,6 +663,7 @@ echo "=== End of Diagnostic Report ==="
 def api_resolutions(camera_id: int):
     """Get available resolutions for a camera format."""
     fmt = request.args.get('format', 'mjpeg')
+    current_resolution = request.args.get('resolution', '')
 
     caps = get_camera_capabilities(camera_id)
     if caps and caps['capabilities']:
@@ -676,8 +677,21 @@ def api_resolutions(camera_id: int):
 
     # Return HTML options for HTMX requests
     if request.headers.get('HX-Request'):
-        options = ''.join(f'<option value="{res}">{res}</option>' for res in resolutions)
-        return options
+        # Try to preserve current selection, otherwise select first
+        preserved = current_resolution in resolutions
+        selected_resolution = current_resolution if preserved else (resolutions[0] if resolutions else '')
+
+        options = []
+        for res in resolutions:
+            selected = 'selected' if res == selected_resolution else ''
+            options.append(f'<option value="{res}" {selected}>{res}</option>')
+
+        # Add HX-Trigger header to notify if selection changed
+        response = ''.join(options)
+        headers = {}
+        if not preserved and current_resolution:
+            headers['HX-Trigger'] = 'selectionChanged'
+        return response, 200, headers
 
     return jsonify(resolutions)
 
@@ -687,6 +701,13 @@ def api_framerates(camera_id: int):
     """Get available framerates for a camera resolution."""
     fmt = request.args.get('format', 'mjpeg')
     resolution = request.args.get('resolution', '1280x720')
+    current_framerate = request.args.get('framerate', '')
+
+    # Convert to int for comparison if provided
+    try:
+        current_framerate_int = int(current_framerate) if current_framerate else None
+    except ValueError:
+        current_framerate_int = None
 
     caps = get_camera_capabilities(camera_id)
     if caps and caps['capabilities']:
@@ -700,8 +721,21 @@ def api_framerates(camera_id: int):
 
     # Return HTML options for HTMX requests
     if request.headers.get('HX-Request'):
-        options = ''.join(f'<option value="{fps}">{fps} fps</option>' for fps in framerates)
-        return options
+        # Try to preserve current selection, otherwise select first
+        preserved = current_framerate_int in framerates
+        selected_framerate = current_framerate_int if preserved else (framerates[0] if framerates else None)
+
+        options = []
+        for fps in framerates:
+            selected = 'selected' if fps == selected_framerate else ''
+            options.append(f'<option value="{fps}" {selected}>{fps} fps</option>')
+
+        # Add HX-Trigger header to notify if selection changed
+        response = ''.join(options)
+        headers = {}
+        if not preserved and current_framerate_int is not None:
+            headers['HX-Trigger'] = 'selectionChanged'
+        return response, 200, headers
 
     return jsonify(framerates)
 

@@ -87,7 +87,7 @@
                             hx-get="{{ url_for('cameras.api_framerates', camera_id=camera.id) }}"
                             hx-trigger="change"
                             hx-target="#framerate"
-                            hx-include="[name='format']">
+                            hx-include="[name='format'], #framerate">
                         {% for res in resolutions %}
                             <option value="{{ res }}"
                                     {% if camera.settings and camera.settings.resolution == res %}selected{% endif %}>
@@ -95,6 +95,9 @@
                             </option>
                         {% endfor %}
                     </select>
+                    <p class="form-help selection-warning" id="resolution-warning" style="display: none;">
+                        Previous resolution not available for this format. Please verify your selection.
+                    </p>
                 </div>
 
                 <!-- Framerate -->
@@ -108,6 +111,9 @@
                             </option>
                         {% endfor %}
                     </select>
+                    <p class="form-help selection-warning" id="framerate-warning" style="display: none;">
+                        Previous framerate not available. Please verify your selection.
+                    </p>
                 </div>
 
                 <!-- Enable/Disable -->
@@ -149,7 +155,8 @@
                     <select id="format" name="format"
                             hx-get="{{ url_for('cameras.api_resolutions', camera_id=camera.id) }}"
                             hx-trigger="change"
-                            hx-target="#resolution">
+                            hx-target="#resolution"
+                            hx-include="#resolution, #framerate">
                         {% for fmt in capabilities.keys() %}
                             <option value="{{ fmt }}"
                                     {% if camera.settings and camera.settings.format == fmt %}selected{% endif %}>
@@ -336,6 +343,44 @@
             warning.style.display = select.value === 'h264_rkmpp' ? 'block' : 'none';
         }
     }
+
+    // Handle selection changed warnings
+    function showSelectionWarning(elementId) {
+        const warning = document.getElementById(elementId + '-warning');
+        if (warning) {
+            warning.style.display = 'block';
+            // Highlight the dropdown briefly
+            const select = document.getElementById(elementId);
+            if (select) {
+                select.classList.add('selection-changed');
+                setTimeout(() => select.classList.remove('selection-changed'), 3000);
+            }
+            // Auto-hide warning after 5 seconds
+            setTimeout(() => {
+                warning.style.display = 'none';
+            }, 5000);
+        }
+    }
+
+    // Listen for HTMX events to detect selection changes
+    document.body.addEventListener('htmx:afterRequest', function(event) {
+        const trigger = event.detail.xhr.getResponseHeader('HX-Trigger');
+        if (trigger === 'selectionChanged') {
+            const targetId = event.detail.target.id;
+            showSelectionWarning(targetId);
+        }
+    });
+
+    // When resolution dropdown is updated, also trigger framerate update
+    document.body.addEventListener('htmx:afterSwap', function(event) {
+        if (event.detail.target.id === 'resolution') {
+            // Trigger change event to cascade to framerate
+            const resolution = document.getElementById('resolution');
+            if (resolution) {
+                htmx.trigger(resolution, 'change');
+            }
+        }
+    });
 
     // Check initial encoder selection on page load
     document.addEventListener('DOMContentLoaded', function() {
