@@ -15,7 +15,7 @@ from .config import (
     FORMAT_PRIORITY, FORMAT_ALIASES, QUALITY_TIERS,
     DEFAULT_CAMERA_SETTINGS, DEBOUNCE_DELAY
 )
-from .hardware import estimate_cpu_capability, get_best_encoder, detect_encoders
+from .hardware import estimate_cpu_capability
 
 logger = logging.getLogger(__name__)
 
@@ -271,17 +271,14 @@ def auto_configure(capabilities: Dict, camera_count: int = 1) -> Dict:
                 # Find closest framerate
                 framerate = min(available_fps, key=lambda x: abs(x - framerate))
 
-    # Get best encoder
-    encoders = detect_encoders()
-    encoder = get_best_encoder(encoders)
-
+    # Always use software encoding for initial setup (user can enable HW accel later)
     settings = {
         'format': selected_format,
         'resolution': resolution,
         'framerate': framerate,
-        'encoder': encoder,
+        'encoder': 'libx264',
         'bitrate': bitrate,
-        'preset': 'ultrafast' if encoder == 'libx264' else None,
+        'preset': 'ultrafast',
         'rotation': 0,
         'audio_enabled': False,
     }
