@@ -1,328 +1,228 @@
-# Ravens Perch 🦅
+# Ravens Perch v3
 
-**Advanced webcam streaming solution for 3D printers and beyond**
+**Zero-touch camera management for Klipper-based 3D printers**
 
-A comprehensive, menu-driven camera configuration tool for MediaMTX with advanced features including Moonraker integration, V4L2 controls, audio support, and recording capabilities.
+Cameras are automatically detected, optimally configured, and registered with Moonraker without user intervention. A web UI at `/cameras/` provides optional customization.
 
 ---
 
-## 🌟 Features
+## Key Features
 
-### Core Streaming
+### Zero-Touch Operation
+- **Automatic Detection**: Cameras are detected instantly when plugged in via USB
+- **Smart Auto-Configuration**: Resolution, framerate, and encoder selected based on camera capabilities and system resources
+- **Moonraker Integration**: Cameras automatically appear in Fluidd/Mainsail
+- **Persistent Settings**: Camera configurations survive reboots and reconnections
+
+### Web Interface
+- **Dashboard**: View all cameras with live status and thumbnails
+- **Per-Camera Settings**: Adjust resolution, framerate, rotation, and more
+- **Advanced Options**: Encoder selection, bitrate, V4L2 controls
+- **Log Viewer**: Monitor system activity
+- **Dark Theme**: Matches Fluidd/Mainsail aesthetic
+
+### Streaming
 - **MediaMTX Backend**: RTSP, WebRTC, and HLS streaming
-- **Hardware Acceleration**: VAAPI (Intel/AMD), RKMPP (Rockchip), V4L2M2M (Raspberry Pi)
-- **Snapshot Server**: On-demand JPEG snapshots via Flask/PyAV
-- **Auto-Detection**: Automatically finds and configures USB cameras
-
-### Advanced Configuration
-- **Interactive Menu System**: Easy-to-use terminal interface
-- **Bitrate Control**: 500 Kbps to 10 Mbps
-- **Video Rotation**: 0°, 90°, 180°, 270°
-- **V4L2 Camera Controls**: Brightness, contrast, saturation, exposure, white balance
-- **Audio Support**: Microphone capture with AAC or Opus codecs
-- **Recording**: Continuous recording with configurable segment duration
-- **Per-Camera Settings**: Individual configurations saved to JSON
-
-### Moonraker Integration
-- **Direct API Integration**: Add cameras to Moonraker/Fluidd/Mainsail
-- **Smart Detection**: Identifies existing MediaMTX cameras
-- **Bulk Operations**: Add all cameras at once or selectively
-- **WebRTC & HLS Support**: Choose streaming method per camera
-- **Auto URL Generation**: Automatically uses correct system IP
+- **Hardware Acceleration**: VAAPI (Intel/AMD), V4L2M2M (Raspberry Pi)
+- **JPEG Snapshots**: On-demand snapshots with caching
+- **Quality Tiers**: Automatic quality adjustment based on CPU capability
 
 ---
 
-## 📋 Requirements
+## Requirements
 
-### System Requirements
-- Linux (Ubuntu 20.04+ or Debian-based)
+### System
+- Linux (Debian/Ubuntu-based, Raspberry Pi OS)
 - Python 3.8+
-- FFmpeg (or hardware-accelerated build)
+- FFmpeg
 - v4l-utils
-- USB webcam(s)
+- nginx (for reverse proxy)
 
 ### Supported Platforms
-- ✅ x86_64 (Intel/AMD with VAAPI)
-- ✅ ARM64 (Raspberry Pi, Orange Pi, etc.)
-- ✅ Rockchip (RK3588, RK3399 with MPP/RGA)
-- ✅ Raspberry Pi (with V4L2M2M)
+- Raspberry Pi 3/4/5
+- x86_64 (Intel/AMD)
+- ARM64 (Orange Pi, etc.)
 
 ---
 
-## 🚀 Quick Start
+## Installation
 
-### 1. Clone the Repository
+### Quick Install
 
 ```bash
 cd ~
-git clone https://github.com/mrmees/ravens-perch.git
+git clone https://github.com/mrmees/ravens-perch-v2.git ravens-perch
 cd ravens-perch
-```
-
-### 2. Run the Installer
-
-```bash
 bash install.sh
 ```
 
 The installer will:
-- Install system dependencies (python3, ffmpeg, v4l-utils, etc.)
-- Create a Python virtual environment
-- Download the latest MediaMTX release
-- Auto-detect and configure connected cameras
-- Create systemd services
-- Start streaming
+1. Install system dependencies
+2. Download MediaMTX
+3. Create Python virtual environment
+4. Initialize the database
+5. Configure systemd services
+6. Set up nginx reverse proxy
+7. Add Moonraker update manager entry
 
-**For Rockchip Platforms:**
-The installer will detect Rockchip SoCs and offer to install an optimized FFmpeg build with MPP/RGA hardware acceleration.
+### Access the Web UI
 
-### 3. Configure Your Cameras (Interactive)
+After installation:
+```
+http://<your-ip>/cameras/
+```
 
-After installation, run the configuration tool:
+Or directly:
+```
+http://<your-ip>:8585/cameras/
+```
 
+---
+
+## How It Works
+
+### Automatic Camera Detection
+
+1. **Plug in a USB camera** - Ravens Perch detects it within seconds
+2. **Capabilities probed** - Available formats, resolutions, and framerates discovered
+3. **Auto-configured** - Optimal settings selected based on system capability
+4. **Stream started** - MediaMTX stream created automatically
+5. **Registered with Moonraker** - Camera appears in Fluidd/Mainsail
+
+### Quality Tiers
+
+Ravens Perch automatically selects quality based on your system:
+
+| CPU Rating | Resolution | Framerate | Bitrate |
+|------------|------------|-----------|---------|
+| Low (1-3)  | 640x480    | 15 fps    | 1 Mbps  |
+| Medium (4-5) | 1280x720 | 15 fps    | 2 Mbps  |
+| Good (6-7) | 1280x720   | 30 fps    | 4 Mbps  |
+| High (8-9) | 1920x1080  | 30 fps    | 6 Mbps  |
+| Excellent (10) | 1920x1080 | 60 fps | 8 Mbps  |
+
+Hardware encoders (VAAPI, V4L2M2M) boost your CPU rating.
+
+---
+
+## Web UI Guide
+
+### Dashboard (`/cameras/`)
+
+- Grid view of all cameras
+- Live/Offline status indicators
+- Thumbnail previews (auto-refresh)
+- Quick access to configuration
+
+### Camera Detail (`/cameras/<id>`)
+
+**Basic Settings:**
+- Friendly name
+- Resolution (populated from camera capabilities)
+- Framerate
+- Enable/disable toggle
+
+**Advanced Settings:**
+- Input format (MJPEG, H.264, YUYV)
+- Encoder (libx264, VAAPI, V4L2M2M)
+- Bitrate
+- Rotation (0°, 90°, 180°, 270°)
+
+**Stream URLs:**
+- WebRTC, RTSP, and snapshot URLs displayed
+- Click to copy
+
+### Settings (`/cameras/settings`)
+
+- CPU threshold for quality reduction
+- Moonraker URL configuration
+- Log level
+- System information
+
+### Logs (`/cameras/logs`)
+
+- Filterable by level (Info, Warning, Error)
+- Camera-specific log entries
+- Auto-refresh
+
+---
+
+## Stream URLs
+
+For each camera, streams are available at:
+
+| Protocol | URL |
+|----------|-----|
+| WebRTC | `http://<ip>:8889/<camera_id>/` |
+| RTSP | `rtsp://<ip>:8554/<camera_id>` |
+| HLS | `http://<ip>:8888/<camera_id>/` |
+| Snapshot | `http://<ip>/cameras/snapshot/<camera_id>.jpg` |
+
+---
+
+## Service Management
+
+### Check Status
 ```bash
-cd ~/ravens-perch
-./venv/bin/python scripts/generate_mediamtx_config.py
+sudo systemctl status ravens-perch
+sudo systemctl status mediamtx
 ```
 
-You'll see the main menu:
-
-```
-======================================================================
-🎥 MediaMTX Camera Configuration Tool
-======================================================================
-
-  [1] Configure Connected Devices
-      - Select which cameras to use
-      - Choose resolution and format
-      - Basic setup
-
-  [2] Advanced Video/Audio Settings
-      - Adjust bitrate, encoder, rotation
-      - Configure V4L2 controls
-      - Setup recording and audio
-
-  [3] Moonraker Integration
-      - Add cameras to Moonraker/Fluidd/Mainsail
-      - Manage existing Moonraker cameras
-      - Bulk operations
-
-  [4] Quick Auto-Configure All
-      - Automatically configure all cameras
-      - Use best available settings
-
-  [q] Quit
-```
-
----
-
-## 📖 Detailed Usage
-
-### Option 1: Configure Connected Devices
-
-**Interactive Mode:**
-- View all available resolutions and formats
-- Select specific resolution/FPS for each camera
-- See quality indicators (High/Medium/Low)
-- Skip cameras you don't want to use
-
-**Auto Mode:**
-- Automatically selects best format (prefers MJPEG)
-- Chooses 1280x720 if available, otherwise highest resolution
-- Uses maximum FPS
-
-### Option 2: Advanced Video/Audio Settings
-
-Configure per-camera settings:
-
-#### Video Quality & Performance
-- **Bitrate**: 500K to 10M (default: 4M)
-  - 1M = Good for 3D printer monitoring
-  - 4M = High quality streaming
-  - 8M = Maximum quality
-- **Encoder Preset**: ultrafast to slow (software encoding)
-- **Buffer Size**: small/default/large (latency vs stability)
-
-#### Video Adjustments
-- **Rotation**: Fix sideways/upside-down cameras
-  - 0°, 90°, 180°, 270°
-
-#### V4L2 Camera Controls
-- **Brightness**: Adjust exposure brightness
-- **Contrast**: Increase/decrease contrast
-- **Saturation**: Control color intensity
-- **Auto Exposure**: Enable/disable automatic exposure
-- **Auto White Balance**: Enable/disable AWB
-
-#### Recording
-- **Enable/Disable**: Continuous recording to disk
-- **Recording Path**: Where to save files
-- **Segment Duration**: File length (60s, 5m, 1h, etc.)
-
-#### Audio
-- **Enable/Disable**: Capture microphone audio
-- **Audio Device**: Auto-detected ALSA devices
-- **Codec**: AAC (best compatibility) or Opus (better quality)
-
-### Option 3: Moonraker Integration
-
-Integrate with Klipper/Moonraker for 3D printer webcams:
-
-**Features:**
-- Auto-detects localhost Moonraker instance
-- Lists existing webcams with MediaMTX status
-- Shows which cameras are already assigned
-- Prevents duplicate assignments
-- Supports WebRTC and HLS streaming
-
-**Operations:**
-1. Add new camera to Moonraker
-2. Update existing camera
-3. Add ALL cameras (bulk)
-4. Add only unassigned cameras
-5. Delete cameras
-6. Change Moonraker URL
-
-### Option 4: Quick Auto-Configure
-
-Fastest way to get started:
-- Detects all cameras
-- Auto-selects best settings
-- Uses defaults (4M bitrate, no rotation, etc.)
-- No prompts
-
----
-
-## 🎯 Camera Access URLs
-
-After configuration, cameras are available at:
-
-```
-🎥 cam0:
-   📡 RTSP:     rtsp://192.168.1.100:8554/cam0
-   🌐 WebRTC:   http://192.168.1.100:8889/cam0/
-   📺 HLS:      http://192.168.1.100:8888/cam0/index.m3u8
-   🖼️ Snapshot: http://192.168.1.100:5050/cam0.jpg
-```
-
-Replace `192.168.1.100` with your system's IP address.
-
----
-
-## 🔧 Configuration Files
-
-### Main Configuration
-- **mediamtx.yml**: `~/ravens-perch/mediamtx/mediamtx.yml`
-  - MediaMTX configuration
-  - FFmpeg commands
-  - Stream settings
-
-- **camera_settings.json**: `~/ravens-perch/mediamtx/camera_settings.json`
-  - Advanced settings per camera
-  - Persists between reconfigurations
-
-### Service Files
-- **mediamtx.service**: Streaming server
-- **snapfeeder.service**: Snapshot server
-
----
-
-## 🔄 Managing Services
-
-### View Status
+### Restart Services
 ```bash
-sudo systemctl status mediamtx.service
-sudo systemctl status snapfeeder.service
-```
-
-### Restart After Changes
-```bash
-sudo systemctl restart mediamtx.service snapfeeder.service
+sudo systemctl restart ravens-perch
 ```
 
 ### View Logs
 ```bash
+# Ravens Perch logs
+sudo journalctl -u ravens-perch -f
+
 # MediaMTX logs
-sudo journalctl -u mediamtx.service -f
+sudo journalctl -u mediamtx -f
 
-# SnapFeeder logs
-sudo journalctl -u snapfeeder.service -f
-```
-
-### Stop Services
-```bash
-sudo systemctl stop mediamtx.service snapfeeder.service
-```
-
-### Disable Auto-Start
-```bash
-sudo systemctl disable mediamtx.service snapfeeder.service
+# Or via web UI at /cameras/logs
 ```
 
 ---
 
-## 🗑️ Uninstallation
+## Configuration
+
+### Database Location
+```
+~/ravens-perch/data/ravens-perch.db
+```
+
+Camera settings persist in SQLite. Survives reboots and reinstalls.
+
+### Log Files
+```
+~/ravens-perch/logs/ravens-perch.log
+```
+
+### MediaMTX Configuration
+```
+~/ravens-perch/mediamtx/mediamtx.yml
+```
+
+Streams are managed dynamically via the MediaMTX API - no manual editing needed.
+
+---
+
+## Uninstallation
 
 ```bash
 cd ~/ravens-perch
 bash uninstall.sh
 ```
 
-This will:
-- Stop and disable services
-- Remove systemd service files
-- Delete MediaMTX installation
-- Remove Python virtual environment
-- Delete generated service files
-
-**Note:** This preserves your configuration files in case you want to reinstall.
+Options:
+- Keep database and logs for reinstall
+- Remove everything completely
 
 ---
 
-## 🌐 Moonraker Integration Guide
-
-### For Fluidd/Mainsail Users
-
-1. Run the configuration tool:
-   ```bash
-   ./venv/bin/python scripts/generate_mediamtx_config.py
-   ```
-
-2. Select **[3] Moonraker Integration**
-
-3. Choose **[1] Add MediaMTX camera to Moonraker (new)**
-
-4. Select your camera and streaming service:
-   - **WebRTC** (recommended): Lower latency, better for live viewing
-   - **HLS**: Better compatibility, works on more devices
-
-5. Enter a name (or accept default)
-
-6. Camera will appear in Fluidd/Mainsail webcam settings!
-
-### Manual Moonraker Configuration
-
-Alternatively, add to your `moonraker.conf`:
-
-**WebRTC:**
-```ini
-[webcam my_camera]
-service: webrtc-mediamtx
-stream_url: http://192.168.1.100:8889/cam0/
-snapshot_url: http://192.168.1.100:5050/cam0.jpg
-```
-
-**HLS:**
-```ini
-[webcam my_camera]
-service: hlsstream
-stream_url: http://192.168.1.100:8888/cam0/index.m3u8
-snapshot_url: http://192.168.1.100:5050/cam0.jpg
-```
-
----
-
-## 🛠️ Troubleshooting
+## Troubleshooting
 
 ### Camera Not Detected
 
@@ -332,147 +232,77 @@ ls -la /dev/video*
 v4l2-ctl --list-devices
 ```
 
-**Check supported formats:**
+**Check permissions:**
 ```bash
-v4l2-ctl --list-formats-ext -d /dev/video0
+# Add user to video group
+sudo usermod -aG video $USER
+# Log out and back in
 ```
 
-### Services Not Starting
+### Stream Not Starting
 
-**Check MediaMTX logs:**
+**Check Ravens Perch logs:**
 ```bash
-sudo journalctl -u mediamtx.service -n 50
-```
-
-**Check SnapFeeder logs:**
-```bash
-sudo journalctl -u snapfeeder.service -n 50
+sudo journalctl -u ravens-perch -n 50
 ```
 
 **Common issues:**
-- Camera permissions (add user to `video` group)
-- Port conflicts (8554, 8889, 8888, 5050)
-- FFmpeg not found
+- Camera in use by another application
+- Unsupported format/resolution
+- FFmpeg errors (check logs)
 
-### Stream Not Working
+### Web UI Not Accessible
 
-**Test RTSP directly:**
+**Check nginx configuration:**
 ```bash
-ffplay rtsp://localhost:8554/cam0
+sudo nginx -t
+sudo systemctl status nginx
 ```
 
-**Check if MediaMTX is running:**
-```bash
-sudo systemctl status mediamtx.service
+**Direct access (bypass nginx):**
 ```
-
-**Verify camera is streaming:**
-```bash
-curl http://localhost:5050/cam0.jpg --output test.jpg
+http://<ip>:8585/cameras/
 ```
 
 ### High CPU Usage
 
-Try these optimizations:
-1. **Lower resolution** (720p → 480p)
-2. **Lower bitrate** (4M → 2M)
-3. **Enable hardware acceleration** (check if VAAPI/RKMPP/V4L2M2M is available)
-4. **Use MJPEG format** (most efficient for USB cameras)
+1. Check if hardware encoder is detected (Settings page)
+2. Lower resolution in camera settings
+3. Reduce framerate
+4. Lower bitrate
 
-### Camera Appears Rotated
+---
 
-Use **Option 2 → Advanced Settings** and set rotation to:
-- 90° for clockwise
-- 180° for upside down
-- 270° for counter-clockwise
+## Architecture
 
-### Poor Image Quality
-
-Adjust in **Option 2 → Advanced Settings**:
-- Increase bitrate (4M → 6M or 8M)
-- Adjust brightness/contrast
-- Enable auto exposure/white balance
-
-### Moonraker Connection Failed
-
-**Verify Moonraker is running:**
-```bash
-curl http://localhost:7125/server/info
 ```
-
-**Check Moonraker port:**
-Default is 7125, but could be different. Check your `moonraker.conf`.
-
----
-
-## 💡 Tips & Best Practices
-
-### Camera Placement
-- Mount cameras securely to avoid vibration
-- Consider lighting (good lighting = better image quality than any software adjustment)
-- USB cable quality matters (use short, high-quality cables)
-
-### Network Bandwidth
-- **WiFi 2.4GHz**: Max ~2-3 cameras at 2M bitrate
-- **WiFi 5GHz**: Max ~10+ cameras at 4M bitrate
-- **Wired Ethernet**: No practical limit
-
-### Storage for Recording
-Recording uses significant disk space:
-- **1M bitrate**: ~450 MB/hour
-- **4M bitrate**: ~1.8 GB/hour
-- **8M bitrate**: ~3.6 GB/hour
-
-Set up automatic cleanup or use large storage.
-
-### Multiple Cameras
-- Name cameras logically (front, side, tool_head, etc.)
-- Use different resolutions based on importance
-- Lower bitrate on less critical cameras
-
-### Hardware Acceleration
-Always use hardware encoding when available:
-- **Intel/AMD**: VAAPI (automatic on most modern CPUs)
-- **Rockchip**: Install custom FFmpeg during setup
-- **Raspberry Pi**: V4L2M2M (built-in on Pi 3/4/5)
-
----
-
-## 🔐 Security Considerations
-
-### Default Configuration
-- Services bind to `0.0.0.0` (all interfaces)
-- No authentication by default
-- Suitable for trusted local networks
-
-### For Public/Untrusted Networks
-1. **Use a reverse proxy** (NGINX, Caddy) with authentication
-2. **Add firewall rules** to restrict access
-3. **Use VPN** for remote access
-4. **Enable HTTPS** via reverse proxy
-
-Example NGINX with basic auth:
-```nginx
-location /cam0/ {
-    auth_basic "Camera Access";
-    auth_basic_user_file /etc/nginx/.htpasswd;
-    proxy_pass http://localhost:8889/cam0/;
-}
+ravens-perch/
+├── daemon/
+│   ├── main.py              # Entry point, orchestration
+│   ├── config.py            # Configuration constants
+│   ├── db.py                # SQLite database layer
+│   ├── camera_manager.py    # Detection, auto-config
+│   ├── stream_manager.py    # MediaMTX API
+│   ├── moonraker_client.py  # Moonraker API
+│   ├── snapshot_server.py   # JPEG snapshots
+│   ├── hardware.py          # Encoder detection
+│   └── web_ui/
+│       ├── app.py           # Flask application
+│       ├── routes.py        # Route handlers
+│       ├── templates/       # Jinja2 templates
+│       └── static/          # CSS, JS
+├── mediamtx/                # MediaMTX binary
+├── data/                    # SQLite database
+├── logs/                    # Log files
+├── install.sh
+└── uninstall.sh
 ```
 
 ---
 
-## 🤝 Contributing
+## Contributing
 
-This project is a fork of [mtx-stream-snap](https://github.com/thesydoruk/mtx-stream-snap) by thesydoruk, with significant enhancements including:
-- Advanced configuration menu system
-- Moonraker integration
-- V4L2 camera controls
-- Audio support
-- Recording capabilities
-- Per-camera advanced settings
-
-Contributions are welcome! Please:
+Contributions welcome! Please:
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
@@ -480,12 +310,11 @@ Contributions are welcome! Please:
 
 ---
 
-## 📜 License
+## License
 
 MIT License
 
-Original work: Copyright (c) 2025 Valerii Sydoruk (thesydoruk)  
-Modified work: Copyright (c) 2025 mrmees
+Copyright (c) 2025 mrmees
 
 Permission is hereby granted, free of charge, to any person obtaining a copy
 of this software and associated documentation files (the "Software"), to deal
@@ -507,35 +336,14 @@ SOFTWARE.
 
 ---
 
-## 🙏 Acknowledgments
+## Acknowledgments
 
-- **thesydoruk**: Original [mtx-stream-snap](https://github.com/thesydoruk/mtx-stream-snap) project
-- **bluenviron**: [MediaMTX](https://github.com/bluenviron/mediamtx) - Excellent RTSP server
-- **nyanmisaka**: Rockchip-optimized [FFmpeg fork](https://github.com/nyanmisaka/ffmpeg-rockchip)
-- **Moonraker/Klipper**: 3D printer interface integration
-
----
-
-## 📞 Support
-
-- **Issues**: [GitHub Issues](https://github.com/mrmees/ravens-perch/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/mrmees/ravens-perch/discussions)
-- **Original Project**: [mtx-stream-snap](https://github.com/thesydoruk/mtx-stream-snap)
+- **bluenviron**: [MediaMTX](https://github.com/bluenviron/mediamtx)
+- **Klipper/Moonraker**: 3D printer firmware and API
+- **Fluidd/Mainsail**: Web interfaces for Klipper
 
 ---
 
-## 🗺️ Roadmap
+## Support
 
-Future enhancements being considered:
-- [ ] Web UI for configuration
-- [ ] Motion detection
-- [ ] MQTT support for Home Assistant
-- [ ] Network camera support (not just USB)
-- [ ] Multi-camera view layouts
-- [ ] Timelapse generation
-- [ ] Cloud upload integration
-- [ ] Mobile app
-
----
-
-**Made with ❤️ for the 3D printing and maker community**
+- **Issues**: [GitHub Issues](https://github.com/mrmees/ravens-perch-v2/issues)
