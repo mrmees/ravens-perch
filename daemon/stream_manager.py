@@ -370,6 +370,9 @@ def build_ffmpeg_command(
             "-c:v", "libx264",
             "-preset", preset,
             "-tune", "zerolatency",
+            "-profile:v", "baseline",  # Maximum browser/mobile compatibility
+            "-level", "3.1",           # Safe for most devices
+            "-bf", "0",                # No B-frames (explicit for low-latency)
             "-b:v", bitrate,
             "-maxrate", bitrate,
             "-bufsize", bitrate,
@@ -377,16 +380,22 @@ def build_ffmpeg_command(
     elif encoder_type == 'h264_vaapi':
         cmd_parts.extend([
             "-c:v", "h264_vaapi",
+            "-profile:v", "constrained_baseline",
+            "-level", "31",
             "-b:v", bitrate,
         ])
     elif encoder_type == 'h264_rkmpp':
         cmd_parts.extend([
             "-c:v", "h264_rkmpp",
+            "-profile:v", "baseline",
+            "-level", "31",
             "-b:v", bitrate,
         ])
     elif encoder_type == 'h264_v4l2m2m':
         cmd_parts.extend([
             "-c:v", "h264_v4l2m2m",
+            "-profile:v", "baseline",
+            "-level", "31",
             "-b:v", bitrate,
         ])
 
