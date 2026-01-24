@@ -9,7 +9,7 @@ import requests
 
 from .config import (
     MEDIAMTX_API_BASE, MEDIAMTX_RTSP_PORT, MEDIAMTX_WEBRTC_PORT,
-    ENCODER_DEFAULTS, FFMPEG_INPUT_FORMATS, WEB_UI_PORT
+    ENCODER_DEFAULTS, FFMPEG_INPUT_FORMATS, WEB_UI_PORT, BAYER_FORMATS
 )
 
 logger = logging.getLogger(__name__)
@@ -329,6 +329,10 @@ def build_ffmpeg_command(
 
     # Video filters
     filters = []
+
+    # Debayer filter for Bayer (raw sensor) formats
+    if input_format in BAYER_FORMATS:
+        filters.append("bayer2rgb")
 
     # Rotation - use 'or' to handle None values
     rotation = settings.get('rotation') or 0

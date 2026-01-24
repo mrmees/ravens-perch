@@ -64,6 +64,11 @@ FORMAT_ALIASES = {
     "YUYV": "yuyv",
     "NV12": "nv12",
     "RGB3": "rgb24",
+    # Bayer patterns
+    "GRBG": "bayer_grbg",
+    "RGGB": "bayer_rggb",
+    "BGGR": "bayer_bggr",
+    "GBRG": "bayer_gbrg",
 }
 
 # FFmpeg input format names (internal name -> FFmpeg -input_format value)
@@ -75,7 +80,20 @@ FFMPEG_INPUT_FORMATS = {
     "nv12": "nv12",
     "rgb24": "rgb24",
     "yuyv422": "yuyv422",   # Already correct
+    # Bayer patterns (8-bit)
+    "bayer_grbg": "bayer_grbg8",
+    "bayer_rggb": "bayer_rggb8",
+    "bayer_bggr": "bayer_bggr8",
+    "bayer_gbrg": "bayer_gbrg8",
+    "grbg": "bayer_grbg8",  # Direct mapping if not aliased
+    "rggb": "bayer_rggb8",
+    "bggr": "bayer_bggr8",
+    "gbrg": "bayer_gbrg8",
 }
+
+# Bayer formats that require debayering filter
+BAYER_FORMATS = {"bayer_grbg", "bayer_rggb", "bayer_bggr", "bayer_gbrg",
+                 "grbg", "rggb", "bggr", "gbrg"}
 
 # Encoder settings
 ENCODER_DEFAULTS = {
