@@ -1,121 +1,166 @@
-#!/usr/bin/env bash
-
-# ==============================================================================
-# Uninstaller for Ravens Perch
-# ----------------------------------------
-# - Stops and disables systemd services
-# - Removes service files and symlinks
-# - Removes MediaMTX binary and config
-# - Optionally removes Python virtual environment
-# - Preserves raven_settings.yml by default
+#!/bin/bash
 #
-# Last modified: 2026-01-13
-# ==============================================================================
+# Ravens Perch v3 Uninstall Script
+# Removes all components installed by install.sh
+#
 
 set -e
 
-BASE_DIR="$(dirname $(realpath $0))"
-VENV_DIR="$BASE_DIR/venv"
-SERVICE_DIR="/etc/systemd/system"
-RENDERED_DIR="$BASE_DIR/services"
-MEDIAMTX_DIR="$BASE_DIR/mediamtx"
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
 
-echo "=================================================="
-echo "  Ravens Perch Uninstaller"
-echo "=================================================="
+INSTALL_DIR="${HOME}/ravens-perch"
+KLIPPER_CONFIG_DIR="${HOME}/printer_data/config"
+
+log_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
+
+log_success() {
+    echo -e "${GREEN}[OK]${NC} $1"
+}
+
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
+
+echo ""
+echo -e "${YELLOW}╔════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${YELLOW}║            Ravens Perch v3.0 Uninstaller                   ║${NC}"
+echo -e "${YELLOW}╚════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 
-# Stop and disable services
-echo "🛑 Stopping services..."
-for service in mediamtx snapfeeder raven-watchdog web-ui camera-hotplug; do
+# Confirm uninstall
+read -p "This will remove Ravens Perch. Continue? (y/N): " confirm
+if [[ "$confirm" != "y" && "$confirm" != "Y" ]]; then
+    echo "Cancelled."
+    exit 0
+fi
+
+echo ""
+
+# Stop services
+log_info "Stopping services..."
+for service in ravens-perch mediamtx; do
     if systemctl is-active --quiet ${service}.service 2>/dev/null; then
-        echo "   Stopping ${service}..."
+        log_info "Stopping ${service}..."
         sudo systemctl stop ${service}.service || true
     fi
+done
+log_success "Services stopped"
+
+# Disable services
+log_info "Disabling services..."
+for service in ravens-perch mediamtx; do
     if systemctl is-enabled --quiet ${service}.service 2>/dev/null; then
-        echo "   Disabling ${service}..."
         sudo systemctl disable ${service}.service || true
     fi
 done
+log_success "Services disabled"
 
-# Remove service symlinks from systemd
-echo ""
-echo "🔗 Removing service symlinks..."
-for service in mediamtx snapfeeder raven-watchdog web-ui camera-hotplug; do
-    if [ -L "$SERVICE_DIR/${service}.service" ]; then
-        echo "   Removing $SERVICE_DIR/${service}.service"
-        sudo rm -f "$SERVICE_DIR/${service}.service"
+# Remove service files
+log_info "Removing service files..."
+for service in ravens-perch mediamtx; do
+    if [ -f "/etc/systemd/system/${service}.service" ]; then
+        sudo rm -f "/etc/systemd/system/${service}.service"
+    fi
+done
+sudo systemctl daemon-reload
+log_success "Service files removed"
+
+# Remove nginx configuration
+log_info "Removing nginx configuration..."
+
+# Try to remove from common nginx configs
+configs=(
+    "/etc/nginx/sites-available/fluidd"
+    "/etc/nginx/sites-available/mainsail"
+    "/etc/nginx/sites-enabled/default"
+)
+
+for conf in "${configs[@]}"; do
+    if [ -f "$conf" ]; then
+        if grep -q "location /cameras/" "$conf" 2>/dev/null; then
+            log_info "Removing /cameras/ location from ${conf}..."
+            # Remove the location block (this is a best-effort removal)
+            sudo sed -i '/# Ravens Perch Camera UI/,/^[[:space:]]*}/d' "$conf" 2>/dev/null || true
+        fi
     fi
 done
 
-# Reload systemd
-echo ""
-echo "🔄 Reloading systemd..."
-sudo systemctl daemon-reload
-
-# Remove rendered services directory
-if [ -d "$RENDERED_DIR" ]; then
-    echo ""
-    echo "🗑️  Removing rendered services directory..."
-    rm -rf "$RENDERED_DIR"
+# Remove standalone config
+if [ -f "/etc/nginx/conf.d/ravens-perch.conf" ]; then
+    sudo rm -f "/etc/nginx/conf.d/ravens-perch.conf"
 fi
 
-# Remove MediaMTX directory
-if [ -d "$MEDIAMTX_DIR" ]; then
-    echo ""
-    echo "🗑️  Removing MediaMTX directory..."
-    rm -rf "$MEDIAMTX_DIR"
+# Reload nginx
+if sudo nginx -t 2>/dev/null; then
+    sudo systemctl reload nginx || true
 fi
+log_success "Nginx configuration removed"
 
-# Ask about virtual environment
-echo ""
-read -p "🐍 Remove Python virtual environment? (y/N): " remove_venv
-if [[ "$remove_venv" == "y" || "$remove_venv" == "Y" ]]; then
-    if [ -d "$VENV_DIR" ]; then
-        echo "   Removing venv..."
-        rm -rf "$VENV_DIR"
+# Remove Moonraker update_manager entry
+log_info "Removing Moonraker configuration..."
+moonraker_conf="${KLIPPER_CONFIG_DIR}/moonraker.conf"
+if [ -f "${moonraker_conf}" ]; then
+    if grep -q "\[update_manager ravens-perch\]" "${moonraker_conf}"; then
+        # Remove the ravens-perch section
+        sudo sed -i '/\[update_manager ravens-perch\]/,/^$/d' "${moonraker_conf}" 2>/dev/null || true
+        log_success "Removed from Moonraker configuration"
     fi
+fi
+
+# Ask about keeping data
+echo ""
+read -p "Keep database and logs (for reinstall)? (Y/n): " keep_data
+if [[ "$keep_data" == "n" || "$keep_data" == "N" ]]; then
+    log_info "Removing data directory..."
+    rm -rf "${INSTALL_DIR}/data"
+    rm -rf "${INSTALL_DIR}/logs"
+    log_success "Data removed"
 else
-    echo "   Keeping venv (can be reused on reinstall)"
+    log_info "Keeping data directory"
 fi
 
-# Ask about settings file
+# Ask about removing install directory
 echo ""
-SETTINGS_FILE="$MEDIAMTX_DIR/../mediamtx/raven_settings.yml"
-if [ -f "$BASE_DIR/mediamtx/raven_settings.yml" ]; then
-    SETTINGS_FILE="$BASE_DIR/mediamtx/raven_settings.yml"
+read -p "Remove entire install directory (${INSTALL_DIR})? (y/N): " remove_all
+if [[ "$remove_all" == "y" || "$remove_all" == "Y" ]]; then
+    log_info "Removing install directory..."
+    rm -rf "${INSTALL_DIR}"
+    log_success "Install directory removed"
+else
+    # Only remove specific components
+    log_info "Removing components but keeping directory..."
+    rm -rf "${INSTALL_DIR}/venv" 2>/dev/null || true
+    rm -rf "${INSTALL_DIR}/mediamtx" 2>/dev/null || true
+    rm -rf "${INSTALL_DIR}/daemon" 2>/dev/null || true
+    log_success "Components removed"
 fi
 
-if [ -f "$SETTINGS_FILE" ]; then
-    read -p "⚙️  Remove raven_settings.yml? (y/N): " remove_settings
-    if [[ "$remove_settings" == "y" || "$remove_settings" == "Y" ]]; then
-        echo "   Removing settings file..."
-        rm -f "$SETTINGS_FILE"
-    else
-        echo "   Keeping settings file (preserves your configuration)"
-    fi
-fi
-
-# Summary
 echo ""
-echo "=================================================="
-echo "  ✅ Uninstallation Complete"
-echo "=================================================="
+echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}║            Ravens Perch Uninstalled Successfully           ║${NC}"
+echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo "The following have been removed:"
-echo "  - MediaMTX binary and default config"
-echo "  - Systemd service files"
-echo "  - Rendered service configurations"
-if [[ "$remove_venv" == "y" || "$remove_venv" == "Y" ]]; then
+echo "  - Systemd services (ravens-perch, mediamtx)"
+echo "  - Nginx configuration (/cameras/ location)"
+echo "  - Moonraker update_manager entry"
+if [[ "$remove_all" == "y" || "$remove_all" == "Y" ]]; then
+    echo "  - Install directory (${INSTALL_DIR})"
+else
     echo "  - Python virtual environment"
+    echo "  - MediaMTX binary"
+    echo "  - Daemon module"
 fi
-if [[ "$remove_settings" == "y" || "$remove_settings" == "Y" ]]; then
-    echo "  - Camera settings file"
+if [[ "$keep_data" != "n" && "$keep_data" != "N" ]]; then
+    echo ""
+    echo "Data preserved at: ${INSTALL_DIR}/data"
+    echo "Logs preserved at: ${INSTALL_DIR}/logs"
 fi
-echo ""
-echo "The ravens-perch source directory remains at:"
-echo "  $BASE_DIR"
-echo ""
-echo "To completely remove, run:"
-echo "  rm -rf $BASE_DIR"
 echo ""

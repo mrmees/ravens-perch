@@ -1,0 +1,36 @@
+<div class="camera-card {% if not camera.connected %}disconnected{% endif %}"
+     id="camera-{{ camera.id }}">
+    <div class="camera-preview">
+        <img src="{{ url_for('cameras.snapshot', camera_id=camera.id) }}?t={{ now() }}"
+             alt="{{ camera.friendly_name }}"
+             loading="lazy">
+        <div class="camera-status">
+            {% if camera.connected %}
+                {% if camera.stream_active %}
+                    <span class="status-badge status-active">Live</span>
+                {% else %}
+                    <span class="status-badge status-starting">Starting</span>
+                {% endif %}
+            {% else %}
+                <span class="status-badge status-offline">Offline</span>
+            {% endif %}
+        </div>
+    </div>
+    <div class="camera-info">
+        <h3 class="camera-name">{{ camera.friendly_name }}</h3>
+        {% if camera.settings %}
+            <span class="camera-resolution">
+                {{ camera.settings.resolution }} @ {{ camera.settings.framerate }}fps
+            </span>
+        {% endif %}
+    </div>
+    <div class="camera-actions">
+        <a href="{{ url_for('cameras.camera_detail', camera_id=camera.id) }}"
+           class="btn btn-primary">Configure</a>
+        {% if camera.connected and camera.stream_active %}
+            <a href="{{ camera.stream_urls.webrtc }}"
+               target="_blank"
+               class="btn btn-secondary">View</a>
+        {% endif %}
+    </div>
+</div>

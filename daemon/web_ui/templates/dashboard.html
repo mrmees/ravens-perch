@@ -1,0 +1,96 @@
+{% extends "base.html" %}
+
+{% block title %}Cameras - Ravens Perch{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Cameras</h1>
+    <div class="header-actions">
+        <span class="status-text" id="connection-status">
+            {% if cameras|length > 0 %}
+                {{ cameras|selectattr('connected')|list|length }} of {{ cameras|length }} connected
+            {% else %}
+                No cameras detected
+            {% endif %}
+        </span>
+    </div>
+</div>
+
+<div class="camera-grid"
+     hx-get="{{ url_for('cameras.api_status') }}"
+     hx-trigger="every 5s"
+     hx-swap="none">
+    {% if cameras %}
+        {% for camera in cameras %}
+            <div class="camera-card {% if not camera.connected %}disconnected{% endif %}"
+                 id="camera-{{ camera.id }}">
+                <div class="camera-preview">
+                    <img src="{{ url_for('cameras.snapshot', camera_id=camera.id) }}"
+                         alt="{{ camera.friendly_name }}"
+                         loading="lazy"
+                         onerror="this.src='{{ url_for('cameras.static', filename='img/no-signal.svg') }}'">
+                    <div class="camera-status">
+                        {% if camera.connected %}
+                            {% if camera.stream_active %}
+                                <span class="status-badge status-active">Live</span>
+                            {% else %}
+                                <span class="status-badge status-starting">Starting</span>
+                            {% endif %}
+                        {% else %}
+                            <span class="status-badge status-offline">Offline</span>
+                        {% endif %}
+                    </div>
+                </div>
+                <div class="camera-info">
+                    <h3 class="camera-name">{{ camera.friendly_name }}</h3>
+                    {% if camera.settings %}
+                        <span class="camera-resolution">
+                            {{ camera.settings.resolution }} @ {{ camera.settings.framerate }}fps
+                        </span>
+                    {% endif %}
+                </div>
+                <div class="camera-actions">
+                    <a href="{{ url_for('cameras.camera_detail', camera_id=camera.id) }}"
+                       class="btn btn-primary">Configure</a>
+                    {% if camera.connected and camera.stream_active %}
+                        <a href="{{ camera.stream_urls.webrtc }}"
+                           target="_blank"
+                           class="btn btn-secondary">View</a>
+                    {% endif %}
+                </div>
+            </div>
+        {% endfor %}
+    {% else %}
+        <div class="empty-state">
+            <div class="empty-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+                    <circle cx="12" cy="13" r="4"></circle>
+                </svg>
+            </div>
+            <h3>No Cameras Detected</h3>
+            <p>Connect a USB camera to get started. Cameras will be automatically detected and configured.</p>
+        </div>
+    {% endif %}
+</div>
+
+{% if cameras %}
+<div class="info-panel">
+    <h4>Quick Info</h4>
+    <p>Cameras are automatically detected when plugged in. Click "Configure" to adjust settings or view the stream.</p>
+    <p>Stream URLs are automatically registered with Moonraker for use in Fluidd/Mainsail.</p>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Refresh thumbnails periodically
+    setInterval(() => {
+        document.querySelectorAll('.camera-preview img').forEach(img => {
+            const src = img.src.split('?')[0];
+            img.src = src + '?t=' + Date.now();
+        });
+    }, 10000);
+</script>
+{% endblock %}

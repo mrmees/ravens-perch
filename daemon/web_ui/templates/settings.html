@@ -1,0 +1,129 @@
+{% extends "base.html" %}
+
+{% block title %}Settings - Ravens Perch{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Settings</h1>
+</div>
+
+<div class="settings-layout">
+    <div class="settings-card">
+        <h3>General Settings</h3>
+
+        <form method="POST"
+              action="{{ url_for('cameras.update_global_settings') }}"
+              hx-post="{{ url_for('cameras.update_global_settings') }}"
+              hx-swap="innerHTML"
+              hx-target="#settings-status">
+
+            <div class="form-group">
+                <label for="cpu_threshold">CPU Threshold (%)</label>
+                <input type="range"
+                       id="cpu_threshold"
+                       name="cpu_threshold"
+                       min="10"
+                       max="80"
+                       value="{{ settings.get('cpu_threshold', 30) }}"
+                       oninput="document.getElementById('cpu_threshold_value').textContent = this.value + '%'">
+                <span id="cpu_threshold_value" class="range-value">{{ settings.get('cpu_threshold', 30) }}%</span>
+                <p class="form-help">Quality will be reduced if CPU usage exceeds this threshold.</p>
+            </div>
+
+            <div class="form-group">
+                <label for="moonraker_url">Moonraker URL</label>
+                <input type="text"
+                       id="moonraker_url"
+                       name="moonraker_url"
+                       value="{{ settings.get('moonraker_url', 'http://127.0.0.1:7125') }}"
+                       placeholder="http://127.0.0.1:7125">
+                <p class="form-help">
+                    Status:
+                    {% if moonraker_available %}
+                        <span class="status-text status-ok">Connected</span>
+                    {% else %}
+                        <span class="status-text status-error">Not connected</span>
+                    {% endif %}
+                </p>
+            </div>
+
+            <div class="form-group">
+                <label for="log_level">Log Level</label>
+                <select id="log_level" name="log_level">
+                    {% for level in ['DEBUG', 'INFO', 'WARNING', 'ERROR'] %}
+                        <option value="{{ level }}"
+                                {% if settings.get('log_level', 'INFO') == level %}selected{% endif %}>
+                            {{ level }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+
+            <div id="settings-status"></div>
+
+            <button type="submit" class="btn btn-primary">Save Settings</button>
+        </form>
+    </div>
+
+    <div class="settings-card">
+        <h3>System Information</h3>
+
+        <dl class="info-list">
+            <dt>Platform</dt>
+            <dd>{{ platform_info.platform }} ({{ platform_info.machine }})</dd>
+
+            {% if platform_info.model %}
+            <dt>Model</dt>
+            <dd>{{ platform_info.model }}</dd>
+            {% endif %}
+
+            <dt>Python Version</dt>
+            <dd>{{ platform_info.python_version }}</dd>
+
+            <dt>CPU Capability Rating</dt>
+            <dd>
+                <span class="rating-bar">
+                    <span class="rating-fill" style="width: {{ cpu_rating * 10 }}%"></span>
+                </span>
+                {{ cpu_rating }}/10
+            </dd>
+        </dl>
+    </div>
+
+    <div class="settings-card">
+        <h3>Available Encoders</h3>
+
+        <ul class="encoder-list">
+            <li class="{% if encoders.software %}available{% else %}unavailable{% endif %}">
+                <span class="encoder-name">Software (libx264)</span>
+                <span class="encoder-status">
+                    {% if encoders.software %}Available{% else %}Not available{% endif %}
+                </span>
+            </li>
+            <li class="{% if encoders.vaapi %}available{% else %}unavailable{% endif %}">
+                <span class="encoder-name">VAAPI (Intel/AMD GPU)</span>
+                <span class="encoder-status">
+                    {% if encoders.vaapi %}Available{% else %}Not available{% endif %}
+                </span>
+            </li>
+            <li class="{% if encoders.v4l2m2m %}available{% else %}unavailable{% endif %}">
+                <span class="encoder-name">V4L2M2M (Raspberry Pi)</span>
+                <span class="encoder-status">
+                    {% if encoders.v4l2m2m %}Available{% else %}Not available{% endif %}
+                </span>
+            </li>
+        </ul>
+    </div>
+
+    <div class="settings-card">
+        <h3>About</h3>
+        <p>Ravens Perch v3.0 - Zero-touch camera management for Klipper</p>
+        <p class="text-muted">
+            Cameras are automatically detected, configured, and registered with Moonraker.
+        </p>
+        <p>
+            <a href="https://github.com/USER/ravens-perch" target="_blank">GitHub Repository</a>
+        </p>
+    </div>
+</div>
+{% endblock %}

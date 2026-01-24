@@ -1,0 +1,88 @@
+{% extends "base.html" %}
+
+{% block title %}Logs - Ravens Perch{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <h1>Logs</h1>
+    <div class="header-actions">
+        <div class="log-filters">
+            <a href="{{ url_for('cameras.logs_page') }}"
+               class="btn btn-sm {% if not current_level %}btn-primary{% else %}btn-secondary{% endif %}">
+                All
+            </a>
+            <a href="{{ url_for('cameras.logs_page', level='INFO') }}"
+               class="btn btn-sm {% if current_level == 'INFO' %}btn-primary{% else %}btn-secondary{% endif %}">
+                Info
+            </a>
+            <a href="{{ url_for('cameras.logs_page', level='WARNING') }}"
+               class="btn btn-sm {% if current_level == 'WARNING' %}btn-primary{% else %}btn-secondary{% endif %}">
+                Warning
+            </a>
+            <a href="{{ url_for('cameras.logs_page', level='ERROR') }}"
+               class="btn btn-sm {% if current_level == 'ERROR' %}btn-primary{% else %}btn-secondary{% endif %}">
+                Error
+            </a>
+        </div>
+    </div>
+</div>
+
+<div class="logs-container"
+     hx-get="{{ url_for('cameras.logs_page', level=current_level) }}"
+     hx-trigger="every 10s"
+     hx-select=".log-table"
+     hx-swap="innerHTML"
+     hx-target=".log-table-wrapper">
+
+    <div class="log-table-wrapper">
+        {% if logs %}
+        <table class="log-table">
+            <thead>
+                <tr>
+                    <th class="col-time">Time</th>
+                    <th class="col-level">Level</th>
+                    <th class="col-camera">Camera</th>
+                    <th class="col-message">Message</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr class="log-{{ log.level|lower }}">
+                    <td class="col-time">{{ log.timestamp }}</td>
+                    <td class="col-level">
+                        <span class="level-badge level-{{ log.level|lower }}">{{ log.level }}</span>
+                    </td>
+                    <td class="col-camera">
+                        {% if log.camera_name %}
+                            <a href="{{ url_for('cameras.camera_detail', camera_id=log.camera_id) }}">
+                                {{ log.camera_name }}
+                            </a>
+                        {% else %}
+                            <span class="text-muted">System</span>
+                        {% endif %}
+                    </td>
+                    <td class="col-message">{{ log.message }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div class="empty-state">
+            <p>No logs found{% if current_level %} with level "{{ current_level }}"{% endif %}.</p>
+        </div>
+        {% endif %}
+    </div>
+
+    {% if logs and logs|length >= 50 %}
+    <div class="pagination">
+        {% if page > 1 %}
+            <a href="{{ url_for('cameras.logs_page', level=current_level, page=page-1) }}"
+               class="btn btn-secondary">&larr; Newer</a>
+        {% endif %}
+        <span class="page-info">Page {{ page }}</span>
+        <a href="{{ url_for('cameras.logs_page', level=current_level, page=page+1) }}"
+           class="btn btn-secondary">Older &rarr;</a>
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

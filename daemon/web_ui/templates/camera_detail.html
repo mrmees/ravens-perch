@@ -1,0 +1,269 @@
+{% extends "base.html" %}
+
+{% block title %}{{ camera.friendly_name }} - Ravens Perch{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <a href="{{ url_for('cameras.dashboard') }}" class="back-link">&larr; Back to Cameras</a>
+    <h1 id="camera-name">{{ camera.friendly_name }}</h1>
+    <div class="header-status">
+        {% if camera.connected %}
+            {% if camera.stream_active %}
+                <span class="status-badge status-active">Live</span>
+            {% else %}
+                <span class="status-badge status-starting">Starting</span>
+            {% endif %}
+        {% else %}
+            <span class="status-badge status-offline">Offline</span>
+        {% endif %}
+    </div>
+</div>
+
+<div class="detail-layout">
+    <div class="preview-section">
+        <div class="preview-container">
+            {% if camera.connected and camera.stream_active %}
+                <iframe src="{{ camera.stream_urls.webrtc }}"
+                        class="preview-iframe"
+                        allow="autoplay"
+                        allowfullscreen></iframe>
+            {% else %}
+                <img src="{{ url_for('cameras.snapshot', camera_id=camera.id) }}"
+                     alt="{{ camera.friendly_name }}"
+                     class="preview-image"
+                     id="preview-image">
+                <div class="preview-overlay">
+                    {% if not camera.connected %}
+                        <span>Camera Disconnected</span>
+                    {% else %}
+                        <span>Stream Starting...</span>
+                    {% endif %}
+                </div>
+            {% endif %}
+        </div>
+        <div class="preview-actions">
+            {% if camera.connected %}
+                <button class="btn btn-secondary"
+                        hx-post="{{ url_for('cameras.restart_camera_stream', camera_id=camera.id) }}"
+                        hx-swap="none">
+                    Restart Stream
+                </button>
+            {% endif %}
+            <a href="{{ camera.stream_urls.webrtc }}" target="_blank" class="btn btn-secondary">
+                Open in New Tab
+            </a>
+        </div>
+    </div>
+
+    <div class="settings-section">
+        <div class="settings-card">
+            <h3>Camera Settings</h3>
+
+            <form method="POST"
+                  action="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
+                  hx-post="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
+                  hx-swap="innerHTML"
+                  hx-target="#settings-status">
+
+                <!-- Name -->
+                <div class="form-group">
+                    <label for="friendly_name">Name</label>
+                    <div class="input-group">
+                        <input type="text"
+                               id="friendly_name"
+                               name="friendly_name"
+                               value="{{ camera.friendly_name }}"
+                               hx-post="{{ url_for('cameras.rename_camera', camera_id=camera.id) }}"
+                               hx-trigger="blur changed"
+                               hx-swap="innerHTML"
+                               hx-target="#camera-name">
+                    </div>
+                </div>
+
+                <!-- Resolution -->
+                <div class="form-group">
+                    <label for="resolution">Resolution</label>
+                    <select id="resolution" name="resolution"
+                            hx-get="{{ url_for('cameras.api_framerates', camera_id=camera.id) }}"
+                            hx-trigger="change"
+                            hx-target="#framerate"
+                            hx-include="[name='format']">
+                        {% for res in resolutions %}
+                            <option value="{{ res }}"
+                                    {% if camera.settings and camera.settings.resolution == res %}selected{% endif %}>
+                                {{ res }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Framerate -->
+                <div class="form-group">
+                    <label for="framerate">Framerate</label>
+                    <select id="framerate" name="framerate">
+                        {% for fps in framerates %}
+                            <option value="{{ fps }}"
+                                    {% if camera.settings and camera.settings.framerate == fps %}selected{% endif %}>
+                                {{ fps }} fps
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Enable/Disable -->
+                <div class="form-group">
+                    <label class="toggle-label">
+                        <span>Enable Camera</span>
+                        <div class="toggle-switch"
+                             hx-post="{{ url_for('cameras.toggle_enable', camera_id=camera.id) }}"
+                             hx-swap="outerHTML">
+                            <input type="checkbox"
+                                   {% if camera.enabled %}checked{% endif %}
+                                   disabled>
+                            <span class="toggle-slider"></span>
+                        </div>
+                    </label>
+                </div>
+
+                <div id="settings-status"></div>
+
+                <button type="submit" class="btn btn-primary btn-block">
+                    Save Settings
+                </button>
+            </form>
+        </div>
+
+        <!-- Advanced Settings (collapsed by default) -->
+        <details class="settings-card advanced-settings">
+            <summary>Advanced Settings</summary>
+
+            <form method="POST"
+                  action="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
+                  hx-post="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
+                  hx-swap="innerHTML"
+                  hx-target="#advanced-settings-status">
+
+                <!-- Format -->
+                <div class="form-group">
+                    <label for="format">Input Format</label>
+                    <select id="format" name="format"
+                            hx-get="{{ url_for('cameras.api_resolutions', camera_id=camera.id) }}"
+                            hx-trigger="change"
+                            hx-target="#resolution">
+                        {% for fmt in capabilities.keys() %}
+                            <option value="{{ fmt }}"
+                                    {% if camera.settings and camera.settings.format == fmt %}selected{% endif %}>
+                                {{ fmt|upper }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Encoder -->
+                <div class="form-group">
+                    <label for="encoder">Encoder</label>
+                    <select id="encoder" name="encoder">
+                        <option value="libx264"
+                                {% if camera.settings and camera.settings.encoder == 'libx264' %}selected{% endif %}>
+                            Software (libx264)
+                        </option>
+                        {% if encoders.vaapi %}
+                        <option value="h264_vaapi"
+                                {% if camera.settings and camera.settings.encoder == 'h264_vaapi' %}selected{% endif %}>
+                            VAAPI (Intel/AMD GPU)
+                        </option>
+                        {% endif %}
+                        {% if encoders.v4l2m2m %}
+                        <option value="h264_v4l2m2m"
+                                {% if camera.settings and camera.settings.encoder == 'h264_v4l2m2m' %}selected{% endif %}>
+                            V4L2M2M (Raspberry Pi)
+                        </option>
+                        {% endif %}
+                    </select>
+                </div>
+
+                <!-- Bitrate -->
+                <div class="form-group">
+                    <label for="bitrate">Bitrate</label>
+                    <select id="bitrate" name="bitrate">
+                        {% for br in ['1M', '2M', '4M', '6M', '8M', '10M'] %}
+                            <option value="{{ br }}"
+                                    {% if camera.settings and camera.settings.bitrate == br %}selected{% endif %}>
+                                {{ br }}bps
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Rotation -->
+                <div class="form-group">
+                    <label for="rotation">Rotation</label>
+                    <select id="rotation" name="rotation">
+                        <option value="0" {% if camera.settings and camera.settings.rotation == 0 %}selected{% endif %}>None</option>
+                        <option value="90" {% if camera.settings and camera.settings.rotation == 90 %}selected{% endif %}>90&deg;</option>
+                        <option value="180" {% if camera.settings and camera.settings.rotation == 180 %}selected{% endif %}>180&deg;</option>
+                        <option value="270" {% if camera.settings and camera.settings.rotation == 270 %}selected{% endif %}>270&deg;</option>
+                    </select>
+                </div>
+
+                <div id="advanced-settings-status"></div>
+
+                <button type="submit" class="btn btn-primary btn-block">
+                    Save Advanced Settings
+                </button>
+            </form>
+        </details>
+
+        <!-- Stream URLs -->
+        <div class="settings-card">
+            <h3>Stream URLs</h3>
+            <div class="url-list">
+                <div class="url-item">
+                    <label>WebRTC</label>
+                    <code>{{ camera.stream_urls.webrtc }}</code>
+                </div>
+                <div class="url-item">
+                    <label>RTSP</label>
+                    <code>{{ camera.stream_urls.rtsp }}</code>
+                </div>
+                <div class="url-item">
+                    <label>Snapshot</label>
+                    <code>http://{{ system_ip }}/cameras/snapshot/{{ camera.id }}.jpg</code>
+                </div>
+            </div>
+        </div>
+
+        <!-- Device Info -->
+        <div class="settings-card">
+            <h3>Device Information</h3>
+            <dl class="info-list">
+                <dt>Hardware Name</dt>
+                <dd>{{ camera.hardware_name }}</dd>
+                {% if camera.serial_number %}
+                <dt>Serial Number</dt>
+                <dd>{{ camera.serial_number }}</dd>
+                {% endif %}
+                <dt>Device Path</dt>
+                <dd>{{ camera.device_path or 'Not connected' }}</dd>
+                <dt>First Seen</dt>
+                <dd>{{ camera.first_seen }}</dd>
+                <dt>Last Seen</dt>
+                <dd>{{ camera.last_seen }}</dd>
+            </dl>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Refresh snapshot preview if not using WebRTC
+    const previewImage = document.getElementById('preview-image');
+    if (previewImage) {
+        setInterval(() => {
+            const src = previewImage.src.split('?')[0];
+            previewImage.src = src + '?t=' + Date.now();
+        }, 2000);
+    }
+</script>
+{% endblock %}

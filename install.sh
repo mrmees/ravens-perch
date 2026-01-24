@@ -1,246 +1,491 @@
-#!/usr/bin/env bash
-
-# ==============================================================================
-# Full Installer for MediaMTX + SnapFeeder
-# ----------------------------------------
-# - Installs dependencies via APT and pip if needed
-# - Creates Python virtual environment in ./venv/
-# - Downloads MediaMTX and places it into ./mediamtx/
-# - Enables MediaMTX API for hot-reload configuration
-# - Generates mediamtx.yml using scripts/generate_mediamtx_config.py
-# - Processes *.service.template files from ./templates/
-#   - Injects current user and absolute install path
-#   - Saves rendered files into ./services/
-#   - Creates symlinks into /etc/systemd/system/
-# - Starts and enables systemd services
+#!/bin/bash
 #
-# Last modified: 2026-01-11 12:42 CST
-# ==============================================================================
+# Ravens Perch v3 Installation Script
+# Zero-touch camera management for Klipper-based 3D printers
+#
 
 set -e
 
-# Define directories
-BASE_DIR="$(dirname $(realpath $0))"
-VENV_DIR="$BASE_DIR/venv"
-SERVICE_DIR="/etc/systemd/system"
-TEMPLATE_DIR="$BASE_DIR/templates"
-RENDERED_DIR="$BASE_DIR/services"
-SCRIPTS_DIR="$BASE_DIR/scripts"
-MEDIAMTX_DIR="$BASE_DIR/mediamtx"
-MEDIAMTX_BIN="$MEDIAMTX_DIR/mediamtx"
-MEDIAMTX_CONFIG="$MEDIAMTX_DIR/mediamtx.yml"
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+NC='\033[0m' # No Color
 
-USERNAME=$(whoami)
+# Configuration
+RAVENS_USER="${USER}"
+INSTALL_DIR="${HOME}/ravens-perch"
+MEDIAMTX_VERSION="v1.5.1"
+KLIPPER_CONFIG_DIR="${HOME}/printer_data/config"
 
-# ----------------------------------------------
-# 🤖 Detect Rockchip platform (e.g., RK3588, RK3399)
-# If detected, offer to install custom FFmpeg build
-# with Rockchip hardware acceleration (MPP/RGA)
-# ----------------------------------------------
+# Logging functions
+log_info() {
+    echo -e "${BLUE}[INFO]${NC} $1"
+}
 
-# Read SoC info from device tree
-ROCKCHIP_CPU=""
-if [ -f /proc/device-tree/compatible ]; then
-    ROCKCHIP_CPU=$(tr -d '\0' < /proc/device-tree/compatible | grep -o 'rockchip,[^,]*' || true)
-fi
+log_success() {
+    echo -e "${GREEN}[OK]${NC} $1"
+}
 
-if [[ -n "$ROCKCHIP_CPU" ]]; then
-    echo -e "🧠  \e[33mDetected Rockchip platform:\e[0m $ROCKCHIP_CPU"
-    
-    # Prompt user to optionally install the custom FFmpeg
-    echo -e "🚀  \e[36mWould you like to install a custom FFmpeg build with Rockchip hardware acceleration (MPP/RGA)?\e[0m"
-    read -p "✅  Type 'yes' to proceed or press Enter to skip: " user_input
+log_warn() {
+    echo -e "${YELLOW}[WARN]${NC} $1"
+}
 
-    if [[ "$user_input" == "yes" ]]; then
-      echo -e "🔧  \e[32mLaunching FFmpeg installer...\e[0m"
-      bash "$BASE_DIR"/extras/rockchip_ffmpeg_installer.sh
-    else
-        echo -e "⏭️  \e[34mSkipping custom FFmpeg installation.\e[0m"
+log_error() {
+    echo -e "${RED}[ERROR]${NC} $1"
+}
+
+# Detect architecture
+detect_arch() {
+    local arch=$(uname -m)
+    case $arch in
+        x86_64|amd64)
+            echo "amd64"
+            ;;
+        aarch64|arm64)
+            echo "arm64v8"
+            ;;
+        armv7l|armhf)
+            echo "armv7"
+            ;;
+        armv6l)
+            echo "armv6"
+            ;;
+        *)
+            log_error "Unsupported architecture: $arch"
+            exit 1
+            ;;
+    esac
+}
+
+# Detect if running on Raspberry Pi
+is_raspberry_pi() {
+    if [ -f /proc/device-tree/model ]; then
+        if grep -qi "raspberry pi" /proc/device-tree/model 2>/dev/null; then
+            return 0
+        fi
     fi
-else
-    echo -e "ℹ️  \e[34mNo Rockchip platform detected. Skipping hardware-accelerated FFmpeg prompt.\e[0m"
-fi
+    if grep -qi "raspberry pi\|bcm" /proc/cpuinfo 2>/dev/null; then
+        return 0
+    fi
+    return 1
+}
 
-# Ensure required system packages are installed
-REQUIRED_PKGS=(python3 python3-pip python3-venv curl v4l-utils)
-MISSING_PKGS=()
+# Detect Rockchip platform
+is_rockchip() {
+    if [ -f /proc/device-tree/compatible ]; then
+        if grep -q "rockchip" /proc/device-tree/compatible 2>/dev/null; then
+            return 0
+        fi
+    fi
+    return 1
+}
 
-for pkg in "${REQUIRED_PKGS[@]}"; do
-  if ! dpkg -s "$pkg" >/dev/null 2>&1; then
-    MISSING_PKGS+=("$pkg")
-  fi
-done
+# Check if running as correct user
+check_user() {
+    if [ "$EUID" -eq 0 ]; then
+        log_error "Do not run this script as root. Run as your normal user."
+        exit 1
+    fi
+}
 
-if ! command -v ffmpeg >/dev/null 2>&1; then
-  echo "ℹ️  ffmpeg not found, adding to install list"
-  MISSING_PKGS+=(ffmpeg)
-fi
+# Install system packages
+install_system_packages() {
+    log_info "Installing system packages..."
 
-if apt-cache show libturbojpeg0 >/dev/null 2>&1; then
-  if ! dpkg -s libturbojpeg0 >/dev/null 2>&1; then
-    echo "ℹ️  libturbojpeg0 is available and not installed — adding to install list"
-    MISSING_PKGS+=(libturbojpeg0)
-  fi
-elif apt-cache show libturbojpeg >/dev/null 2>&1; then
-  if ! dpkg -s libturbojpeg >/dev/null 2>&1; then
-    echo "ℹ️  libturbojpeg is available and not installed — adding to install list"
-    MISSING_PKGS+=(libturbojpeg)
-  fi
-else
-  echo "❌ Neither 'libturbojpeg0' nor 'libturbojpeg' are available in APT repositories."
-  echo "   Please check your APT sources."
-  exit 1
-fi
+    sudo apt-get update -qq
 
-if [ ${#MISSING_PKGS[@]} -ne 0 ]; then
-  echo "🔧 Installing missing system packages: ${MISSING_PKGS[*]}"
-  sudo apt update
-  sudo apt install -y "${MISSING_PKGS[@]}"
-fi
+    local packages=(
+        python3
+        python3-venv
+        python3-pip
+        python3-dev
+        ffmpeg
+        v4l-utils
+        curl
+        nginx
+    )
 
+    # Add libturbojpeg (name varies by distro)
+    if apt-cache show libturbojpeg0 >/dev/null 2>&1; then
+        packages+=(libturbojpeg0)
+    elif apt-cache show libturbojpeg >/dev/null 2>&1; then
+        packages+=(libturbojpeg)
+    fi
+
+    # Add optional dev packages for PyAV
+    local optional_packages=(
+        libturbojpeg0-dev
+        libavformat-dev
+        libavcodec-dev
+        libavdevice-dev
+        libavutil-dev
+        libswscale-dev
+        libswresample-dev
+        libavfilter-dev
+    )
+
+    sudo apt-get install -y "${packages[@]}" || {
+        log_warn "Some packages may not be available, continuing..."
+    }
+
+    # Try optional packages but don't fail
+    sudo apt-get install -y "${optional_packages[@]}" 2>/dev/null || true
+
+    log_success "System packages installed"
+}
+
+# Create directory structure
+create_directories() {
+    log_info "Creating directory structure..."
+
+    mkdir -p "${INSTALL_DIR}/mediamtx"
+    mkdir -p "${INSTALL_DIR}/data"
+    mkdir -p "${INSTALL_DIR}/logs"
+    mkdir -p "${INSTALL_DIR}/daemon"
+
+    log_success "Directories created"
+}
+
+# Copy source files
+copy_source_files() {
+    log_info "Copying source files..."
+
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+    # Copy daemon module
+    cp -r "${script_dir}/daemon"/* "${INSTALL_DIR}/daemon/"
+
+    # Copy requirements
+    cp "${script_dir}/requirements.txt" "${INSTALL_DIR}/"
+
+    log_success "Source files copied"
+}
+
+# Download and install MediaMTX
+install_mediamtx() {
+    log_info "Installing MediaMTX..."
+
+    local arch=$(detect_arch)
+    local mtx_archive="mediamtx_${MEDIAMTX_VERSION}_linux_${arch}.tar.gz"
+    local mtx_url="https://github.com/bluenviron/mediamtx/releases/download/${MEDIAMTX_VERSION}/${mtx_archive}"
+
+    cd "${INSTALL_DIR}/mediamtx"
+
+    if [ -f "mediamtx" ]; then
+        log_info "MediaMTX already installed, skipping download..."
+    else
+        log_info "Downloading MediaMTX ${MEDIAMTX_VERSION} for ${arch}..."
+        curl -sL "${mtx_url}" -o mediamtx.tar.gz || {
+            log_error "Failed to download MediaMTX"
+            exit 1
+        }
+
+        tar -xzf mediamtx.tar.gz
+        rm mediamtx.tar.gz
+        chmod +x mediamtx
+    fi
+
+    # Enable API in config
+    if [ -f "mediamtx.yml" ]; then
+        log_info "Configuring MediaMTX..."
+        # Enable API
+        if grep -q "^api:" mediamtx.yml; then
+            sed -i 's/^api:.*/api: yes/' mediamtx.yml
+        else
+            echo "api: yes" >> mediamtx.yml
+        fi
+        # Set API address
+        if grep -q "^apiAddress:" mediamtx.yml; then
+            sed -i 's/^apiAddress:.*/apiAddress: 127.0.0.1:9997/' mediamtx.yml
+        fi
+    fi
+
+    cd "${INSTALL_DIR}"
+    log_success "MediaMTX installed"
+}
 
 # Create Python virtual environment
-echo "Checking for existing venv at: $VENV_DIR"
-if [ -d "$VENV_DIR" ] && [ -f "$VENV_DIR/bin/python" ]; then
-  echo "⚠️  Virtual environment already exists"
-  read -p "Remove and recreate? (y/n): " recreate_venv
-  if [[ "$recreate_venv" == "y" ]]; then
-    echo "🗑️  Removing existing venv..."
-    rm -rf "$VENV_DIR"
-    echo "🔧 Creating Python virtual environment"
-    python3 -m venv "$VENV_DIR"
-  else
-    echo "✅ Using existing virtual environment"
-  fi
-else
-  echo "🔧 Creating Python virtual environment"
-  python3 -m venv "$VENV_DIR"
-fi
+create_venv() {
+    log_info "Creating Python virtual environment..."
 
-# Install packages directly using venv's pip (not activating to avoid shell issues)
-echo "📦 Installing Python packages..."
-"$VENV_DIR/bin/pip" install --upgrade pip wheel
-"$VENV_DIR/bin/pip" install -r "$BASE_DIR/venv-requirements.txt"
+    cd "${INSTALL_DIR}"
 
-# Download latest MediaMTX binary
-VERSION=$(curl -s https://api.github.com/repos/bluenviron/mediamtx/releases/latest | grep tag_name | cut -d '"' -f 4)
-ARCH=$(uname -m)
-case "$ARCH" in
-  armv6l)       PLATFORM="linux_armv6" ;;
-  armv7l)       PLATFORM="linux_armv7" ;;
-  aarch64)      PLATFORM="linux_arm64" ;;
-  amd64|x86_64) PLATFORM="linux_amd64" ;;
-  *) echo "❌ Unsupported architecture: $ARCH"; exit 1 ;;
-esac
+    if [ -d "venv" ]; then
+        log_info "Virtual environment exists, updating..."
+    else
+        python3 -m venv venv
+    fi
 
-TMP_DIR=$(mktemp -d)
-cd "$TMP_DIR"
-echo "⬇️  Downloading MediaMTX $VERSION for $PLATFORM..."
-curl -L -o mediamtx.tar.gz "https://github.com/bluenviron/mediamtx/releases/download/${VERSION}/mediamtx_${VERSION}_${PLATFORM}.tar.gz"
-tar -xzf mediamtx.tar.gz
+    # Activate and install packages
+    source venv/bin/activate
 
-mkdir -p "$MEDIAMTX_DIR"
-mv mediamtx "$MEDIAMTX_BIN"
-chmod +x "$MEDIAMTX_BIN"
-mv mediamtx.yml "$MEDIAMTX_CONFIG"
-chmod 644 "$MEDIAMTX_CONFIG"
+    pip install --upgrade pip wheel setuptools -q
 
-# Enable API in MediaMTX config (required for hot-reload configuration)
-echo "🔧 Enabling MediaMTX API..."
-if grep -q "^api:" "$MEDIAMTX_CONFIG"; then
-  # Replace existing api setting
-  sed -i 's/^api:.*/api: yes/' "$MEDIAMTX_CONFIG"
-else
-  # Add api setting near the top of the file (after first non-comment line)
-  sed -i '0,/^[^#]/s//api: yes\n&/' "$MEDIAMTX_CONFIG"
-fi
+    # Install core requirements
+    pip install flask requests psutil ruamel.yaml -q
 
-# Verify API is enabled
-if grep -q "^api: yes" "$MEDIAMTX_CONFIG"; then
-  echo "✅ MediaMTX API enabled"
-else
-  echo "⚠️  Could not verify API setting - manual check recommended"
-fi
+    # Install optional packages (may fail on some platforms)
+    pip install pyudev -q 2>/dev/null || log_warn "pyudev not installed (using polling fallback)"
+    pip install av -q 2>/dev/null || log_warn "PyAV not installed (using ffmpeg fallback for snapshots)"
+    pip install pyturbojpeg -q 2>/dev/null || log_warn "pyturbojpeg not installed (using PIL fallback)"
 
-# Render systemd service templates BEFORE running configuration
-mkdir -p "$RENDERED_DIR"
+    deactivate
 
-# Render .service files from templates and symlink to systemd
-for template in "$TEMPLATE_DIR"/*.service.template; do
-  base=$(basename "$template" .template)
-  output="$RENDERED_DIR/$base"
-  systemd_target="$SERVICE_DIR/$base"
+    log_success "Python environment created"
+}
 
-  echo "🛠️  Rendering $base..."
+# Initialize database
+init_database() {
+    log_info "Initializing database..."
 
-  # Render template with variable substitution
-  sed \
-    -e "s|__BASE_DIR__|$BASE_DIR|g" \
-    -e "s|__VENV_DIR__|$VENV_DIR|g" \
-    -e "s|__USERNAME__|$USERNAME|g" \
-    "$template" > "$output"
+    cd "${INSTALL_DIR}"
+    source venv/bin/activate
 
-  # Create symlink to systemd
-  echo "🔗 Linking $base → $systemd_target"
-  sudo ln -sf "$output" "$systemd_target"
-done
+    # Set the install directory environment variable
+    export RAVENS_PERCH_DIR="${INSTALL_DIR}"
 
-# Reload systemd so services are available
-echo "🔄 Reloading systemd..."
-sudo systemctl daemon-reexec
-sudo systemctl daemon-reload
-sudo systemctl enable mediamtx.service snapfeeder.service raven-watchdog.service web-ui.service camera-hotplug.service
+    python3 -c "from daemon.db import init_db; init_db()"
+    deactivate
 
-# Ensure all scripts have executable permissions
-echo "🔧 Setting executable permissions..."
-chmod +x "$BASE_DIR/ravens-perch"
-chmod +x "$BASE_DIR/install.sh"
-chmod +x "$BASE_DIR/uninstall.sh"
-chmod +x "$SCRIPTS_DIR/generate_mediamtx_config.py"
-# Make any extras scripts executable
-if [ -d "$BASE_DIR/extras" ]; then
-    find "$BASE_DIR/extras" -name "*.sh" -exec chmod +x {} \;
-fi
+    log_success "Database initialized"
+}
 
-# Show installation complete message
-echo ""
-echo "✅ Installation complete!"
-echo ""
-echo "🚀 Launching camera configuration..."
-echo ""
-sleep 2
+# Create systemd service for MediaMTX
+create_mediamtx_service() {
+    log_info "Creating MediaMTX service..."
 
-# Launch the wrapper to configure cameras
-"$BASE_DIR/ravens-perch"
+    sudo tee /etc/systemd/system/mediamtx.service > /dev/null << EOF
+[Unit]
+Description=MediaMTX Streaming Server
+After=network.target
 
-# Ensure all services are running
-echo ""
-echo "🚀 Ensuring services are running..."
-for service in mediamtx snapfeeder raven-watchdog web-ui camera-hotplug; do
-  if ! systemctl is-active --quiet ${service}.service; then
-    echo "   Starting ${service}..."
-    sudo systemctl start ${service}.service
-  else
-    echo "   ✓ ${service} already running"
-  fi
-done
+[Service]
+Type=simple
+User=${RAVENS_USER}
+WorkingDirectory=${INSTALL_DIR}/mediamtx
+ExecStart=${INSTALL_DIR}/mediamtx/mediamtx
+Restart=on-failure
+RestartSec=5
 
-echo ""
-echo "✅ Setup complete!"
-echo ""
-echo "📹 To reconfigure cameras anytime, run:"
-echo "   ./ravens-perch"
-echo ""
-echo "🌐 Web Interface:"
-echo "   http://$(hostname -I | awk '{print $1}')/cameras"
-echo ""
-echo "🔧 Services running:"
-echo "   - mediamtx (RTSP/WebRTC/HLS streaming)"
-echo "   - snapfeeder (JPEG snapshots on port 5050)"
-echo "   - raven-watchdog (config sync & override API on port 5051)"
-echo "   - web-ui (camera configuration on port 80)"
-echo "   - camera-hotplug (plug-and-play camera detection)"
-echo ""
-echo "🔌 Plug-and-Play:"
-echo "   New cameras will be auto-configured when plugged in!"
-echo ""
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    log_success "MediaMTX service created"
+}
+
+# Create systemd service for Ravens Perch
+create_ravens_service() {
+    log_info "Creating Ravens Perch service..."
+
+    sudo tee /etc/systemd/system/ravens-perch.service > /dev/null << EOF
+[Unit]
+Description=Ravens Perch Camera Manager
+After=network.target mediamtx.service
+Wants=mediamtx.service
+
+[Service]
+Type=simple
+User=${RAVENS_USER}
+Environment="RAVENS_PERCH_DIR=${INSTALL_DIR}"
+WorkingDirectory=${INSTALL_DIR}
+ExecStart=${INSTALL_DIR}/venv/bin/python -m daemon.main
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+    log_success "Ravens Perch service created"
+}
+
+# Configure nginx reverse proxy
+configure_nginx() {
+    log_info "Configuring nginx..."
+
+    # Create standalone config file
+    sudo tee /etc/nginx/conf.d/ravens-perch.conf > /dev/null << 'EOF'
+# Ravens Perch Camera UI - standalone config
+# This is included via the main nginx config
+EOF
+
+    # Try to find and modify the main server block
+    local configs=(
+        "/etc/nginx/sites-available/fluidd"
+        "/etc/nginx/sites-available/mainsail"
+        "/etc/nginx/sites-enabled/default"
+        "/etc/nginx/nginx.conf"
+    )
+
+    local found=0
+    for conf in "${configs[@]}"; do
+        if [ -f "$conf" ]; then
+            if ! grep -q "location /cameras/" "$conf" 2>/dev/null; then
+                log_info "Adding /cameras/ location to ${conf}..."
+
+                # Create a backup
+                sudo cp "$conf" "${conf}.bak"
+
+                # Try to insert the location block
+                # This sed command inserts before the last closing brace of a server block
+                sudo sed -i '/^[[:space:]]*server[[:space:]]*{/,/^[[:space:]]*}[[:space:]]*$/{
+                    /^[[:space:]]*}[[:space:]]*$/i\
+\    # Ravens Perch Camera UI\
+\    location /cameras/ {\
+\        proxy_pass http://127.0.0.1:8585/cameras/;\
+\        proxy_http_version 1.1;\
+\        proxy_set_header Host $host;\
+\        proxy_set_header X-Real-IP $remote_addr;\
+\        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\
+\        proxy_set_header X-Forwarded-Proto $scheme;\
+\    }
+                }' "$conf" 2>/dev/null && found=1 || true
+            else
+                log_info "/cameras/ location already in ${conf}"
+                found=1
+            fi
+            break
+        fi
+    done
+
+    if [ $found -eq 0 ]; then
+        log_warn "Could not auto-configure nginx."
+        log_info "Please add the following to your nginx server block:"
+        echo ""
+        echo "    location /cameras/ {"
+        echo "        proxy_pass http://127.0.0.1:8585/cameras/;"
+        echo "        proxy_http_version 1.1;"
+        echo "        proxy_set_header Host \$host;"
+        echo "        proxy_set_header X-Real-IP \$remote_addr;"
+        echo "        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;"
+        echo "        proxy_set_header X-Forwarded-Proto \$scheme;"
+        echo "    }"
+        echo ""
+    fi
+
+    # Test and reload nginx
+    if sudo nginx -t 2>/dev/null; then
+        sudo systemctl reload nginx || true
+        log_success "Nginx configured"
+    else
+        log_warn "Nginx config test failed - please check configuration"
+    fi
+}
+
+# Add to Moonraker update_manager
+configure_moonraker() {
+    log_info "Configuring Moonraker update manager..."
+
+    local moonraker_conf="${KLIPPER_CONFIG_DIR}/moonraker.conf"
+
+    if [ -f "${moonraker_conf}" ]; then
+        if ! grep -q "\[update_manager ravens-perch\]" "${moonraker_conf}"; then
+            log_info "Adding ravens-perch to moonraker.conf..."
+            cat >> "${moonraker_conf}" << EOF
+
+[update_manager ravens-perch]
+type: git_repo
+path: ${INSTALL_DIR}
+origin: https://github.com/USER/ravens-perch.git
+primary_branch: main
+managed_services: ravens-perch mediamtx
+EOF
+            log_success "Added to Moonraker update manager"
+        else
+            log_info "Already configured in Moonraker"
+        fi
+    else
+        log_warn "moonraker.conf not found at ${moonraker_conf}"
+        log_info "To enable automatic updates, add to your moonraker.conf:"
+        echo ""
+        echo "[update_manager ravens-perch]"
+        echo "type: git_repo"
+        echo "path: ${INSTALL_DIR}"
+        echo "origin: https://github.com/USER/ravens-perch.git"
+        echo "primary_branch: main"
+        echo "managed_services: ravens-perch mediamtx"
+        echo ""
+    fi
+}
+
+# Enable and start services
+start_services() {
+    log_info "Starting services..."
+
+    sudo systemctl daemon-reload
+
+    # Enable services
+    sudo systemctl enable mediamtx ravens-perch
+
+    # Start MediaMTX first
+    sudo systemctl start mediamtx || log_warn "MediaMTX may already be running"
+    sleep 2
+
+    # Start Ravens Perch
+    sudo systemctl start ravens-perch || log_warn "Ravens Perch may already be running"
+
+    log_success "Services started"
+}
+
+# Print completion message
+print_success() {
+    local ip=$(hostname -I | awk '{print $1}')
+
+    echo ""
+    echo -e "${GREEN}╔════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${GREEN}║         Ravens Perch v3.0 Installed Successfully!          ║${NC}"
+    echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+    echo -e "Web UI:        ${BLUE}http://${ip}/cameras/${NC}"
+    echo -e "Direct access: ${BLUE}http://${ip}:8585/cameras/${NC}"
+    echo ""
+    echo "Commands:"
+    echo "  sudo systemctl status ravens-perch   - Check status"
+    echo "  sudo systemctl restart ravens-perch  - Restart service"
+    echo "  sudo journalctl -u ravens-perch -f   - View logs"
+    echo ""
+    echo "Cameras will be automatically detected and configured."
+    echo "Check the web UI to customize settings."
+    echo ""
+}
+
+# Main installation flow
+main() {
+    echo ""
+    echo -e "${BLUE}╔════════════════════════════════════════════════════════════╗${NC}"
+    echo -e "${BLUE}║            Ravens Perch v3.0 Installation                  ║${NC}"
+    echo -e "${BLUE}╚════════════════════════════════════════════════════════════╝${NC}"
+    echo ""
+
+    check_user
+
+    if is_raspberry_pi; then
+        log_info "Detected Raspberry Pi"
+    elif is_rockchip; then
+        log_info "Detected Rockchip platform"
+    fi
+
+    log_info "Architecture: $(detect_arch)"
+    log_info "Install directory: ${INSTALL_DIR}"
+    echo ""
+
+    install_system_packages
+    create_directories
+    copy_source_files
+    install_mediamtx
+    create_venv
+    init_database
+    create_mediamtx_service
+    create_ravens_service
+    configure_nginx
+    configure_moonraker
+    start_services
+
+    print_success
+}
+
+# Run main
+main "$@"

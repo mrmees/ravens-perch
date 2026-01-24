@@ -1,0 +1,8 @@
+<div class="toggle-switch"
+     hx-post="{{ url_for('cameras.toggle_enable', camera_id=camera_id) }}"
+     hx-swap="outerHTML">
+    <input type="checkbox"
+           {% if enabled %}checked{% endif %}
+           disabled>
+    <span class="toggle-slider"></span>
+</div>
