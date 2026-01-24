@@ -106,12 +106,26 @@ log_success "Nginx configuration removed"
 # Remove Moonraker update_manager entry
 log_info "Removing Moonraker configuration..."
 moonraker_conf="${KLIPPER_CONFIG_DIR}/moonraker.conf"
+moonraker_asvc="${HOME}/printer_data/moonraker.asvc"
+
 if [ -f "${moonraker_conf}" ]; then
     if grep -q "\[update_manager ravens-perch\]" "${moonraker_conf}"; then
         # Remove the ravens-perch section
         sudo sed -i '/\[update_manager ravens-perch\]/,/^$/d' "${moonraker_conf}" 2>/dev/null || true
         log_success "Removed from Moonraker configuration"
     fi
+fi
+
+# Remove services from moonraker.asvc
+if [ -f "${moonraker_asvc}" ]; then
+    log_info "Removing services from moonraker.asvc..."
+    for service in ravens-perch mediamtx; do
+        if grep -q "^${service}$" "${moonraker_asvc}"; then
+            sed -i "/^${service}$/d" "${moonraker_asvc}" 2>/dev/null || true
+            log_info "Removed ${service} from moonraker.asvc"
+        fi
+    done
+    log_success "Service permissions removed"
 fi
 
 # Ask about keeping data
@@ -151,6 +165,7 @@ echo "The following have been removed:"
 echo "  - Systemd services (ravens-perch, mediamtx)"
 echo "  - Nginx configuration (/cameras/ location)"
 echo "  - Moonraker update_manager entry"
+echo "  - Moonraker service permissions (moonraker.asvc)"
 if [[ "$remove_all" == "y" || "$remove_all" == "Y" ]]; then
     echo "  - Install directory (${INSTALL_DIR})"
 else

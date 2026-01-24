@@ -386,6 +386,7 @@ configure_moonraker() {
     log_info "Configuring Moonraker update manager..."
 
     local moonraker_conf="${KLIPPER_CONFIG_DIR}/moonraker.conf"
+    local moonraker_asvc="${HOME}/printer_data/moonraker.asvc"
 
     if [ -f "${moonraker_conf}" ]; then
         if ! grep -q "\[update_manager ravens-perch\]" "${moonraker_conf}"; then
@@ -403,6 +404,25 @@ EOF
         else
             log_info "Already configured in Moonraker"
         fi
+
+        # Add services to moonraker.asvc for service management permissions
+        if [ -f "${moonraker_asvc}" ]; then
+            log_info "Adding services to moonraker.asvc..."
+            for service in ravens-perch mediamtx; do
+                if ! grep -q "^${service}$" "${moonraker_asvc}"; then
+                    echo "${service}" >> "${moonraker_asvc}"
+                    log_info "Added ${service} to moonraker.asvc"
+                fi
+            done
+            log_success "Service permissions configured"
+        else
+            log_warn "moonraker.asvc not found at ${moonraker_asvc}"
+            log_info "To allow Moonraker to manage services, create the file and add:"
+            echo ""
+            echo "ravens-perch"
+            echo "mediamtx"
+            echo ""
+        fi
     else
         log_warn "moonraker.conf not found at ${moonraker_conf}"
         log_info "To enable automatic updates, add to your moonraker.conf:"
@@ -413,6 +433,11 @@ EOF
         echo "origin: https://github.com/USER/ravens-perch.git"
         echo "primary_branch: main"
         echo "managed_services: ravens-perch mediamtx"
+        echo ""
+        log_info "And add to ${moonraker_asvc}:"
+        echo ""
+        echo "ravens-perch"
+        echo "mediamtx"
         echo ""
     fi
 }
