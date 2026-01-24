@@ -213,23 +213,33 @@ class RavensPerchDaemon:
 
     def _start_web_ui(self):
         """Start the web UI in a background thread."""
-        from .web_ui.app import create_app
-
-        app = create_app()
+        try:
+            from .web_ui.app import create_app
+            app = create_app()
+        except Exception as e:
+            logger.error(f"Failed to create Flask app: {e}", exc_info=True)
+            add_log("ERROR", f"Web UI failed to initialize: {e}")
+            return
 
         def run_server():
-            # Use werkzeug server for development
-            # In production, use gunicorn or similar
-            app.run(
-                host=WEB_UI_HOST,
-                port=WEB_UI_PORT,
-                debug=False,
-                use_reloader=False,
-                threaded=True
-            )
+            try:
+                logger.info(f"Web UI server starting on {WEB_UI_HOST}:{WEB_UI_PORT}")
+                # Use werkzeug server for development
+                # In production, use gunicorn or similar
+                app.run(
+                    host=WEB_UI_HOST,
+                    port=WEB_UI_PORT,
+                    debug=False,
+                    use_reloader=False,
+                    threaded=True
+                )
+            except Exception as e:
+                logger.error(f"Web UI server error: {e}", exc_info=True)
+                add_log("ERROR", f"Web UI server failed: {e}")
 
         self.web_thread = threading.Thread(target=run_server, daemon=True)
         self.web_thread.start()
+        logger.info("Web UI thread started")
 
     def _on_camera_connected(self, device_info: DeviceInfo):
         """Handle camera connection event."""

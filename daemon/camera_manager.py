@@ -104,8 +104,16 @@ def get_device_info(device_path: str) -> Optional[DeviceInfo]:
 
 
 def is_capture_device(device_path: str) -> bool:
-    """Check if a V4L2 device is a video capture device (not metadata/etc)."""
+    """Check if a V4L2 device is a video capture device (not metadata/codec)."""
     try:
+        # Filter out hardware codec devices by path name
+        path_lower = device_path.lower()
+        codec_patterns = ['dec', 'enc', 'm2m', 'isp', 'iep', 'rga']
+        for pattern in codec_patterns:
+            if pattern in path_lower:
+                logger.debug(f"Skipping codec device: {device_path}")
+                return False
+
         result = subprocess.run(
             ["v4l2-ctl", "--device", device_path, "--all"],
             capture_output=True,
@@ -116,8 +124,28 @@ def is_capture_device(device_path: str) -> bool:
         if result.returncode != 0:
             return False
 
-        # Check for video capture capability
-        return "Video Capture" in result.stdout
+        output = result.stdout
+
+        # Filter out hardware codec devices by card name
+        card_patterns = ['rkvdec', 'rkvenc', 'rkisp', 'rga', 'hantro', 'cedrus',
+                         'decoder', 'encoder', 'm2m', 'mem2mem', 'isp']
+        for pattern in card_patterns:
+            if pattern in output.lower():
+                logger.debug(f"Skipping codec device by card name: {device_path}")
+                return False
+
+        # Must have Video Capture capability (not just Output or M2M)
+        if "Video Capture" not in output:
+            return False
+
+        # Exclude mem2mem devices (they have both capture and output)
+        if "Video Output" in output and "Video Capture" in output:
+            # This is likely a mem2mem device, not a camera
+            # Real cameras only have capture, not output
+            logger.debug(f"Skipping mem2mem device: {device_path}")
+            return False
+
+        return True
 
     except Exception:
         return False

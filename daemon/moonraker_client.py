@@ -144,7 +144,7 @@ def register_camera(
     data = {
         "name": webcam_name,
         "location": "printer",
-        "service": "webrtc-go2rtc",  # Use WebRTC for best experience
+        "service": "webrtc-mediamtx",
         "enabled": True,
         "icon": "mdiWebcam",
         "target_fps": 30,
@@ -155,16 +155,13 @@ def register_camera(
         "flip_vertical": flip_vertical,
         "rotation": rotation,
         "aspect_ratio": "16:9",
-        "extra_data": {
-            "ravens_perch_id": camera_id,
-            "friendly_name": friendly_name,
-        }
     }
 
     success, result, error = client._request(
         "/server/webcams/item",
         method="POST",
-        data=data
+        data=data,
+        timeout=10  # Longer timeout for webcam registration
     )
 
     if success and result:
