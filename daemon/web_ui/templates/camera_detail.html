@@ -21,7 +21,7 @@
 
 <div class="detail-layout">
     <div class="preview-section">
-        <div class="preview-container">
+        <div class="preview-container sticky-preview">
             {% if camera.connected and camera.stream_active %}
                 <iframe src="{{ camera.stream_urls.webrtc }}"
                         class="preview-iframe"
@@ -55,9 +55,10 @@
         </div>
     </div>
 
-    <div class="settings-section">
-        <details class="settings-card" open>
-            <summary>Camera Settings</summary>
+    <div class="settings-section accordion-container">
+        <!-- Basic Settings -->
+        <details class="settings-card accordion-item" open>
+            <summary>Basic Settings</summary>
 
             <form method="POST"
                   action="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
@@ -78,6 +79,24 @@
                                hx-swap="innerHTML"
                                hx-target="#camera-name">
                     </div>
+                </div>
+
+                <!-- Format -->
+                <div class="form-group">
+                    <label for="format">Input Format</label>
+                    <select id="format" name="format"
+                            hx-get="{{ url_for('cameras.api_resolutions', camera_id=camera.id) }}"
+                            hx-trigger="change"
+                            hx-target="#resolution"
+                            hx-include="#resolution, #framerate">
+                        {% for fmt in capabilities.keys() %}
+                            <option value="{{ fmt }}"
+                                    {% if camera.settings and camera.settings.format == fmt %}selected{% endif %}>
+                                {{ fmt|upper }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                    <p class="form-help">Video format from camera. MJPEG is recommended for most USB cameras.</p>
                 </div>
 
                 <!-- Resolution -->
@@ -139,32 +158,15 @@
             </form>
         </details>
 
-        <!-- Advanced Settings (collapsed by default) -->
-        <details class="settings-card advanced-settings">
-            <summary>Advanced Settings</summary>
+        <!-- Encoding Settings -->
+        <details class="settings-card accordion-item">
+            <summary>Encoding</summary>
 
             <form method="POST"
                   action="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
                   hx-post="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
                   hx-swap="innerHTML"
-                  hx-target="#advanced-settings-status">
-
-                <!-- Format -->
-                <div class="form-group">
-                    <label for="format">Input Format</label>
-                    <select id="format" name="format"
-                            hx-get="{{ url_for('cameras.api_resolutions', camera_id=camera.id) }}"
-                            hx-trigger="change"
-                            hx-target="#resolution"
-                            hx-include="#resolution, #framerate">
-                        {% for fmt in capabilities.keys() %}
-                            <option value="{{ fmt }}"
-                                    {% if camera.settings and camera.settings.format == fmt %}selected{% endif %}>
-                                {{ fmt|upper }}
-                            </option>
-                        {% endfor %}
-                    </select>
-                </div>
+                  hx-target="#encoding-settings-status">
 
                 <!-- Encoder -->
                 <div class="form-group">
@@ -193,9 +195,9 @@
                         </option>
                         {% endif %}
                     </select>
+                    <p class="form-help">Hardware encoders reduce CPU usage significantly.</p>
                     <p class="form-help encoder-warning" id="rkmpp-warning" style="display: none; color: var(--warning);">
                         Warning: Rockchip RKMPP encoding has limited support and may not work reliably.
-                        If you experience issues, switch to Software (libx264).
                     </p>
                 </div>
 
@@ -210,6 +212,7 @@
                             </option>
                         {% endfor %}
                     </select>
+                    <p class="form-help">Higher bitrate = better quality but more bandwidth.</p>
                 </div>
 
                 <!-- Rotation -->
@@ -223,32 +226,31 @@
                     </select>
                 </div>
 
-                <div id="advanced-settings-status"></div>
+                <div id="encoding-settings-status"></div>
 
                 <button type="submit" class="btn btn-primary btn-block">
-                    Save Advanced Settings
+                    Save Encoding Settings
                 </button>
             </form>
         </details>
 
-        <!-- Print Integration -->
-        <details class="settings-card">
-            <summary>Print Integration</summary>
+        <!-- Print Overlay -->
+        <details class="settings-card accordion-item">
+            <summary>Print Overlay</summary>
             <p class="form-help" style="margin-bottom: 1rem;">
-                Display print progress on the video feed and automatically adjust framerate during prints.
-                Requires Moonraker connection.
+                Display print progress on the video feed. Requires Moonraker connection.
             </p>
 
             <form method="POST"
                   action="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
                   hx-post="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
                   hx-swap="innerHTML"
-                  hx-target="#print-settings-status">
+                  hx-target="#overlay-settings-status">
 
                 <!-- Overlay Toggle -->
                 <div class="form-group">
                     <label class="toggle-label">
-                        <span>Show Print Status Overlay</span>
+                        <span>Enable Overlay</span>
                         <label class="toggle-switch">
                             <input type="checkbox"
                                    name="overlay_enabled"
@@ -258,8 +260,6 @@
                         </label>
                     </label>
                 </div>
-
-                <h4 style="margin: 1.5rem 0 0.75rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Overlay Appearance</h4>
 
                 <!-- Overlay Font -->
                 <div class="form-group">
@@ -305,7 +305,7 @@
                             <option value="{{ value }}"
                                     {% if camera.settings and camera.settings.overlay_position == value %}selected{% endif %}
                                     {% if not camera.settings and value == 'bottom_center' %}selected{% endif %}>
-                                {{ label }}{% if value == 'bottom_center' %} (default){% endif %}
+                                {{ label }}
                             </option>
                         {% endfor %}
                     </select>
@@ -327,7 +327,7 @@
                             <option value="{{ value }}"
                                     {% if camera.settings and camera.settings.overlay_color == value %}selected{% endif %}
                                     {% if not camera.settings and value == 'white' %}selected{% endif %}>
-                                {{ label }}{% if value == 'white' %} (default){% endif %}
+                                {{ label }}
                             </option>
                         {% endfor %}
                     </select>
@@ -345,7 +345,6 @@
                             <span class="toggle-slider"></span>
                         </label>
                     </label>
-                    <p class="form-help">Stack stats vertically instead of on one line.</p>
                 </div>
 
                 <div class="form-group">
@@ -359,130 +358,97 @@
                             <span class="toggle-slider"></span>
                         </label>
                     </label>
-                    <p class="form-help">Show labels like "Progress:" before values.</p>
                 </div>
 
-                <h4 style="margin: 1.5rem 0 0.75rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Stats to Display</h4>
-
-                <div class="checkbox-grid" style="display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.5rem;">
-                    <!-- Progress -->
-                    <label class="checkbox-label">
-                        <input type="checkbox" name="overlay_show_progress" value="1"
-                               {% if camera.settings and camera.settings.overlay_show_progress != False %}checked{% endif %}>
-                        <span>Progress %</span>
-                    </label>
-
-                    <!-- Layer -->
-                    <label class="checkbox-label">
-                        <input type="checkbox" name="overlay_show_layer" value="1"
-                               {% if camera.settings and camera.settings.overlay_show_layer != False %}checked{% endif %}>
-                        <span>Layer</span>
-                    </label>
-
-                    <!-- ETA -->
-                    <label class="checkbox-label">
-                        <input type="checkbox" name="overlay_show_eta" value="1"
-                               {% if camera.settings and camera.settings.overlay_show_eta != False %}checked{% endif %}>
-                        <span>ETA</span>
-                    </label>
-
-                    <!-- Elapsed -->
-                    <label class="checkbox-label">
-                        <input type="checkbox" name="overlay_show_elapsed" value="1"
-                               {% if camera.settings and camera.settings.overlay_show_elapsed %}checked{% endif %}>
-                        <span>Elapsed Time</span>
-                    </label>
-
-                    <!-- Filename -->
-                    <label class="checkbox-label">
-                        <input type="checkbox" name="overlay_show_filename" value="1"
-                               {% if camera.settings and camera.settings.overlay_show_filename %}checked{% endif %}>
-                        <span>Filename</span>
-                    </label>
-
-                    <!-- Print State -->
-                    <label class="checkbox-label">
-                        <input type="checkbox" name="overlay_show_print_state" value="1"
-                               {% if camera.settings and camera.settings.overlay_show_print_state %}checked{% endif %}>
-                        <span>Print State</span>
-                    </label>
-
-                    <!-- Hotend Temp -->
-                    <label class="checkbox-label">
-                        <input type="checkbox" name="overlay_show_hotend_temp" value="1"
-                               {% if camera.settings and camera.settings.overlay_show_hotend_temp %}checked{% endif %}>
-                        <span>Hotend Temp</span>
-                    </label>
-
-                    <!-- Bed Temp -->
-                    <label class="checkbox-label">
-                        <input type="checkbox" name="overlay_show_bed_temp" value="1"
-                               {% if camera.settings and camera.settings.overlay_show_bed_temp %}checked{% endif %}>
-                        <span>Bed Temp</span>
-                    </label>
-
-                    <!-- Fan Speed -->
-                    <label class="checkbox-label">
-                        <input type="checkbox" name="overlay_show_fan_speed" value="1"
-                               {% if camera.settings and camera.settings.overlay_show_fan_speed %}checked{% endif %}>
-                        <span>Fan Speed</span>
-                    </label>
-
-                    <!-- Print Speed -->
-                    <label class="checkbox-label">
-                        <input type="checkbox" name="overlay_show_print_speed" value="1"
-                               {% if camera.settings and camera.settings.overlay_show_print_speed %}checked{% endif %}>
-                        <span>Print Speed</span>
-                    </label>
-
-                    <!-- Z Height -->
-                    <label class="checkbox-label">
-                        <input type="checkbox" name="overlay_show_z_height" value="1"
-                               {% if camera.settings and camera.settings.overlay_show_z_height %}checked{% endif %}>
-                        <span>Z Height</span>
-                    </label>
-
-                    <!-- Filament Used -->
-                    <label class="checkbox-label">
-                        <input type="checkbox" name="overlay_show_filament_used" value="1"
-                               {% if camera.settings and camera.settings.overlay_show_filament_used %}checked{% endif %}>
-                        <span>Filament Used</span>
-                    </label>
-
-                    <!-- Current Time -->
-                    <label class="checkbox-label">
-                        <input type="checkbox" name="overlay_show_current_time" value="1"
-                               {% if camera.settings and camera.settings.overlay_show_current_time %}checked{% endif %}>
-                        <span>Current Time</span>
-                    </label>
-
-                    <!-- Live Velocity -->
-                    <label class="checkbox-label">
-                        <input type="checkbox" name="overlay_show_live_velocity" value="1"
-                               {% if camera.settings and camera.settings.overlay_show_live_velocity %}checked{% endif %}>
-                        <span>Head Speed</span>
-                    </label>
-
-                    <!-- Flow Rate -->
-                    <label class="checkbox-label">
-                        <input type="checkbox" name="overlay_show_flow_rate" value="1"
-                               {% if camera.settings and camera.settings.overlay_show_flow_rate %}checked{% endif %}>
-                        <span>Flow Rate</span>
-                    </label>
-
-                    <!-- Filament Type -->
-                    <label class="checkbox-label">
-                        <input type="checkbox" name="overlay_show_filament_type" value="1"
-                               {% if camera.settings and camera.settings.overlay_show_filament_type %}checked{% endif %}>
-                        <span>Filament Type</span>
-                    </label>
+                <div class="form-subsection">
+                    <label class="form-subsection-title">Stats to Display</label>
+                    <div class="checkbox-grid">
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="overlay_show_progress" value="1"
+                                   {% if camera.settings and camera.settings.overlay_show_progress != False %}checked{% endif %}>
+                            <span>Progress %</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="overlay_show_layer" value="1"
+                                   {% if camera.settings and camera.settings.overlay_show_layer != False %}checked{% endif %}>
+                            <span>Layer</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="overlay_show_eta" value="1"
+                                   {% if camera.settings and camera.settings.overlay_show_eta != False %}checked{% endif %}>
+                            <span>ETA</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="overlay_show_elapsed" value="1"
+                                   {% if camera.settings and camera.settings.overlay_show_elapsed %}checked{% endif %}>
+                            <span>Elapsed Time</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="overlay_show_filename" value="1"
+                                   {% if camera.settings and camera.settings.overlay_show_filename %}checked{% endif %}>
+                            <span>Filename</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="overlay_show_print_state" value="1"
+                                   {% if camera.settings and camera.settings.overlay_show_print_state %}checked{% endif %}>
+                            <span>Print State</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="overlay_show_hotend_temp" value="1"
+                                   {% if camera.settings and camera.settings.overlay_show_hotend_temp %}checked{% endif %}>
+                            <span>Hotend Temp</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="overlay_show_bed_temp" value="1"
+                                   {% if camera.settings and camera.settings.overlay_show_bed_temp %}checked{% endif %}>
+                            <span>Bed Temp</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="overlay_show_fan_speed" value="1"
+                                   {% if camera.settings and camera.settings.overlay_show_fan_speed %}checked{% endif %}>
+                            <span>Fan Speed</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="overlay_show_print_speed" value="1"
+                                   {% if camera.settings and camera.settings.overlay_show_print_speed %}checked{% endif %}>
+                            <span>Print Speed</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="overlay_show_z_height" value="1"
+                                   {% if camera.settings and camera.settings.overlay_show_z_height %}checked{% endif %}>
+                            <span>Z Height</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="overlay_show_filament_used" value="1"
+                                   {% if camera.settings and camera.settings.overlay_show_filament_used %}checked{% endif %}>
+                            <span>Filament Used</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="overlay_show_current_time" value="1"
+                                   {% if camera.settings and camera.settings.overlay_show_current_time %}checked{% endif %}>
+                            <span>Current Time</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="overlay_show_live_velocity" value="1"
+                                   {% if camera.settings and camera.settings.overlay_show_live_velocity %}checked{% endif %}>
+                            <span>Head Speed</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="overlay_show_flow_rate" value="1"
+                                   {% if camera.settings and camera.settings.overlay_show_flow_rate %}checked{% endif %}>
+                            <span>Flow Rate</span>
+                        </label>
+                        <label class="checkbox-label">
+                            <input type="checkbox" name="overlay_show_filament_type" value="1"
+                                   {% if camera.settings and camera.settings.overlay_show_filament_type %}checked{% endif %}>
+                            <span>Filament Type</span>
+                        </label>
+                    </div>
                 </div>
-
-                <h4 style="margin: 1.5rem 0 0.75rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Update Settings</h4>
 
                 <!-- Overlay Update Interval -->
                 <div class="form-group">
-                    <label for="overlay_update_interval">Overlay Update Interval</label>
+                    <label for="overlay_update_interval">Update Interval</label>
                     <input type="range"
                            id="overlay_update_interval"
                            name="overlay_update_interval"
@@ -491,10 +457,29 @@
                            value="{{ settings.get('overlay_update_interval', 5) }}"
                            oninput="document.getElementById('overlay_interval_value').textContent = this.value + 's'">
                     <span id="overlay_interval_value" class="range-value">{{ settings.get('overlay_update_interval', 5) }}s</span>
-                    <p class="form-help">How often to update the overlay text (1-10 seconds). Affects all cameras.</p>
+                    <p class="form-help">How often to update overlay text (affects all cameras).</p>
                 </div>
 
-                <h4 style="margin: 1.5rem 0 0.75rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Dynamic Framerate</h4>
+                <div id="overlay-settings-status"></div>
+
+                <button type="submit" class="btn btn-primary btn-block">
+                    Save Overlay Settings
+                </button>
+            </form>
+        </details>
+
+        <!-- Dynamic Framerate -->
+        <details class="settings-card accordion-item">
+            <summary>Dynamic Framerate</summary>
+            <p class="form-help" style="margin-bottom: 1rem;">
+                Automatically adjust framerate based on print state to save bandwidth and CPU.
+            </p>
+
+            <form method="POST"
+                  action="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
+                  hx-post="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
+                  hx-swap="innerHTML"
+                  hx-target="#framerate-settings-status">
 
                 <!-- Printing Framerate -->
                 <div class="form-group">
@@ -508,7 +493,7 @@
                             </option>
                         {% endfor %}
                     </select>
-                    <p class="form-help">Framerate to use while actively printing.</p>
+                    <p class="form-help">Framerate while actively printing.</p>
                 </div>
 
                 <!-- Standby Framerate -->
@@ -523,24 +508,23 @@
                             </option>
                         {% endfor %}
                     </select>
-                    <p class="form-help">Lower framerate when not printing to save bandwidth and CPU.</p>
+                    <p class="form-help">Lower framerate when idle.</p>
                 </div>
 
-                <div id="print-settings-status"></div>
+                <div id="framerate-settings-status"></div>
 
                 <button type="submit" class="btn btn-primary btn-block">
-                    Save Print Settings
+                    Save Framerate Settings
                 </button>
             </form>
         </details>
 
         <!-- Camera Controls (V4L2) -->
         {% if camera.connected %}
-        <details class="settings-card advanced-settings">
+        <details class="settings-card accordion-item">
             <summary>Camera Controls</summary>
             <p class="form-help" style="margin-bottom: 1rem;">
-                Adjust brightness, contrast, exposure, and other camera-specific settings.
-                Changes are applied immediately and saved for stream restarts.
+                Brightness, contrast, exposure, and other hardware controls.
             </p>
             <div id="v4l2-controls"
                  hx-get="{{ url_for('cameras.api_get_controls', camera_id=camera.id) }}"
@@ -552,7 +536,7 @@
         {% endif %}
 
         <!-- Stream URLs -->
-        <details class="settings-card">
+        <details class="settings-card accordion-item">
             <summary>Stream URLs</summary>
             <div class="url-list">
                 <div class="url-item">
@@ -570,18 +554,8 @@
             </div>
         </details>
 
-        <!-- FFmpeg Command -->
-        {% if ffmpeg_cmd %}
-        <details class="settings-card">
-            <summary>FFmpeg Command</summary>
-            <div class="ffmpeg-command">
-                <code>{{ ffmpeg_cmd }}</code>
-            </div>
-        </details>
-        {% endif %}
-
         <!-- Device Info -->
-        <details class="settings-card">
+        <details class="settings-card accordion-item">
             <summary>Device Information</summary>
             <dl class="info-list">
                 <dt>Hardware Name</dt>
@@ -597,10 +571,19 @@
                 <dt>Last Seen</dt>
                 <dd>{{ camera.last_seen }}</dd>
             </dl>
+
+            {% if ffmpeg_cmd %}
+            <div class="form-subsection" style="margin-top: 1rem;">
+                <label class="form-subsection-title">FFmpeg Command</label>
+                <div class="ffmpeg-command">
+                    <code>{{ ffmpeg_cmd }}</code>
+                </div>
+            </div>
+            {% endif %}
         </details>
 
         <!-- Danger Zone -->
-        <details class="settings-card danger-zone">
+        <details class="settings-card accordion-item danger-zone">
             <summary>Danger Zone</summary>
             <p class="danger-text">These actions cannot be undone.</p>
 
@@ -611,7 +594,7 @@
                     <button type="submit" class="btn btn-danger">
                         Delete Camera
                     </button>
-                    <span class="action-help">Remove camera from database. It will be re-added if reconnected.</span>
+                    <span class="action-help">Remove from database. Re-added if reconnected.</span>
                 </form>
 
                 <form action="{{ url_for('cameras.ignore_camera_route', camera_id=camera.id) }}"
@@ -620,7 +603,7 @@
                     <button type="submit" class="btn btn-danger">
                         Ignore Camera
                     </button>
-                    <span class="action-help">Delete and add to ignore list. Camera will not be auto-detected again.</span>
+                    <span class="action-help">Delete and never auto-detect again.</span>
                 </form>
             </div>
         </details>
@@ -630,6 +613,19 @@
 
 {% block scripts %}
 <script>
+    // Accordion behavior - close others when one opens
+    document.querySelectorAll('.accordion-item').forEach(function(details) {
+        details.addEventListener('toggle', function(e) {
+            if (this.open) {
+                document.querySelectorAll('.accordion-item').forEach(function(other) {
+                    if (other !== details && other.open) {
+                        other.open = false;
+                    }
+                });
+            }
+        });
+    });
+
     // Refresh snapshot preview if not using WebRTC
     const previewImage = document.getElementById('preview-image');
     if (previewImage) {
@@ -653,26 +649,17 @@
         const select = document.getElementById(elementId);
 
         if (warning && select) {
-            // First, expand the parent details element if collapsed
             const parentDetails = select.closest('details');
             if (parentDetails && !parentDetails.open) {
                 parentDetails.open = true;
             }
 
-            // Show warning and highlight
             warning.style.display = 'block';
             select.classList.add('selection-changed');
-
-            // Scroll the select into view
             select.scrollIntoView({ behavior: 'smooth', block: 'center' });
 
-            // Remove highlight after 3 seconds
             setTimeout(() => select.classList.remove('selection-changed'), 3000);
-
-            // Auto-hide warning after 5 seconds
-            setTimeout(() => {
-                warning.style.display = 'none';
-            }, 5000);
+            setTimeout(() => { warning.style.display = 'none'; }, 5000);
         }
     }
 
@@ -688,7 +675,6 @@
     // When resolution dropdown is updated, also trigger framerate update
     document.body.addEventListener('htmx:afterSwap', function(event) {
         if (event.detail.target.id === 'resolution') {
-            // Trigger change event to cascade to framerate
             const resolution = document.getElementById('resolution');
             if (resolution) {
                 htmx.trigger(resolution, 'change');
@@ -703,36 +689,68 @@
             updateEncoderWarning(encoderSelect);
         }
     });
-
 </script>
 
 <style>
+    /* Sticky video preview */
+    .sticky-preview {
+        position: sticky;
+        top: 1rem;
+    }
+
+    /* Form subsection styling */
+    .form-subsection {
+        margin: 1rem 0;
+    }
+    .form-subsection-title {
+        display: block;
+        font-weight: 500;
+        margin-bottom: 0.5rem;
+        color: var(--text-secondary);
+        font-size: 0.9rem;
+    }
+
     /* Checkbox grid styling */
+    .checkbox-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.25rem;
+        background: var(--bg-primary);
+        padding: 0.5rem;
+        border-radius: var(--radius-sm);
+        margin-bottom: 1rem;
+    }
     .checkbox-label {
         display: flex;
         align-items: center;
         gap: 0.5rem;
-        padding: 0.5rem;
+        padding: 0.4rem 0.5rem;
         cursor: pointer;
-        border-radius: 4px;
+        border-radius: var(--radius-sm);
         transition: background-color 0.2s;
     }
     .checkbox-label:hover {
-        background-color: rgba(255, 255, 255, 0.05);
+        background-color: var(--bg-hover);
     }
     .checkbox-label input[type="checkbox"] {
-        width: 1.1rem;
-        height: 1.1rem;
+        width: 1rem;
+        height: 1rem;
         cursor: pointer;
     }
     .checkbox-label span {
-        font-size: 0.9rem;
+        font-size: 0.85rem;
     }
-    .checkbox-grid {
-        background: rgba(0, 0, 0, 0.1);
-        padding: 0.5rem;
-        border-radius: 8px;
+
+    /* Compact accordion items */
+    .accordion-item summary {
+        font-size: 1rem;
+    }
+    .accordion-item .form-group {
         margin-bottom: 1rem;
+    }
+    .accordion-item .form-help {
+        font-size: 0.8rem;
+        margin-top: 0.25rem;
     }
 </style>
 {% endblock %}
