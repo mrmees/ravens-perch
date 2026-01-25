@@ -14,6 +14,7 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 INSTALL_DIR="${HOME}/ravens-perch"
+KLIPPER_CONFIG_DIR="${HOME}/printer_data/config"
 
 log_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -158,6 +159,72 @@ if [ -f "$fluidd_css" ]; then
             rm -f "$fluidd_css"
         fi
         log_success "Removed Ravens Perch CSS from Fluidd theme"
+    fi
+fi
+
+# Check if crowsnest was disabled during install
+backup_dir="${INSTALL_DIR}/data/crowsnest_backup"
+if [ -f "${backup_dir}/migration_date" ]; then
+    echo ""
+    log_info "Crowsnest was disabled during Ravens Perch installation"
+    read -p "Restore crowsnest? (Y/n): " restore_crowsnest
+
+    if [[ "$restore_crowsnest" != "n" && "$restore_crowsnest" != "N" ]]; then
+        # Uncomment crowsnest section in moonraker.conf
+        moonraker_conf="${KLIPPER_CONFIG_DIR}/moonraker.conf"
+        if [ -f "$moonraker_conf" ]; then
+            if grep -q "Ravens Perch: crowsnest disabled" "$moonraker_conf" 2>/dev/null; then
+                log_info "Restoring crowsnest section in moonraker.conf..."
+                python3 - "$moonraker_conf" << 'PYTHON_SCRIPT' 2>/dev/null || true
+import sys
+import re
+
+conf_file = sys.argv[1]
+
+with open(conf_file, 'r') as f:
+    content = f.read()
+
+# Find the commented crowsnest section and uncomment it
+pattern = r'# --- Ravens Perch: crowsnest disabled ---\n(.*?)# --- End crowsnest section ---'
+match = re.search(pattern, content, re.DOTALL)
+
+if match:
+    section = match.group(1)
+    # Uncomment each line (remove leading "# ")
+    uncommented = '\n'.join(
+        line[2:] if line.startswith('# ') else line
+        for line in section.split('\n')
+    )
+    content = content[:match.start()] + uncommented.strip() + '\n' + content[match.end():]
+
+    with open(conf_file, 'w') as f:
+        f.write(content)
+    print("Crowsnest section restored")
+PYTHON_SCRIPT
+                log_success "Crowsnest section restored in moonraker.conf"
+            fi
+        fi
+
+        # Re-enable and start crowsnest service
+        log_info "Re-enabling crowsnest service..."
+        if systemctl list-unit-files crowsnest.service >/dev/null 2>&1; then
+            sudo systemctl enable crowsnest.service 2>/dev/null || true
+            sudo systemctl start crowsnest.service 2>/dev/null || true
+            log_success "Crowsnest service re-enabled and started"
+        else
+            log_warn "Crowsnest service not found - may need manual reinstall"
+        fi
+
+        # Restart Moonraker
+        if systemctl is-active --quiet moonraker.service 2>/dev/null; then
+            log_info "Restarting Moonraker..."
+            sudo systemctl restart moonraker.service || true
+            log_success "Moonraker restarted"
+        fi
+
+        log_success "Crowsnest restored"
+    else
+        log_info "Keeping crowsnest disabled"
     fi
 fi
 

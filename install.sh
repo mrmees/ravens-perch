@@ -17,6 +17,8 @@ NC='\033[0m' # No Color
 RAVENS_USER="${USER}"
 INSTALL_DIR="${HOME}/ravens-perch"
 MEDIAMTX_VERSION="v1.5.1"
+KLIPPER_CONFIG_DIR="${HOME}/printer_data/config"
+MOONRAKER_URL="http://127.0.0.1:7125"
 
 # Logging functions
 log_info() {
@@ -87,6 +89,138 @@ check_user() {
         log_error "Do not run this script as root. Run as your normal user."
         exit 1
     fi
+}
+
+# Migrate from crowsnest
+migrate_from_crowsnest() {
+    # Check if crowsnest service exists
+    if ! systemctl list-unit-files crowsnest.service >/dev/null 2>&1; then
+        return
+    fi
+
+    echo ""
+    log_info "Detected crowsnest installation"
+    echo ""
+    echo "Ravens Perch can replace crowsnest for camera management."
+    echo "This will:"
+    echo "  - Stop and disable the crowsnest service"
+    echo "  - Comment out crowsnest in moonraker.conf (reversible)"
+    echo "  - Clear existing camera configurations from Moonraker"
+    echo "  - Back up your current camera settings"
+    echo ""
+    read -p "Migrate from crowsnest to Ravens Perch? (y/N): " migrate_choice
+
+    if [[ "$migrate_choice" != "y" && "$migrate_choice" != "Y" ]]; then
+        log_info "Keeping crowsnest active alongside Ravens Perch"
+        log_warn "Note: You may need to manually configure cameras to avoid conflicts"
+        return
+    fi
+
+    local backup_dir="${INSTALL_DIR}/data/crowsnest_backup"
+    mkdir -p "$backup_dir"
+
+    # Stop and disable crowsnest
+    log_info "Stopping crowsnest service..."
+    if systemctl is-active --quiet crowsnest.service 2>/dev/null; then
+        sudo systemctl stop crowsnest.service || true
+    fi
+    if systemctl is-enabled --quiet crowsnest.service 2>/dev/null; then
+        sudo systemctl disable crowsnest.service || true
+    fi
+    log_success "Crowsnest service stopped and disabled"
+
+    # Create migration marker
+    echo "$(date -Iseconds)" > "${backup_dir}/migration_date"
+
+    # Backup current cameras from Moonraker
+    log_info "Backing up camera configuration from Moonraker..."
+    if curl -s "${MOONRAKER_URL}/server/webcams/list" > "${backup_dir}/webcams.json" 2>/dev/null; then
+        log_success "Camera configuration backed up to ${backup_dir}/webcams.json"
+    else
+        log_warn "Could not backup cameras (Moonraker may not be running)"
+    fi
+
+    # Comment out crowsnest section in moonraker.conf
+    local moonraker_conf="${KLIPPER_CONFIG_DIR}/moonraker.conf"
+    if [ -f "$moonraker_conf" ]; then
+        if grep -q "\[update_manager crowsnest\]" "$moonraker_conf" 2>/dev/null; then
+            log_info "Commenting out crowsnest in moonraker.conf..."
+            # Backup moonraker.conf
+            cp "$moonraker_conf" "${backup_dir}/moonraker.conf.bak"
+
+            # Use Python to safely comment out the section
+            python3 - "$moonraker_conf" << 'PYTHON_SCRIPT'
+import sys
+import re
+
+conf_file = sys.argv[1]
+
+with open(conf_file, 'r') as f:
+    content = f.read()
+
+# Find the [update_manager crowsnest] section and comment it out
+# Match from [update_manager crowsnest] to the next section or end of file
+pattern = r'(\[update_manager crowsnest\].*?)(?=\n\[|\Z)'
+match = re.search(pattern, content, re.DOTALL)
+
+if match:
+    section = match.group(1)
+    # Comment out each line
+    commented = '\n'.join('# ' + line if line.strip() and not line.startswith('#') else line
+                          for line in section.split('\n'))
+    # Add marker comment
+    commented = '# --- Ravens Perch: crowsnest disabled ---\n' + commented + '\n# --- End crowsnest section ---'
+    content = content[:match.start()] + commented + content[match.end():]
+
+    with open(conf_file, 'w') as f:
+        f.write(content)
+    print("Crowsnest section commented out")
+else:
+    print("Crowsnest section not found")
+PYTHON_SCRIPT
+            log_success "Crowsnest section commented out in moonraker.conf"
+        fi
+    fi
+
+    # Delete existing cameras from Moonraker
+    log_info "Clearing existing cameras from Moonraker..."
+    # Get list of cameras and delete each one
+    local cameras=$(curl -s "${MOONRAKER_URL}/server/webcams/list" 2>/dev/null | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    for cam in data.get('result', {}).get('webcams', []):
+        print(cam.get('name', ''))
+except:
+    pass
+" 2>/dev/null)
+
+    if [ -n "$cameras" ]; then
+        while IFS= read -r cam_name; do
+            if [ -n "$cam_name" ]; then
+                curl -s -X POST "${MOONRAKER_URL}/server/webcams/delete" \
+                    -H "Content-Type: application/json" \
+                    -d "{\"name\": \"$cam_name\"}" >/dev/null 2>&1 || true
+                log_info "Removed camera: $cam_name"
+            fi
+        done <<< "$cameras"
+        log_success "Existing cameras cleared"
+    else
+        log_info "No existing cameras to remove"
+    fi
+
+    # Restart Moonraker to apply changes
+    log_info "Restarting Moonraker..."
+    if systemctl is-active --quiet moonraker.service 2>/dev/null; then
+        sudo systemctl restart moonraker.service || true
+        sleep 2
+        log_success "Moonraker restarted"
+    else
+        log_warn "Moonraker service not running"
+    fi
+
+    log_success "Migration from crowsnest complete"
+    echo ""
 }
 
 # Install system packages
@@ -643,6 +777,7 @@ main() {
 
     install_system_packages
     create_directories
+    migrate_from_crowsnest
     copy_source_files
     install_mediamtx
     create_venv
