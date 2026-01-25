@@ -380,11 +380,11 @@ def build_ffmpeg_command(
         escaped_path = overlay_path.replace('\\', '/').replace(':', '\\:')
 
         # drawtext filter with text file that reloads every second
-        # Use fontconfig font name for cross-platform compatibility
+        # expansion=none disables strftime % sequences so we can use literal %
         drawtext = (
             f"drawtext=textfile='{escaped_path}'"
             f":reload=1"
-            f":font=monospace"
+            f":expansion=none"
             f":fontcolor={color}"
             f":fontsize={font_size}"
             f":borderw=2"

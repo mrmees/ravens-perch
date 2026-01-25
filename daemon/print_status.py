@@ -65,11 +65,7 @@ class PrintStatus:
 
         result = "  ".join(lines)  # Use spaces instead of | which can cause FFmpeg issues
         # Ensure we never return empty string
-        if not result:
-            result = "Printing..."
-        # Escape % for FFmpeg drawtext filter (% is interpreted as strftime format)
-        # Note: Don't escape : here - that's only needed for inline text, not textfile
-        return result.replace('%', '%%')
+        return result if result else "Printing..."
 
 
 class PrintStatusMonitor:
