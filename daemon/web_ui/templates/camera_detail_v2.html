@@ -379,7 +379,17 @@
 
             </div>
 
-            <!-- Camera Controls Tab -->
+            <!-- Hidden container for v4l2 control values (populated by JS on submit) -->
+            <div id="v4l2-hidden-inputs" style="display: none;"></div>
+
+            <!-- Save Button for all settings -->
+            <div class="form-actions-global">
+                <div id="settings-status" class="form-status"></div>
+                <button type="submit" class="btn btn-primary btn-save-all">Save Settings</button>
+            </div>
+        </form>
+
+            <!-- Camera Controls Tab (outside form - preview only) -->
             {% if camera.connected %}
             <div class="tab-panel" id="tab-controls">
                 <p class="form-help" style="margin-bottom: 0.5rem;">
@@ -396,13 +406,6 @@
                 </div>
             </div>
             {% endif %}
-
-            <!-- Save Button for all settings -->
-            <div class="form-actions-global">
-                <div id="settings-status" class="form-status"></div>
-                <button type="submit" class="btn btn-primary btn-save-all">Save Settings</button>
-            </div>
-        </form>
 
             <!-- Info Tab (outside form - read-only) -->
             <div class="tab-panel" id="tab-info">
@@ -496,7 +499,7 @@
     function updateSaveButtons(tabId) {
         var sticky = document.getElementById('mobile-sticky');
         var globalSave = document.querySelector('.form-actions-global');
-        var hasSettings = ['basic', 'encoding', 'overlay', 'controls'].includes(tabId);
+        var hasSettings = ['basic', 'encoding', 'overlay'].includes(tabId);
 
         // Mobile sticky button
         sticky.classList.toggle('visible', hasSettings);
@@ -551,6 +554,18 @@
     document.addEventListener('DOMContentLoaded', function() {
         var encoderSelect = document.getElementById('encoder');
         if (encoderSelect) updateEncoderWarning(encoderSelect);
+    });
+
+    // Sync v4l2 hidden inputs from controls partial to form container on submit
+    document.getElementById('settings-form').addEventListener('submit', function() {
+        // Copy v4l2 hidden inputs from controls partial to form container
+        var source = document.querySelectorAll('#v4l2-controls input[type="hidden"]');
+        var target = document.getElementById('v4l2-hidden-inputs');
+        target.innerHTML = '';
+        source.forEach(function(input) {
+            var clone = input.cloneNode();
+            target.appendChild(clone);
+        });
     });
 </script>
 
@@ -668,10 +683,10 @@
         padding: 1rem;
     }
     .tab-panel {
-        display: none;
+        display: none !important;
     }
     .tab-panel.active {
-        display: block;
+        display: block !important;
     }
 
     /* Form Styles - Mobile First (single column) */
