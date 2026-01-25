@@ -226,15 +226,10 @@ def camera_detail(camera_id: int):
         if settings.get('overlay_enabled') and print_monitor:
             overlay_path = str(print_monitor.get_overlay_path(str(camera_id)))
 
-        # Apply dynamic framerate based on current printer state
-        printing_fps = settings.get('printing_framerate')
-        standby_fps = settings.get('standby_framerate')
-        if (printing_fps or standby_fps) and print_monitor:
-            base_fps = settings.get('framerate', 30)
-            if print_monitor.effective_state == 'printing':
-                settings['framerate'] = printing_fps or base_fps
-            else:
-                settings['framerate'] = standby_fps or base_fps
+        # Apply standby framerate if enabled and printer is idle
+        if settings.get('standby_enabled') and settings.get('standby_framerate') and print_monitor:
+            if print_monitor.effective_state == 'standby':
+                settings['framerate'] = settings['standby_framerate']
 
         ffmpeg_cmd = build_ffmpeg_command(
             camera['device_path'],
@@ -284,9 +279,6 @@ def update_settings(camera_id: int):
     # Print integration settings
     if 'overlay_enabled' in request.form:
         settings['overlay_enabled'] = request.form['overlay_enabled'] == '1'
-    elif 'printing_framerate' in request.form or 'standby_framerate' in request.form:
-        # If print settings form submitted without checkbox, it means disabled
-        settings['overlay_enabled'] = False
 
     # Overlay customization
     if 'overlay_font_size' in request.form:
@@ -316,12 +308,13 @@ def update_settings(camera_id: int):
         if stat in request.form:
             settings[stat] = request.form[stat] == '1'
 
-    if 'printing_framerate' in request.form:
-        val = request.form['printing_framerate']
-        settings['printing_framerate'] = int(val) if val else None
-    if 'standby_framerate' in request.form:
-        val = request.form['standby_framerate']
-        settings['standby_framerate'] = int(val) if val else None
+    if 'standby_enabled' in request.form:
+        settings['standby_enabled'] = request.form['standby_enabled'] == '1'
+        if settings['standby_enabled'] and 'standby_framerate' in request.form:
+            val = request.form['standby_framerate']
+            settings['standby_framerate'] = int(val) if val else None
+        elif not settings['standby_enabled']:
+            settings['standby_framerate'] = None
 
     # Handle global overlay update interval
     if 'overlay_update_interval' in request.form:
@@ -352,17 +345,10 @@ def update_settings(camera_id: int):
             # Get V4L2 controls to apply at stream start
             v4l2_controls = current_settings.get('v4l2_controls', {})
 
-            # Apply dynamic framerate based on current printer state
-            printing_fps = current_settings.get('printing_framerate')
-            standby_fps = current_settings.get('standby_framerate')
-            if printing_fps or standby_fps:
-                # Dynamic framerate is configured - apply based on current state
-                if print_monitor:
-                    base_fps = current_settings.get('framerate', 30)
-                    if print_monitor.effective_state == 'printing':
-                        current_settings['framerate'] = printing_fps or base_fps
-                    else:
-                        current_settings['framerate'] = standby_fps or base_fps
+            # Apply standby framerate if enabled and printer is idle
+            if current_settings.get('standby_enabled') and current_settings.get('standby_framerate') and print_monitor:
+                if print_monitor.effective_state == 'standby':
+                    current_settings['framerate'] = current_settings['standby_framerate']
 
             # Get overlay path if enabled
             overlay_path = None
@@ -478,15 +464,10 @@ def restart_camera_stream(camera_id: int):
     if settings.get('overlay_enabled') and print_monitor:
         overlay_path = str(print_monitor.get_overlay_path(str(camera_id)))
 
-    # Apply dynamic framerate based on current printer state
-    printing_fps = settings.get('printing_framerate')
-    standby_fps = settings.get('standby_framerate')
-    if (printing_fps or standby_fps) and print_monitor:
-        base_fps = settings.get('framerate', 30)
-        if print_monitor.effective_state == 'printing':
-            settings['framerate'] = printing_fps or base_fps
-        else:
-            settings['framerate'] = standby_fps or base_fps
+    # Apply standby framerate if enabled and printer is idle
+    if settings.get('standby_enabled') and settings.get('standby_framerate') and print_monitor:
+        if print_monitor.effective_state == 'standby':
+            settings['framerate'] = settings['standby_framerate']
 
     ffmpeg_cmd = build_ffmpeg_command(
         camera['device_path'],
@@ -859,12 +840,18 @@ def api_framerates(camera_id: int):
     fmt = request.args.get('format', 'mjpeg')
     resolution = request.args.get('resolution', '1280x720')
     current_framerate = request.args.get('framerate', '')
+    current_standby = request.args.get('standby_framerate', '')
 
     # Convert to int for comparison if provided
     try:
         current_framerate_int = int(current_framerate) if current_framerate else None
     except ValueError:
         current_framerate_int = None
+
+    try:
+        current_standby_int = int(current_standby) if current_standby else None
+    except ValueError:
+        current_standby_int = None
 
     caps = get_camera_capabilities(camera_id)
     if caps and caps['capabilities']:
@@ -887,8 +874,21 @@ def api_framerates(camera_id: int):
             selected = 'selected' if fps == selected_framerate else ''
             options.append(f'<option value="{fps}" {selected}>{fps} fps</option>')
 
-        # Add HX-Trigger header to notify if selection changed
+        # Also build options for standby framerate dropdown (out-of-band swap)
+        standby_preserved = current_standby_int in framerates
+        selected_standby = current_standby_int if standby_preserved else (framerates[0] if framerates else None)
+
+        standby_options = []
+        for fps in framerates:
+            selected = 'selected' if fps == selected_standby else ''
+            standby_options.append(f'<option value="{fps}" {selected}>{fps} fps</option>')
+
+        # Return both dropdowns - main one targeted, standby via OOB swap
         response = ''.join(options)
+        response += f'<select id="standby_framerate" name="standby_framerate" hx-swap-oob="innerHTML">'
+        response += ''.join(standby_options)
+        response += '</select>'
+
         headers = {}
         if not preserved and current_framerate_int is not None:
             headers['HX-Trigger'] = 'selectionChanged'

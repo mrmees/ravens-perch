@@ -62,7 +62,6 @@
             <button class="tab-btn active" data-tab="basic">Basic</button>
             <button class="tab-btn" data-tab="encoding">Encoding</button>
             <button class="tab-btn" data-tab="overlay">Overlay</button>
-            <button class="tab-btn" data-tab="framerate">Framerate</button>
             {% if camera.connected %}
             <button class="tab-btn" data-tab="controls">Controls</button>
             {% endif %}
@@ -115,7 +114,7 @@
                                     hx-get="{{ url_for('cameras.api_framerates', camera_id=camera.id) }}"
                                     hx-trigger="change"
                                     hx-target="#framerate"
-                                    hx-include="[name='format'], #framerate">
+                                    hx-include="[name='format'], #framerate, #standby_framerate">
                                 {% for res in resolutions %}
                                     <option value="{{ res }}"
                                             {% if camera.settings and camera.settings.resolution == res %}selected{% endif %}>
@@ -156,6 +155,37 @@
                                     <span class="toggle-slider"></span>
                                 </div>
                             </label>
+                        </div>
+                    </div>
+
+                    <div class="form-row" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+                        <div class="form-group">
+                            <label class="toggle-label">
+                                <span>Reduce framerate when idle</span>
+                                <input type="hidden" name="standby_enabled" value="0">
+                                <div class="toggle-switch">
+                                    <input type="checkbox"
+                                           id="standby_enabled"
+                                           name="standby_enabled"
+                                           value="1"
+                                           {% if camera.settings and camera.settings.standby_enabled %}checked{% endif %}
+                                           onchange="document.getElementById('standby_framerate').disabled = !this.checked;">
+                                    <span class="toggle-slider"></span>
+                                </div>
+                            </label>
+                            <p class="form-help">Automatically lower framerate when printer is idle to save bandwidth.</p>
+                        </div>
+                        <div class="form-group">
+                            <label for="standby_framerate">Idle Framerate</label>
+                            <select id="standby_framerate" name="standby_framerate"
+                                    {% if not (camera.settings and camera.settings.standby_enabled) %}disabled{% endif %}>
+                                {% for fps in framerates %}
+                                    <option value="{{ fps }}"
+                                            {% if camera.settings and camera.settings.standby_framerate == fps %}selected{% endif %}>
+                                        {{ fps }} fps
+                                    </option>
+                                {% endfor %}
+                            </select>
                         </div>
                     </div>
 
@@ -365,52 +395,6 @@
 
                     <div id="overlay-status"></div>
                     <button type="submit" class="btn btn-primary">Save Overlay Settings</button>
-                </form>
-            </div>
-
-            <!-- Dynamic Framerate Tab -->
-            <div class="tab-panel" id="tab-framerate">
-                <p class="form-help" style="margin-bottom: 1rem;">
-                    Automatically adjust framerate based on print state to save bandwidth and CPU.
-                </p>
-
-                <form method="POST"
-                      action="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
-                      hx-post="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
-                      hx-swap="innerHTML"
-                      hx-target="#framerate-status">
-
-                    <div class="form-row">
-                        <div class="form-group">
-                            <label for="printing_framerate">Printing Framerate</label>
-                            <select id="printing_framerate" name="printing_framerate">
-                                <option value="">Use default</option>
-                                {% for fps in [5, 10, 15, 20, 24, 30, 60] %}
-                                    <option value="{{ fps }}"
-                                            {% if camera.settings and camera.settings.printing_framerate == fps %}selected{% endif %}>
-                                        {{ fps }} fps
-                                    </option>
-                                {% endfor %}
-                            </select>
-                            <p class="form-help">Higher framerate while actively printing.</p>
-                        </div>
-                        <div class="form-group">
-                            <label for="standby_framerate">Standby Framerate</label>
-                            <select id="standby_framerate" name="standby_framerate">
-                                <option value="">Use default</option>
-                                {% for fps in [1, 2, 5, 10, 15] %}
-                                    <option value="{{ fps }}"
-                                            {% if camera.settings and camera.settings.standby_framerate == fps %}selected{% endif %}>
-                                        {{ fps }} fps
-                                    </option>
-                                {% endfor %}
-                            </select>
-                            <p class="form-help">Lower framerate when idle.</p>
-                        </div>
-                    </div>
-
-                    <div id="framerate-status"></div>
-                    <button type="submit" class="btn btn-primary">Save Framerate Settings</button>
                 </form>
             </div>
 

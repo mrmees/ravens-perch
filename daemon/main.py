@@ -384,18 +384,11 @@ class RavensPerchDaemon:
                 self.print_monitor.set_camera_overlay(str(camera_id), True, settings)
                 overlay_path = str(self.print_monitor.get_overlay_path(str(camera_id)))
 
-            # Determine framerate based on current print state
+            # Apply standby framerate if enabled and printer is idle
             stream_settings = settings.copy()
-            if self.print_monitor:
-                status = self.print_monitor.status
-                if status.is_printing:
-                    # Use printing framerate if set
-                    if settings.get('printing_framerate'):
-                        stream_settings['framerate'] = settings['printing_framerate']
-                else:
-                    # Use standby framerate if set
-                    if settings.get('standby_framerate'):
-                        stream_settings['framerate'] = settings['standby_framerate']
+            if self.print_monitor and settings.get('standby_enabled') and settings.get('standby_framerate'):
+                if not self.print_monitor.status.is_printing:
+                    stream_settings['framerate'] = settings['standby_framerate']
 
             ffmpeg_cmd = build_ffmpeg_command(
                 device_info.path,
@@ -487,22 +480,22 @@ class RavensPerchDaemon:
 
                 settings = camera['settings'] or {}
 
-                # Check if this camera has different framerates configured
-                printing_fps = settings.get('printing_framerate')
-                standby_fps = settings.get('standby_framerate')
-
-                if not printing_fps and not standby_fps:
-                    # No dynamic framerate configured for this camera
+                # Check if standby framerate switching is enabled
+                if not settings.get('standby_enabled') or not settings.get('standby_framerate'):
                     continue
 
                 # Determine which framerate to use
                 base_fps = settings.get('framerate', 30)
-                if new_state == 'printing':
-                    target_fps = printing_fps or base_fps
-                else:
-                    target_fps = standby_fps or base_fps
+                standby_fps = settings.get('standby_framerate')
 
-                current_fps = settings.get('framerate', base_fps)
+                if new_state == 'printing':
+                    target_fps = base_fps
+                else:
+                    target_fps = standby_fps
+
+                # Get current effective framerate
+                # (we track what we last set, not the saved setting)
+                current_fps = getattr(self, '_camera_framerates', {}).get(camera['id'], base_fps)
 
                 if target_fps == current_fps:
                     # No change needed
@@ -533,6 +526,10 @@ class RavensPerchDaemon:
                 # Restart stream with new command
                 success, error = add_or_update_stream(str(camera['id']), ffmpeg_cmd)
                 if success:
+                    # Track what framerate we set
+                    if not hasattr(self, '_camera_framerates'):
+                        self._camera_framerates = {}
+                    self._camera_framerates[camera['id']] = target_fps
                     add_log("INFO", f"Switched to {new_state} framerate ({target_fps}fps)", camera['id'])
                 else:
                     logger.error(f"Failed to switch framerate for camera {camera['id']}: {error}")
