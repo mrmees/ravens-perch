@@ -417,8 +417,11 @@
             <!-- Camera Controls Tab -->
             {% if camera.connected %}
             <div class="tab-panel" id="tab-controls">
-                <p class="form-help" style="margin-bottom: 1rem;">
+                <p class="form-help" style="margin-bottom: 0.5rem;">
                     Brightness, contrast, exposure, and other hardware controls. Changes apply immediately.
+                </p>
+                <p class="form-help" style="margin-bottom: 1rem; font-style: italic;">
+                    Note: Some controls depend on others. For example, White Balance Temperature only applies when White Balance Automatic is disabled.
                 </p>
                 <div id="v4l2-controls"
                      hx-get="{{ url_for('cameras.api_get_controls', camera_id=camera.id) }}"
