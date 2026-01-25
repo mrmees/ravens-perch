@@ -240,7 +240,7 @@ def camera_detail(camera_id: int):
         )
 
     return render_template(
-        'camera_detail.html',
+        'camera_detail_v2.html',
         camera=camera,
         capabilities=capabilities,
         resolutions=resolutions,
@@ -254,7 +254,13 @@ def camera_detail(camera_id: int):
 
 @bp.route('/<int:camera_id>/v2')
 def camera_detail_v2(camera_id: int):
-    """Camera detail page - responsive v2 layout (experimental)."""
+    """Redirect to main camera detail page (v2 is now the default)."""
+    return redirect(url_for('cameras.camera_detail', camera_id=camera_id))
+
+
+@bp.route('/<int:camera_id>/v1')
+def camera_detail_v1(camera_id: int):
+    """Camera detail page - legacy v1 layout."""
     camera = get_camera_with_settings(camera_id)
     if not camera:
         flash("Camera not found", "error")
@@ -305,7 +311,7 @@ def camera_detail_v2(camera_id: int):
         )
 
     return render_template(
-        'camera_detail_v2.html',
+        'camera_detail.html',
         camera=camera,
         capabilities=capabilities,
         resolutions=resolutions,
