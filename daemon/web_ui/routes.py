@@ -231,6 +231,61 @@ def inject_raven_couplet():
     return {'raven_line1': line1, 'raven_line2': line2}
 
 
+def detect_printer_uis():
+    """
+    Detect which printer UIs (Mainsail/Fluidd) are configured in nginx.
+    Returns dict with 'mainsail' and 'fluidd' keys containing URL or None.
+    """
+    import os
+    import re
+
+    result = {'mainsail': None, 'fluidd': None}
+
+    # Common nginx config locations
+    nginx_paths = [
+        '/etc/nginx/sites-enabled',
+        '/etc/nginx/sites-available',
+        '/etc/nginx/conf.d'
+    ]
+
+    for nginx_dir in nginx_paths:
+        if not os.path.isdir(nginx_dir):
+            continue
+
+        for filename in os.listdir(nginx_dir):
+            filepath = os.path.join(nginx_dir, filename)
+            if not os.path.isfile(filepath):
+                continue
+
+            try:
+                with open(filepath, 'r') as f:
+                    content = f.read().lower()
+
+                    # Check for Mainsail
+                    if 'mainsail' in content or 'mainsail' in filename.lower():
+                        # Try to extract port from listen directive
+                        listen_match = re.search(r'listen\s+(\d+)', content)
+                        port = listen_match.group(1) if listen_match else '80'
+                        result['mainsail'] = '/' if port == '80' else f':{port}/'
+
+                    # Check for Fluidd
+                    if 'fluidd' in content or 'fluidd' in filename.lower():
+                        listen_match = re.search(r'listen\s+(\d+)', content)
+                        port = listen_match.group(1) if listen_match else '80'
+                        result['fluidd'] = '/' if port == '80' else f':{port}/'
+
+            except (IOError, PermissionError):
+                continue
+
+    return result
+
+
+@bp.context_processor
+def inject_printer_uis():
+    """Inject detected printer UIs into all templates."""
+    return {'printer_uis': detect_printer_uis()}
+
+
 # ============ Dashboard ============
 
 @bp.route('/')
