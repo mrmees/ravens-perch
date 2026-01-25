@@ -52,7 +52,7 @@ class PrintStatus:
 
         lines = []
 
-        # Progress
+        # Progress - always show
         lines.append(f"{self.progress:.1f}%")
 
         # Layer info
@@ -63,7 +63,12 @@ class PrintStatus:
         if self.time_remaining > 0:
             lines.append(f"ETA {self.format_time(self.time_remaining)}")
 
-        return " | ".join(lines)
+        result = " | ".join(lines)
+        # Ensure we never return empty string
+        if not result:
+            result = "Printing..."
+        # Escape % for FFmpeg drawtext filter (% is interpreted as strftime format)
+        return result.replace('%', '%%')
 
 
 class PrintStatusMonitor:
@@ -291,8 +296,8 @@ class PrintStatusMonitor:
             text = self._status.format_overlay_text()
 
         try:
-            overlay_path.write_text(text)
-            logger.debug(f"Overlay for camera {camera_id}: '{text}'")
+            overlay_path.write_text(text, encoding='utf-8')
+            logger.debug(f"Overlay for camera {camera_id}: '{text}' (state={self._status.state})")
         except Exception as e:
             logger.error(f"Failed to write overlay file for camera {camera_id}: {e}")
 
