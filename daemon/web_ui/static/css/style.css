@@ -787,7 +787,7 @@ details.settings-card > *:not(summary) {
 }
 
 .encoder-list .available .encoder-status {
-    color: var(--success);
+    color: var(--accent-primary);
 }
 
 .encoder-list .unavailable {
@@ -979,7 +979,7 @@ details.settings-card > *:not(summary) {
 }
 
 .status-ok {
-    color: var(--success);
+    color: var(--accent-primary);
 }
 
 .status-error {
