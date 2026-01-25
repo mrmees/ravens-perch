@@ -204,6 +204,34 @@ const currentAccentColor = '{{ settings.get("accent_color", "#4A9EFF")|upper }}'
 const currentCustomColor = '{{ settings.get("custom_accent_color", "#4A9EFF")|upper }}';
 const DEFAULT_COLOR = '#4A9EFF';
 
+// Apply color preview immediately by updating CSS custom properties
+function applyColorPreview(hexColor) {
+    const root = document.documentElement;
+    root.style.setProperty('--accent-primary', hexColor);
+    root.style.setProperty('--accent-hover', darkenColor(hexColor, 0.15));
+    root.style.setProperty('--accent-text', getContrastColor(hexColor));
+}
+
+function darkenColor(hexColor, factor) {
+    const hex = hexColor.replace('#', '');
+    let r = parseInt(hex.substr(0, 2), 16);
+    let g = parseInt(hex.substr(2, 2), 16);
+    let b = parseInt(hex.substr(4, 2), 16);
+    r = Math.round(r * (1 - factor));
+    g = Math.round(g * (1 - factor));
+    b = Math.round(b * (1 - factor));
+    return '#' + [r, g, b].map(x => x.toString(16).padStart(2, '0')).join('').toUpperCase();
+}
+
+function getContrastColor(hexColor) {
+    const hex = hexColor.replace('#', '');
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.5 ? '#000000' : '#FFFFFF';
+}
+
 // Update custom color when picker changes (updates both hidden inputs)
 document.getElementById('custom_color_picker').addEventListener('input', function(e) {
     const color = e.target.value.toUpperCase();
@@ -211,6 +239,7 @@ document.getElementById('custom_color_picker').addEventListener('input', functio
     document.getElementById('custom_accent_color').value = color;
     document.getElementById('custom-color-value').textContent = color;
     updateActiveRow('custom');
+    applyColorPreview(color);
 });
 
 // Handle clicking on color option rows
@@ -234,6 +263,7 @@ document.querySelectorAll('.color-option-row').forEach(row => {
             if (color) {
                 document.getElementById('accent_color').value = color;
                 updateActiveRow(colorType);
+                applyColorPreview(color);
             }
         }
     });
