@@ -127,6 +127,8 @@ class PrintStatusMonitor:
     def set_camera_overlay(self, camera_id: str, enabled: bool):
         """Enable/disable overlay for a specific camera."""
         self._camera_overlays[camera_id] = enabled
+        overlay_path = self.get_overlay_path(camera_id)
+        logger.info(f"Camera {camera_id} overlay {'enabled' if enabled else 'disabled'}, path: {overlay_path}")
         if enabled:
             # Create initial overlay file
             self._update_overlay_file(camera_id)
@@ -297,7 +299,7 @@ class PrintStatusMonitor:
 
         try:
             overlay_path.write_text(text, encoding='utf-8')
-            logger.debug(f"Overlay for camera {camera_id}: '{text}' (state={self._status.state})")
+            logger.info(f"Wrote overlay for camera {camera_id}: '{text}' to {overlay_path}")
         except Exception as e:
             logger.error(f"Failed to write overlay file for camera {camera_id}: {e}")
 

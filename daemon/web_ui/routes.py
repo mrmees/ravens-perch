@@ -986,3 +986,32 @@ def api_reset_control(camera_id: int, control_name: str):
         'control': control_name,
         'value': default_value
     })
+
+
+# ============ Print Status Diagnostic ============
+
+@bp.route('/api/print-status')
+def api_print_status():
+    """Get current print status for debugging."""
+    monitor = get_print_monitor()
+    if not monitor:
+        return jsonify({
+            'error': 'Print monitor not initialized',
+            'moonraker_available': False
+        })
+
+    status = monitor.status
+    return jsonify({
+        'moonraker_available': True,
+        'state': status.state,
+        'is_printing': status.is_printing,
+        'progress': status.progress,
+        'filename': status.filename,
+        'current_layer': status.current_layer,
+        'total_layers': status.total_layers,
+        'time_elapsed': status.time_elapsed,
+        'time_remaining': status.time_remaining,
+        'overlay_text': status.format_overlay_text(),
+        'cameras_with_overlay': list(monitor._camera_overlays.keys()),
+        'overlay_dir': str(monitor.overlay_dir),
+    })
