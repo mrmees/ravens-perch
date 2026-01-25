@@ -104,17 +104,6 @@
 
             <button type="submit" class="btn btn-primary">Save Appearance</button>
         </form>
-
-        <div class="form-group" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
-            <label>Footer Poem</label>
-            <p class="form-help" style="margin-bottom: 0.5rem;">
-                The footer displays lines from Edgar Allan Poe's "The Raven" (1845).
-            </p>
-            <button type="button" class="btn btn-secondary btn-sm" onclick="resetPoem()">
-                Restart Poem
-            </button>
-            <span id="poem-reset-status"></span>
-        </div>
     </div>
 
     <div class="settings-card">
@@ -193,6 +182,13 @@
         <p>
             <a href="https://github.com/USER/ravens-perch" target="_blank">GitHub Repository</a>
         </p>
+        <p class="text-muted" style="margin-top: 1rem;">
+            The footer displays lines from Edgar Allan Poe's "The Raven" (1845).
+        </p>
+        <button type="button" class="btn btn-secondary btn-sm" onclick="resetPoem()">
+            Restart Poem
+        </button>
+        <span id="poem-reset-status"></span>
     </div>
 
     <div class="settings-card danger-zone">
