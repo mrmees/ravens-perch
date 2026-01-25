@@ -293,7 +293,77 @@ def get_camera_by_ravens_id(camera_id: str) -> Optional[Dict]:
 
 
 
-# ============ Notifications ============
+# ============ Console & Notifications ============
+
+def print_to_console(message: str) -> bool:
+    """
+    Print a message to the Klipper console via Moonraker.
+    Uses the RESPOND command which appears in Fluidd/Mainsail console.
+    """
+    client = get_client()
+
+    # Escape quotes in message
+    escaped_message = message.replace('"', '\\"')
+
+    success, _, error = client._request(
+        "/printer/gcode/script",
+        method="POST",
+        data={"script": f'RESPOND MSG="{escaped_message}"'}
+    )
+
+    if not success:
+        logger.debug(f"Failed to print to console: {error}")
+
+    return success
+
+
+def announce_management_url() -> None:
+    """
+    Print the Ravens Perch management URL to the Klipper console.
+    Called on service startup.
+    """
+    # Get hostname
+    hostname = socket.getfqdn()
+    if '.' not in hostname:
+        hostname = f"{hostname}.local"
+
+    # Get IP
+    ip = get_system_ip()
+
+    # Detect port from nginx config (check for fluidd or mainsail)
+    port = "80"
+    import os
+    import re
+    for nginx_dir in ['/etc/nginx/sites-enabled', '/etc/nginx/sites-available']:
+        if not os.path.isdir(nginx_dir):
+            continue
+        for filename in os.listdir(nginx_dir):
+            filepath = os.path.join(nginx_dir, filename)
+            if os.path.isfile(filepath):
+                try:
+                    with open(filepath, 'r') as f:
+                        content = f.read().lower()
+                        if 'fluidd' in content or 'mainsail' in content:
+                            match = re.search(r'listen\s+(\d+)', content)
+                            if match:
+                                port = match.group(1)
+                                break
+                except (IOError, PermissionError):
+                    continue
+
+    # Build URLs
+    if port == "80":
+        url_hostname = f"http://{hostname}/cameras/"
+        url_ip = f"http://{ip}/cameras/"
+    else:
+        url_hostname = f"http://{hostname}:{port}/cameras/"
+        url_ip = f"http://{ip}:{port}/cameras/"
+
+    # Print to console
+    print_to_console("Ravens Perch camera manager available at:")
+    print_to_console(f"  {url_hostname}")
+    print_to_console(f"  {url_ip}")
+
 
 def send_notification(title: str, message: str, level: str = "info") -> bool:
     """

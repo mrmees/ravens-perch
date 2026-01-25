@@ -215,6 +215,11 @@ class RavensPerchDaemon:
             logger.info("Ravens Perch is running")
             add_log("INFO", "Ravens Perch started successfully")
 
+            # Announce management URL to Klipper console (if Moonraker available)
+            if self.moonraker_url:
+                from .moonraker_client import announce_management_url
+                announce_management_url()
+
             # Keep main thread alive
             while self.running:
                 signal.pause() if hasattr(signal, 'pause') else threading.Event().wait(1)
