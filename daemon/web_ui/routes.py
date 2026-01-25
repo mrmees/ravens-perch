@@ -1043,6 +1043,21 @@ def api_bandwidth_camera(camera_id: int):
     return jsonify(stats)
 
 
+# ============ Camera Status API ============
+
+@bp.route('/api/status/<int:camera_id>')
+def api_camera_status(camera_id: int):
+    """Get camera status badge HTML for HTMX polling."""
+    camera = get_camera_by_id(camera_id)
+    if not camera:
+        return '<span class="status-badge status-offline">Unknown</span>'
+
+    # Check if stream is active
+    camera['stream_active'] = is_stream_active(str(camera_id))
+
+    return render_template('partials/camera_status_badge.html', camera=camera)
+
+
 # ============ V4L2 Controls API ============
 
 @bp.route('/api/controls/<int:camera_id>')

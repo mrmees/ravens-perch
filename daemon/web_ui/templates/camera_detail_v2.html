@@ -7,7 +7,10 @@
     <div class="page-header-v2">
         <a href="{{ url_for('cameras.dashboard') }}" class="back-link">&larr; Back to Cameras</a>
         <h1 id="camera-name">{{ camera.friendly_name }}</h1>
-        <div class="header-status">
+        <div class="header-status"
+             hx-get="{{ url_for('cameras.api_camera_status', camera_id=camera.id) }}"
+             hx-trigger="every 3s"
+             hx-swap="innerHTML">
             {% if camera.connected %}
                 {% if camera.stream_active %}
                     <span class="status-badge status-active">Live</span>
