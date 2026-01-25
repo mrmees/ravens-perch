@@ -298,14 +298,17 @@ def get_camera_by_ravens_id(camera_id: str) -> Optional[Dict]:
 def print_to_console(message: str) -> bool:
     """
     Print a message to the Klipper console via Moonraker.
-    Uses M118 command which appears cleanly in Fluidd/Mainsail console.
+    Uses RESPOND TYPE=error which displays highlighted in Fluidd/Mainsail.
     """
     client = get_client()
+
+    # Escape single quotes in message
+    escaped_message = message.replace("'", "\\'")
 
     success, _, error = client._request(
         "/printer/gcode/script",
         method="POST",
-        data={"script": f"M118 {message}"}
+        data={"script": f"RESPOND TYPE=error MSG='{escaped_message}'"}
     )
 
     if not success:
