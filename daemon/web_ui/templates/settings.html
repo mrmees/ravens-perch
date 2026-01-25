@@ -53,6 +53,40 @@
     </div>
 
     <div class="settings-card">
+        <h3>Appearance</h3>
+
+        <form method="POST"
+              action="{{ url_for('cameras.update_global_settings') }}"
+              hx-post="{{ url_for('cameras.update_global_settings') }}"
+              hx-swap="innerHTML"
+              hx-target="#appearance-status">
+
+            <div class="form-group">
+                <label for="accent_color">Accent Color</label>
+                <div class="color-picker-row">
+                    <input type="color"
+                           id="accent_color"
+                           name="accent_color"
+                           value="{{ settings.get('accent_color', '#4a9eff') }}"
+                           class="color-input">
+                    <span class="color-value" id="color-value">{{ settings.get('accent_color', '#4a9eff') }}</span>
+                    <button type="button" class="btn btn-secondary btn-sm" onclick="detectThemeColors()">
+                        Detect from Mainsail/Fluidd
+                    </button>
+                </div>
+                <div id="detected-colors" class="detected-colors" style="display: none;"></div>
+                <p class="form-help">
+                    Customize the accent color to match your Mainsail or Fluidd theme.
+                </p>
+            </div>
+
+            <div id="appearance-status"></div>
+
+            <button type="submit" class="btn btn-primary">Save Appearance</button>
+        </form>
+    </div>
+
+    <div class="settings-card">
         <h3>System Information</h3>
 
         <dl class="info-list">
@@ -142,4 +176,69 @@
         </form>
     </div>
 </div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// Update displayed color value when picker changes
+document.getElementById('accent_color').addEventListener('input', function(e) {
+    document.getElementById('color-value').textContent = e.target.value;
+});
+
+function detectThemeColors() {
+    const container = document.getElementById('detected-colors');
+    container.innerHTML = '<span class="text-muted">Detecting...</span>';
+    container.style.display = 'block';
+
+    fetch('{{ url_for("cameras.api_detect_theme") }}')
+        .then(r => r.json())
+        .then(data => {
+            container.innerHTML = '';
+
+            if (data.mainsail) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'btn btn-sm color-option';
+                btn.style.backgroundColor = data.mainsail;
+                btn.style.color = getContrastColor(data.mainsail);
+                btn.textContent = 'Mainsail: ' + data.mainsail;
+                btn.onclick = function() { setAccentColor(data.mainsail); };
+                container.appendChild(btn);
+            }
+
+            if (data.fluidd) {
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'btn btn-sm color-option';
+                btn.style.backgroundColor = data.fluidd;
+                btn.style.color = getContrastColor(data.fluidd);
+                btn.textContent = 'Fluidd: ' + data.fluidd;
+                btn.onclick = function() { setAccentColor(data.fluidd); };
+                container.appendChild(btn);
+            }
+
+            if (!data.mainsail && !data.fluidd) {
+                container.innerHTML = '<span class="text-muted">No theme colors detected. Make sure Mainsail or Fluidd is configured.</span>';
+            }
+        })
+        .catch(err => {
+            container.innerHTML = '<span class="text-muted">Failed to detect theme colors.</span>';
+        });
+}
+
+function setAccentColor(color) {
+    document.getElementById('accent_color').value = color;
+    document.getElementById('color-value').textContent = color;
+}
+
+function getContrastColor(hexColor) {
+    // Calculate luminance and return black or white for contrast
+    const hex = hexColor.replace('#', '');
+    const r = parseInt(hex.substr(0, 2), 16);
+    const g = parseInt(hex.substr(2, 2), 16);
+    const b = parseInt(hex.substr(4, 2), 16);
+    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+    return luminance > 0.5 ? '#000000' : '#ffffff';
+}
+</script>
 {% endblock %}

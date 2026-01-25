@@ -14,6 +14,19 @@
         })();
     </script>
     <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    {% if accent_color %}
+    <style>
+        :root,
+        [data-theme="dark"] {
+            --accent-primary: {{ accent_color }};
+            --accent-hover: {{ accent_color_hover }};
+        }
+        [data-theme="light"] {
+            --accent-primary: {{ accent_color }};
+            --accent-hover: {{ accent_color_hover }};
+        }
+    </style>
+    {% endif %}
     <script src="https://unpkg.com/htmx.org@1.9.10"></script>
     {% block head %}{% endblock %}
 </head>

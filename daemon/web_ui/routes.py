@@ -25,7 +25,8 @@ from ..stream_manager import (
 from ..moonraker_client import (
     register_camera, update_camera as update_moonraker_camera,
     unregister_camera as unregister_moonraker_camera,
-    build_stream_url, build_snapshot_url, get_system_ip, is_available as moonraker_available
+    build_stream_url, build_snapshot_url, get_system_ip, is_available as moonraker_available,
+    detect_klipper_ui_theme
 )
 from ..hardware import estimate_cpu_capability, detect_encoders, get_platform_info, clear_encoder_cache
 from ..camera_manager import (
@@ -40,6 +41,30 @@ from ..config import COMMON_RESOLUTIONS, COMMON_FRAMERATES
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('cameras', __name__)
+
+
+# ============ Color Utilities ============
+
+def darken_color(hex_color: str, factor: float = 0.15) -> str:
+    """Darken a hex color by a factor (0-1)."""
+    hex_color = hex_color.lstrip('#')
+    r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+    r = int(r * (1 - factor))
+    g = int(g * (1 - factor))
+    b = int(b * (1 - factor))
+    return f'#{r:02x}{g:02x}{b:02x}'
+
+
+@bp.context_processor
+def inject_accent_color():
+    """Inject accent color into all templates."""
+    settings = get_all_settings()
+    accent = settings.get('accent_color')
+    if accent:
+        # Generate hover color (slightly darker)
+        hover = darken_color(accent, 0.15)
+        return {'accent_color': accent, 'accent_color_hover': hover}
+    return {}
 
 
 # ============ Dashboard ============
@@ -654,6 +679,16 @@ def update_global_settings():
     if 'log_level' in request.form:
         set_setting('log_level', request.form['log_level'])
 
+    # Appearance settings
+    if 'accent_color' in request.form:
+        accent_color = request.form['accent_color']
+        # Validate hex color format
+        if accent_color and accent_color.startswith('#') and len(accent_color) == 7:
+            set_setting('accent_color', accent_color)
+        elif not accent_color:
+            # Clear the setting if empty
+            set_setting('accent_color', None)
+
     add_log("INFO", "Global settings updated")
 
     if request.headers.get('HX-Request'):
@@ -1214,6 +1249,15 @@ def api_print_status():
 
 
 # ============ System Fonts ============
+
+@bp.route('/api/detect-theme')
+def api_detect_theme():
+    """Detect Mainsail/Fluidd theme colors from Moonraker."""
+    settings = get_all_settings()
+    moonraker_url = settings.get('moonraker_url', 'http://127.0.0.1:7125')
+    themes = detect_klipper_ui_theme(moonraker_url)
+    return jsonify(themes)
+
 
 @bp.route('/api/fonts')
 def api_fonts():

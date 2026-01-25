@@ -379,3 +379,51 @@ def get_printer_info() -> Optional[Dict]:
     client = get_client()
     success, data, _ = client._request("/printer/info")
     return data if success else None
+
+
+# ============ Theme Detection ============
+
+def detect_klipper_ui_theme(moonraker_url: Optional[str] = None) -> Dict[str, Optional[str]]:
+    """
+    Query Moonraker for Mainsail/Fluidd theme colors.
+
+    Returns: {'mainsail': '#color' or None, 'fluidd': '#color' or None}
+    """
+    result: Dict[str, Optional[str]] = {'mainsail': None, 'fluidd': None}
+
+    if moonraker_url:
+        client = MoonrakerClient(moonraker_url)
+    else:
+        client = get_client()
+
+    # Query Mainsail uiSettings
+    try:
+        success, data, _ = client._request(
+            "/server/database/item",
+            params={'namespace': 'mainsail', 'key': 'uiSettings'},
+            timeout=5
+        )
+        if success and data:
+            value = data.get('value', {})
+            if isinstance(value, dict):
+                result['mainsail'] = value.get('primary')
+    except Exception as e:
+        logger.debug(f"Failed to query Mainsail theme: {e}")
+
+    # Query Fluidd uiSettings
+    try:
+        success, data, _ = client._request(
+            "/server/database/item",
+            params={'namespace': 'fluidd', 'key': 'uiSettings'},
+            timeout=5
+        )
+        if success and data:
+            value = data.get('value', {})
+            if isinstance(value, dict):
+                theme = value.get('theme', {})
+                if isinstance(theme, dict):
+                    result['fluidd'] = theme.get('color')
+    except Exception as e:
+        logger.debug(f"Failed to query Fluidd theme: {e}")
+
+    return result
