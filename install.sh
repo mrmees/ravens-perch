@@ -677,11 +677,19 @@ EOF
             fi
         done
 
-        # Build the URL hint - show port if not 80
-        local url_hint="/cameras/"
-        if [ "$fluidd_port" != "80" ]; then
-            url_hint="[hostname]:${fluidd_port}/cameras/"
+        # Get hostname for full URL
+        local machine_hostname=$(hostname -f 2>/dev/null || hostname)
+        # Append .local if it's a simple hostname without domain
+        if [[ ! "$machine_hostname" == *.* ]]; then
+            machine_hostname="${machine_hostname}.local"
         fi
+
+        # Build the full URL
+        local ravens_url="http://${machine_hostname}"
+        if [ "$fluidd_port" != "80" ]; then
+            ravens_url="${ravens_url}:${fluidd_port}"
+        fi
+        ravens_url="${ravens_url}/cameras/"
 
         # CSS to add a Ravens Perch link banner
         local ravens_css="/* Ravens Perch Integration */
@@ -689,7 +697,7 @@ EOF
 
 /* Banner at top of camera settings section */
 #camera::after {
-  content: \"Manage cameras with Ravens Perch → ${url_hint}\";
+  content: \"Manage cameras with Ravens Perch → ${ravens_url}\";
   display: block;
   margin: 8px 16px;
   padding: 12px 16px;
@@ -722,11 +730,7 @@ EOF
             log_success "Created Fluidd theme with Ravens Perch link"
         fi
 
-        if [ "$fluidd_port" != "80" ]; then
-            log_info "Ravens Perch URL: http://[your-hostname]:${fluidd_port}/cameras/"
-        else
-            log_info "Ravens Perch URL: http://[your-hostname]/cameras/"
-        fi
+        log_info "Ravens Perch URL: ${ravens_url}"
     fi
 }
 
