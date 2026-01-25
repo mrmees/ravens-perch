@@ -997,11 +997,34 @@ details.settings-card > *:not(summary) {
 
 /* Footer */
 .footer {
-    padding: 1rem;
+    padding: 1rem 1.5rem;
     text-align: center;
     color: var(--text-muted);
     font-size: 0.875rem;
     border-top: 1px solid var(--border-color);
+}
+
+.footer-inner {
+    max-width: 1400px;
+    margin: 0 auto;
+}
+
+.raven-quote {
+    font-style: italic;
+    margin-bottom: 0.5rem;
+    line-height: 1.5;
+}
+
+.raven-line {
+    margin: 0;
+    padding: 0;
+}
+
+.footer-brand {
+    display: block;
+    margin-top: 0.5rem;
+    font-style: normal;
+    color: var(--text-secondary);
 }
 
 /* Responsive adjustments */

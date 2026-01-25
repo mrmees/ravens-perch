@@ -100,7 +100,13 @@
     </main>
 
     <footer class="footer">
-        <span>Ravens Perch</span>
+        <div class="footer-inner">
+            <div class="raven-quote">
+                <p class="raven-line">{{ raven_line1 }}</p>
+                <p class="raven-line">{{ raven_line2 }}</p>
+            </div>
+            <span class="footer-brand">Ravens Perch</span>
+        </div>
     </footer>
 
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
