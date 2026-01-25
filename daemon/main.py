@@ -312,6 +312,22 @@ class RavensPerchDaemon:
             camera = db.get_camera_by_hardware_id(device_info.hardware_id)
 
             if camera:
+                # Check if this camera is already connected (duplicate hardware_id)
+                if camera['connected'] and camera['device_path'] != device_info.path:
+                    # This is a duplicate camera with no unique serial number
+                    logger.warning(
+                        f"Duplicate camera detected: {device_info.hardware_name} at {device_info.path}. "
+                        f"Another camera with the same identifier is already connected at {camera['device_path']}. "
+                        f"Cameras without unique serial numbers are not supported when multiple are connected."
+                    )
+                    add_log(
+                        "WARNING",
+                        f"Duplicate camera ignored: {device_info.hardware_name}. "
+                        f"Cameras without unique serial numbers are not supported.",
+                        camera['id']
+                    )
+                    return
+
                 # Existing camera - update connection status
                 camera_id = camera['id']
                 db.mark_camera_connected(camera_id, device_info.path)
