@@ -1,42 +1,39 @@
-<div class="v4l2-controls-list">
+<div class="v4l2-controls-grid">
     {% for name, info in controls.items() %}
-    <div class="control-item" data-control="{{ name }}">
-        <div class="control-header">
+    <div class="control-item-compact" data-control="{{ name }}">
+        <div class="control-header-compact">
             <label for="ctrl-{{ name }}">{{ name.replace('_', ' ').title() }}</label>
-            {% if info.saved is defined %}
-            <span class="control-saved" title="Saved value">Saved: {{ info.saved }}</span>
-            {% endif %}
+            <button type="button" class="btn-reset-sm"
+                    hx-post="{{ url_for('cameras.api_reset_control', camera_id=camera_id, control_name=name) }}"
+                    hx-swap="none"
+                    {% if info.type == 'int' %}
+                    onclick="document.getElementById('ctrl-{{ name }}').value = {{ info.default }}; document.getElementById('val-{{ name }}').textContent = {{ info.default }};"
+                    {% endif %}
+                    title="Reset to {{ info.default }}">
+                &circlearrowleft;
+            </button>
         </div>
 
         {% if info.type == 'menu' and info.options %}
         <!-- Menu control -->
-        <div class="control-input">
-            <select id="ctrl-{{ name }}"
-                    name="value"
-                    class="control-select"
-                    hx-post="{{ url_for('cameras.api_set_control', camera_id=camera_id, control_name=name) }}"
-                    hx-trigger="change"
-                    hx-swap="none">
-                {% for opt_value, opt_label in info.options.items()|sort %}
-                <option value="{{ opt_value }}"
-                        {% if info.value == opt_value %}selected{% endif %}>
-                    {{ opt_label }}
-                </option>
-                {% endfor %}
-            </select>
-            <button type="button" class="btn btn-sm btn-secondary control-reset"
-                    hx-post="{{ url_for('cameras.api_reset_control', camera_id=camera_id, control_name=name) }}"
-                    hx-swap="none"
-                    title="Reset to default ({{ info.default }})">
-                Reset
-            </button>
-        </div>
+        <select id="ctrl-{{ name }}"
+                name="value"
+                class="control-select-compact"
+                hx-post="{{ url_for('cameras.api_set_control', camera_id=camera_id, control_name=name) }}"
+                hx-trigger="change"
+                hx-swap="none">
+            {% for opt_value, opt_label in info.options.items()|sort %}
+            <option value="{{ opt_value }}" {% if info.value == opt_value %}selected{% endif %}>
+                {{ opt_label }}
+            </option>
+            {% endfor %}
+        </select>
 
         {% elif info.type == 'bool' %}
         <!-- Boolean control -->
-        <div class="control-input">
+        <div class="control-bool-compact">
             <input type="hidden" name="value" value="0" id="ctrl-{{ name }}-hidden">
-            <label class="toggle-switch">
+            <label class="toggle-switch-sm">
                 <input type="checkbox"
                        id="ctrl-{{ name }}"
                        name="value"
@@ -47,19 +44,13 @@
                        hx-swap="none"
                        hx-include="#ctrl-{{ name }}-hidden"
                        onclick="document.getElementById('ctrl-{{ name }}-hidden').disabled = this.checked;">
-                <span class="toggle-slider"></span>
+                <span class="toggle-slider-sm"></span>
             </label>
-            <button type="button" class="btn btn-sm btn-secondary control-reset"
-                    hx-post="{{ url_for('cameras.api_reset_control', camera_id=camera_id, control_name=name) }}"
-                    hx-swap="none"
-                    title="Reset to default ({{ info.default }})">
-                Reset
-            </button>
         </div>
 
         {% else %}
         <!-- Integer control (slider) -->
-        <div class="control-input">
+        <div class="control-slider-compact">
             <input type="range"
                    id="ctrl-{{ name }}"
                    name="value"
@@ -67,26 +58,141 @@
                    max="{{ info.max }}"
                    step="{{ info.step|default(1) }}"
                    value="{{ info.value }}"
-                   class="control-range"
+                   class="control-range-compact"
                    oninput="document.getElementById('val-{{ name }}').textContent = this.value"
                    hx-post="{{ url_for('cameras.api_set_control', camera_id=camera_id, control_name=name) }}"
                    hx-trigger="change"
                    hx-swap="none">
-            <span id="val-{{ name }}" class="control-value">{{ info.value }}</span>
-            <button type="button" class="btn btn-sm btn-secondary control-reset"
-                    hx-post="{{ url_for('cameras.api_reset_control', camera_id=camera_id, control_name=name) }}"
-                    hx-swap="none"
-                    onclick="document.getElementById('ctrl-{{ name }}').value = {{ info.default }}; document.getElementById('val-{{ name }}').textContent = {{ info.default }};"
-                    title="Reset to default ({{ info.default }})">
-                Reset
-            </button>
-        </div>
-        <div class="control-range-labels">
-            <span>{{ info.min }}</span>
-            <span class="control-default">Default: {{ info.default }}</span>
-            <span>{{ info.max }}</span>
+            <span id="val-{{ name }}" class="control-val">{{ info.value }}</span>
         </div>
         {% endif %}
     </div>
     {% endfor %}
 </div>
+
+<style>
+    .v4l2-controls-grid {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.75rem 1.5rem;
+    }
+    .control-item-compact {
+        min-width: 0;
+    }
+    .control-header-compact {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 0.35rem;
+    }
+    .control-header-compact label {
+        font-size: 0.8rem;
+        color: var(--text-secondary);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+    .btn-reset-sm {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        cursor: pointer;
+        padding: 0;
+        font-size: 0.9rem;
+        line-height: 1;
+    }
+    .btn-reset-sm:hover {
+        color: var(--accent-primary);
+    }
+    .control-select-compact {
+        width: 100%;
+        padding: 0.35rem 0.5rem;
+        font-size: 0.8rem;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-sm);
+        color: var(--text-primary);
+    }
+    .control-slider-compact {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+    }
+    .control-range-compact {
+        flex: 1;
+        height: 4px;
+        -webkit-appearance: none;
+        appearance: none;
+        background: var(--bg-tertiary);
+        border-radius: 2px;
+    }
+    .control-range-compact::-webkit-slider-thumb {
+        -webkit-appearance: none;
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--accent-primary);
+        cursor: pointer;
+    }
+    .control-range-compact::-moz-range-thumb {
+        width: 14px;
+        height: 14px;
+        border-radius: 50%;
+        background: var(--accent-primary);
+        cursor: pointer;
+        border: none;
+    }
+    .control-val {
+        min-width: 2.5rem;
+        text-align: right;
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        font-family: monospace;
+    }
+    .control-bool-compact {
+        display: flex;
+        align-items: center;
+    }
+    .toggle-switch-sm {
+        position: relative;
+        display: inline-block;
+        width: 36px;
+        height: 20px;
+    }
+    .toggle-switch-sm input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+    .toggle-slider-sm {
+        position: absolute;
+        cursor: pointer;
+        inset: 0;
+        background-color: var(--bg-tertiary);
+        border-radius: 20px;
+        transition: 0.2s;
+    }
+    .toggle-slider-sm:before {
+        position: absolute;
+        content: "";
+        height: 14px;
+        width: 14px;
+        left: 3px;
+        bottom: 3px;
+        background-color: var(--text-muted);
+        border-radius: 50%;
+        transition: 0.2s;
+    }
+    .toggle-switch-sm input:checked + .toggle-slider-sm {
+        background-color: var(--accent-primary);
+    }
+    .toggle-switch-sm input:checked + .toggle-slider-sm:before {
+        transform: translateX(16px);
+        background-color: white;
+    }
+    @media (max-width: 500px) {
+        .v4l2-controls-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+</style>
