@@ -115,17 +115,21 @@ class RavensPerchDaemon:
             init_db()
             add_log("INFO", "Ravens Perch starting")
 
-            # Step 2: Check dependencies
+            # Step 2: Start web UI early so users can access the page during init
+            logger.info(f"Starting web UI on {WEB_UI_HOST}:{WEB_UI_PORT}...")
+            self._start_web_ui()
+
+            # Step 3: Check dependencies
             self._check_dependencies()
 
-            # Step 3: Detect hardware encoders
+            # Step 4: Detect hardware encoders
             logger.info("Detecting hardware encoders...")
             self.encoders = detect_encoders()
             encoder_list = [k for k, v in self.encoders.items() if v]
             logger.info(f"Available encoders: {encoder_list}")
             add_log("INFO", f"Available encoders: {encoder_list}")
 
-            # Step 4: Wait for MediaMTX
+            # Step 5: Wait for MediaMTX
             logger.info("Waiting for MediaMTX...")
             if not wait_for_mediamtx(timeout=30):
                 logger.warning("MediaMTX not available - streams will not work")
@@ -133,20 +137,20 @@ class RavensPerchDaemon:
             else:
                 logger.info("MediaMTX is available")
 
-                # Step 4b: Clean up stale MediaMTX streams
+                # Step 5b: Clean up stale MediaMTX streams
                 logger.info("Cleaning up stale MediaMTX streams...")
                 removed = remove_all_streams()
                 if removed > 0:
                     logger.info(f"Removed {removed} stale stream(s)")
 
-            # Step 5: Detect Moonraker
+            # Step 6: Detect Moonraker
             logger.info("Detecting Moonraker...")
             self.moonraker_url = detect_moonraker_url()
             if self.moonraker_url:
                 logger.info(f"Moonraker found at: {self.moonraker_url}")
                 add_log("INFO", f"Moonraker found at: {self.moonraker_url}")
 
-                # Step 5b: Clean up stale Moonraker webcam registrations
+                # Step 6b: Clean up stale Moonraker webcam registrations
                 logger.info("Cleaning up stale Moonraker webcam registrations...")
                 cleaned = 0
                 for camera in db.get_all_cameras():
@@ -160,7 +164,7 @@ class RavensPerchDaemon:
                 logger.warning("Moonraker not found - webcam registration disabled")
                 add_log("WARNING", "Moonraker not found")
 
-            # Step 5c: Initialize print status monitor (if Moonraker available)
+            # Step 6c: Initialize print status monitor (if Moonraker available)
             if self.moonraker_url:
                 logger.info("Initializing print status monitor...")
                 # Get overlay update interval from settings (default 5 seconds)
@@ -176,10 +180,10 @@ class RavensPerchDaemon:
                 self.print_monitor.start()
                 logger.info(f"Print status monitor started (update interval: {overlay_interval}s)")
 
-            # Step 6: Mark all cameras as disconnected initially
+            # Step 7: Mark all cameras as disconnected initially
             self._reset_camera_states()
 
-            # Step 7: Start camera monitor
+            # Step 8: Start camera monitor
             logger.info("Starting camera monitor...")
             self.camera_monitor = CameraMonitor(
                 on_connect=self._on_camera_connected,
@@ -187,13 +191,9 @@ class RavensPerchDaemon:
             )
             self.camera_monitor.start()
 
-            # Step 8: Scan for existing cameras
+            # Step 9: Scan for existing cameras
             logger.info("Scanning for existing cameras...")
             self.camera_monitor.scan_existing()
-
-            # Step 9: Start web UI
-            logger.info(f"Starting web UI on {WEB_UI_HOST}:{WEB_UI_PORT}...")
-            self._start_web_ui()
 
             logger.info("Ravens Perch is running")
             add_log("INFO", "Ravens Perch started successfully")
