@@ -264,12 +264,14 @@
                 <!-- Overlay Font -->
                 <div class="form-group">
                     <label for="overlay_font">Font</label>
-                    <select id="overlay_font" name="overlay_font"
-                            hx-get="{{ url_for('cameras.api_fonts') }}"
-                            hx-trigger="load"
-                            hx-swap="innerHTML">
-                        <option value="">Loading fonts...</option>
-                    </select>
+                    <div id="font-select-container"
+                         hx-get="{{ url_for('cameras.api_fonts') }}?current={{ camera.settings.overlay_font|default('', true)|urlencode }}"
+                         hx-trigger="load"
+                         hx-swap="innerHTML">
+                        <select id="overlay_font" name="overlay_font">
+                            <option value="">Loading fonts...</option>
+                        </select>
+                    </div>
                 </div>
 
                 <!-- Overlay Font Size -->
@@ -664,16 +666,6 @@
         }
     });
 
-    // Handle font dropdown population and selection
-    document.body.addEventListener('htmx:afterSwap', function(event) {
-        if (event.detail.target.id === 'overlay_font') {
-            const fontSelect = document.getElementById('overlay_font');
-            const savedFont = '{{ camera.settings.overlay_font if camera.settings and camera.settings.overlay_font else "" }}';
-            if (fontSelect && savedFont) {
-                fontSelect.value = savedFont;
-            }
-        }
-    });
 </script>
 
 <style>

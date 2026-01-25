@@ -1079,11 +1079,16 @@ def api_fonts():
     except Exception as e:
         logger.error(f"Error listing fonts: {e}")
 
-    # Return HTML options for HTMX requests
+    # Return HTML select for HTMX requests
     if request.headers.get('HX-Request'):
+        # Get current font from query param if provided
+        current_font = request.args.get('current', '')
+
         options = ['<option value="">System Default</option>']
         for font in fonts:
-            options.append(f'<option value="{font}">{font}</option>')
-        return ''.join(options)
+            selected = ' selected' if font == current_font else ''
+            options.append(f'<option value="{font}"{selected}>{font}</option>')
+
+        return f'<select id="overlay_font" name="overlay_font">{"".join(options)}</select>'
 
     return jsonify(fonts)
