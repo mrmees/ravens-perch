@@ -333,12 +333,35 @@ EOF
     log_success "Ravens Perch service created"
 }
 
-# Configure nginx reverse proxy
+# Configure nginx reverse proxy using include snippet
 configure_nginx() {
     log_info "Configuring nginx..."
 
+    local snippet_dir="/etc/nginx/snippets"
+    local snippet_file="${snippet_dir}/ravens-perch.conf"
+
+    # Create snippets directory if it doesn't exist
+    if [ ! -d "$snippet_dir" ]; then
+        sudo mkdir -p "$snippet_dir"
+    fi
+
+    # Create the snippet file with the location block
+    log_info "Creating nginx snippet..."
+    sudo tee "$snippet_file" > /dev/null << 'EOF'
+# Ravens Perch Camera UI
+# Include this in your server block: include /etc/nginx/snippets/ravens-perch.conf;
+location /cameras/ {
+    proxy_pass http://127.0.0.1:8585/cameras/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+EOF
+    log_success "Created ${snippet_file}"
+
     # Find which nginx config is actually serving port 80
-    # by checking for "listen 80" in enabled sites
     local target_conf=""
 
     for conf in /etc/nginx/sites-enabled/*; do
@@ -352,32 +375,29 @@ configure_nginx() {
 
     if [ -z "$target_conf" ]; then
         log_warn "Could not find nginx site configuration serving port 80."
-        log_info "Please manually add the following to your nginx server block:"
+        log_info "Please manually add to your nginx server block:"
         echo ""
-        echo "    location /cameras/ {"
-        echo "        proxy_pass http://127.0.0.1:8585/cameras/;"
-        echo "        proxy_http_version 1.1;"
-        echo "        proxy_set_header Host \$host;"
-        echo "        proxy_set_header X-Real-IP \$remote_addr;"
-        echo "        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;"
-        echo "        proxy_set_header X-Forwarded-Proto \$scheme;"
-        echo "    }"
+        echo "    include /etc/nginx/snippets/ravens-perch.conf;"
         echo ""
         return
     fi
 
-    # Check if already configured
+    # Check if already configured (either include or direct location)
+    if grep -q "ravens-perch.conf" "$target_conf" 2>/dev/null; then
+        log_info "Ravens Perch already configured in ${target_conf}"
+        return
+    fi
     if grep -q "location /cameras/" "$target_conf" 2>/dev/null; then
-        log_info "/cameras/ location already configured in ${target_conf}"
+        log_info "/cameras/ location already exists in ${target_conf}"
         return
     fi
 
-    log_info "Adding /cameras/ location to ${target_conf}..."
+    log_info "Adding include directive to ${target_conf}..."
 
     # Create a backup
     sudo cp "$target_conf" "${target_conf}.ravens-perch.bak"
 
-    # Use Python for reliable multiline insertion (sed is too fragile for this)
+    # Insert the include line - much simpler than inserting a full block
     sudo python3 - "${target_conf}" << 'PYTHON_SCRIPT'
 import sys
 
@@ -386,50 +406,44 @@ target_conf = sys.argv[1]
 with open(target_conf, 'r') as f:
     content = f.read()
 
-location_block = '''
-    # Ravens Perch Camera UI
-    location /cameras/ {
-        proxy_pass http://127.0.0.1:8585/cameras/;
-        proxy_http_version 1.1;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto $scheme;
-    }
-'''
+include_line = '    include /etc/nginx/snippets/ravens-perch.conf;'
 
-# Try to insert before the first "location /webcam" line
-if 'location /webcam' in content:
-    # Find the line and insert before it
-    lines = content.split('\n')
-    for i, line in enumerate(lines):
-        if 'location /webcam' in line:
-            # Insert the block before this line
-            lines.insert(i, location_block.strip())
-            break
-    content = '\n'.join(lines)
-else:
-    # Insert before the final closing brace
-    lines = content.split('\n')
+# Try to insert before the first "location" line
+lines = content.split('\n')
+inserted = False
+
+for i, line in enumerate(lines):
+    # Find the first location block and insert before it
+    if 'location ' in line and not inserted:
+        lines.insert(i, '')
+        lines.insert(i + 1, include_line)
+        inserted = True
+        break
+
+# If no location found, insert before final closing brace
+if not inserted:
     for i in range(len(lines) - 1, -1, -1):
         if lines[i].strip() == '}':
-            lines.insert(i, location_block.strip())
+            lines.insert(i, '')
+            lines.insert(i + 1, include_line)
             break
-    content = '\n'.join(lines)
+
+content = '\n'.join(lines)
 
 with open(target_conf, 'w') as f:
     f.write(content)
 
-print("Location block added successfully")
+print("Include directive added successfully")
 PYTHON_SCRIPT
 
-    # Verify the block was added
-    if grep -q "location /cameras/" "$target_conf"; then
-        log_success "Added /cameras/ location to nginx config"
+    # Verify the include was added
+    if grep -q "ravens-perch.conf" "$target_conf"; then
+        log_success "Added include directive to nginx config"
     else
-        log_warn "Failed to add location block"
+        log_warn "Failed to add include directive"
         sudo cp "${target_conf}.ravens-perch.bak" "$target_conf"
-        log_info "Please manually add the location block to ${target_conf}"
+        log_info "Please manually add to ${target_conf}:"
+        echo "    include /etc/nginx/snippets/ravens-perch.conf;"
         return
     fi
 
@@ -441,7 +455,8 @@ PYTHON_SCRIPT
         log_warn "Nginx config test failed - restoring backup..."
         sudo cp "${target_conf}.ravens-perch.bak" "$target_conf"
         sudo nginx -t && sudo systemctl reload nginx
-        log_info "Please manually configure nginx for /cameras/ location"
+        log_info "Please manually add to your nginx config:"
+        echo "    include /etc/nginx/snippets/ravens-perch.conf;"
     fi
 }
 

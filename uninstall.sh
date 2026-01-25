@@ -75,7 +75,7 @@ log_success "Service files removed"
 # Remove nginx configuration
 log_info "Removing nginx configuration..."
 
-# Try to remove from common nginx configs
+# Remove include directive from nginx configs
 configs=(
     "/etc/nginx/sites-available/fluidd"
     "/etc/nginx/sites-available/mainsail"
@@ -84,15 +84,26 @@ configs=(
 
 for conf in "${configs[@]}"; do
     if [ -f "$conf" ]; then
-        if grep -q "location /cameras/" "$conf" 2>/dev/null; then
-            log_info "Removing /cameras/ location from ${conf}..."
-            # Remove the location block (this is a best-effort removal)
+        # Remove include line (new snippet-based approach)
+        if grep -q "ravens-perch.conf" "$conf" 2>/dev/null; then
+            log_info "Removing include directive from ${conf}..."
+            sudo sed -i '/ravens-perch\.conf/d' "$conf" 2>/dev/null || true
+        fi
+        # Also handle legacy inline location block (old installations)
+        if grep -q "# Ravens Perch Camera UI" "$conf" 2>/dev/null; then
+            log_info "Removing legacy location block from ${conf}..."
             sudo sed -i '/# Ravens Perch Camera UI/,/^[[:space:]]*}/d' "$conf" 2>/dev/null || true
         fi
     fi
 done
 
-# Remove standalone config
+# Remove snippet file
+if [ -f "/etc/nginx/snippets/ravens-perch.conf" ]; then
+    log_info "Removing nginx snippet..."
+    sudo rm -f "/etc/nginx/snippets/ravens-perch.conf"
+fi
+
+# Remove legacy standalone config (old installations)
 if [ -f "/etc/nginx/conf.d/ravens-perch.conf" ]; then
     sudo rm -f "/etc/nginx/conf.d/ravens-perch.conf"
 fi
