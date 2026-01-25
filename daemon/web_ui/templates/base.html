@@ -82,7 +82,7 @@
             <span class="nav-separator"></span>
             {% endif %}
             {% if printer_uis.mainsail %}
-            <a href="{{ printer_uis.mainsail }}" class="nav-external" title="Mainsail">
+            <a href="{% if printer_uis.mainsail == '80' %}/{% else %}//{{ request.host.split(':')[0] }}:{{ printer_uis.mainsail }}/{% endif %}" class="nav-external" title="Mainsail">
                 <!-- Mainsail logo (official) -->
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 599.38 523.11" width="20" height="18">
                     <g fill="#d41216">
@@ -95,7 +95,7 @@
             </a>
             {% endif %}
             {% if printer_uis.fluidd %}
-            <a href="{{ printer_uis.fluidd }}" class="nav-external" title="Fluidd">
+            <a href="{% if printer_uis.fluidd == '80' %}/{% else %}//{{ request.host.split(':')[0] }}:{{ printer_uis.fluidd }}/{% endif %}" class="nav-external" title="Fluidd">
                 <!-- Fluidd logo (official) -->
                 <svg xmlns="http://www.w3.org/2000/svg" viewBox="32.7 0 446.6 512" width="18" height="18">
                     <path fill="#3e74ac" d="M135.8 308.6 242 397c1.2 1 2.5 1.9 3.8 2.6l.4.2.2.1.3.1.3.1.2.1.3.1h.1c2.4 1 4.9 1.6 7.5 1.7h2c2.5-.1 5.1-.7 7.5-1.7h.1l.4-.2.1-.1.3-.1.3-.1.1-.1.4-.2c1.3-.7 2.6-1.6 3.8-2.6l99.3-82.6 51.6 34.1L256 512 84.5 341.9zm3.7-132.1L244 243.7c3.7 2.4 7.9 3.7 12 3.7s8.3-1.2 12-3.7l104.5-67.2 79.9 40.8L256 380.6 59.7 217.3zM256 0l223.3 82.2L256 225.8 32.7 82.2z"/>

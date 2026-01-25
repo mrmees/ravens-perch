@@ -234,7 +234,7 @@ def inject_raven_couplet():
 def detect_printer_uis():
     """
     Detect which printer UIs (Mainsail/Fluidd) are configured in nginx.
-    Returns dict with 'mainsail' and 'fluidd' keys containing URL or None.
+    Returns dict with 'mainsail' and 'fluidd' keys containing port number or None.
     """
     import os
     import re
@@ -266,13 +266,13 @@ def detect_printer_uis():
                         # Try to extract port from listen directive
                         listen_match = re.search(r'listen\s+(\d+)', content)
                         port = listen_match.group(1) if listen_match else '80'
-                        result['mainsail'] = '/' if port == '80' else f':{port}/'
+                        result['mainsail'] = port
 
                     # Check for Fluidd
                     if 'fluidd' in content or 'fluidd' in filename.lower():
                         listen_match = re.search(r'listen\s+(\d+)', content)
                         port = listen_match.group(1) if listen_match else '80'
-                        result['fluidd'] = '/' if port == '80' else f':{port}/'
+                        result['fluidd'] = port
 
             except (IOError, PermissionError):
                 continue
