@@ -4,6 +4,7 @@ Ravens Perch - Hardware Detection (Encoders, Platform)
 import os
 import subprocess
 import logging
+import json
 from pathlib import Path
 from typing import Dict, Optional
 
@@ -11,12 +12,64 @@ import psutil
 
 logger = logging.getLogger(__name__)
 
+# Cache file location (set by init_encoder_cache)
+_encoder_cache_path: Optional[Path] = None
+_encoder_cache: Optional[Dict[str, bool]] = None
 
-def detect_encoders() -> Dict[str, bool]:
+
+def init_encoder_cache(data_dir: str):
+    """Initialize the encoder cache path."""
+    global _encoder_cache_path
+    _encoder_cache_path = Path(data_dir) / "encoder_cache.json"
+
+
+def _load_encoder_cache() -> Optional[Dict[str, bool]]:
+    """Load encoder results from cache file."""
+    global _encoder_cache
+    if _encoder_cache is not None:
+        return _encoder_cache
+
+    if _encoder_cache_path and _encoder_cache_path.exists():
+        try:
+            with open(_encoder_cache_path, 'r') as f:
+                _encoder_cache = json.load(f)
+                logger.info(f"Loaded encoder cache: {[k for k, v in _encoder_cache.items() if v]}")
+                return _encoder_cache
+        except Exception as e:
+            logger.debug(f"Failed to load encoder cache: {e}")
+    return None
+
+
+def _save_encoder_cache(encoders: Dict[str, bool]):
+    """Save encoder results to cache file."""
+    global _encoder_cache
+    _encoder_cache = encoders
+
+    if _encoder_cache_path:
+        try:
+            _encoder_cache_path.parent.mkdir(parents=True, exist_ok=True)
+            with open(_encoder_cache_path, 'w') as f:
+                json.dump(encoders, f)
+            logger.debug(f"Saved encoder cache to {_encoder_cache_path}")
+        except Exception as e:
+            logger.debug(f"Failed to save encoder cache: {e}")
+
+
+def detect_encoders(force: bool = False) -> Dict[str, bool]:
     """
     Detect available hardware encoders.
     Returns dict with encoder availability.
+
+    Args:
+        force: If True, bypass cache and re-detect encoders.
     """
+    # Check cache first (unless force refresh)
+    if not force:
+        cached = _load_encoder_cache()
+        if cached is not None:
+            return cached
+
+    logger.info("Detecting hardware encoders...")
     encoders = {
         'vaapi': False,
         'v4l2m2m': False,
@@ -65,7 +118,22 @@ def detect_encoders() -> Dict[str, bool]:
     except Exception as e:
         logger.debug(f"V4L2M2M detection failed: {e}")
 
+    # Save to cache for next startup
+    _save_encoder_cache(encoders)
+
     return encoders
+
+
+def clear_encoder_cache():
+    """Clear the encoder cache to force re-detection on next startup."""
+    global _encoder_cache
+    _encoder_cache = None
+    if _encoder_cache_path and _encoder_cache_path.exists():
+        try:
+            _encoder_cache_path.unlink()
+            logger.info("Encoder cache cleared")
+        except Exception as e:
+            logger.debug(f"Failed to clear encoder cache: {e}")
 
 
 def get_best_encoder(encoders: Optional[Dict[str, bool]] = None) -> str:

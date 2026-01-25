@@ -119,6 +119,17 @@
                 </span>
             </li>
         </ul>
+
+        <form method="POST"
+              action="{{ url_for('cameras.redetect_encoders') }}"
+              hx-post="{{ url_for('cameras.redetect_encoders') }}"
+              hx-target="#encoder-status"
+              hx-swap="innerHTML"
+              style="margin-top: 1rem;">
+            <div id="encoder-status"></div>
+            <button type="submit" class="btn btn-secondary btn-sm">Re-detect Encoders</button>
+            <p class="form-help" style="margin-top: 0.5rem;">Use after installing GPU drivers or hardware changes.</p>
+        </form>
     </div>
 
     <div class="settings-card">

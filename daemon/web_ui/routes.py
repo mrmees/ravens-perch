@@ -26,7 +26,7 @@ from ..moonraker_client import (
     unregister_camera as unregister_moonraker_camera,
     build_stream_url, build_snapshot_url, get_system_ip, is_available as moonraker_available
 )
-from ..hardware import estimate_cpu_capability, detect_encoders, get_platform_info
+from ..hardware import estimate_cpu_capability, detect_encoders, get_platform_info, clear_encoder_cache
 from ..camera_manager import (
     find_video_devices, get_device_info, probe_capabilities, auto_configure,
     get_v4l2_controls, set_v4l2_control, get_v4l2_control_value
@@ -611,6 +611,21 @@ def update_global_settings():
         return render_template('partials/settings_success.html')
 
     flash("Settings saved", "success")
+    return redirect(url_for('cameras.settings_page'))
+
+
+@bp.route('/redetect-encoders', methods=['POST'])
+def redetect_encoders():
+    """Clear encoder cache and re-detect hardware encoders."""
+    clear_encoder_cache()
+    encoders = detect_encoders(force=True)
+    encoder_list = [k for k, v in encoders.items() if v]
+    add_log("INFO", f"Re-detected encoders: {encoder_list}")
+
+    if request.headers.get('HX-Request'):
+        return f'<span class="alert alert-success">Encoders re-detected: {", ".join(encoder_list)}</span>'
+
+    flash(f"Encoders re-detected: {', '.join(encoder_list)}", "success")
     return redirect(url_for('cameras.settings_page'))
 
 

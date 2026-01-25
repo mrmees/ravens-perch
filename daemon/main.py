@@ -23,7 +23,8 @@ from .config import (
 from .db import init_db, add_log, get_all_cameras, update_camera
 from .hardware import (
     detect_encoders, check_ffmpeg_available,
-    check_v4l2_utils_available, get_platform_info
+    check_v4l2_utils_available, get_platform_info,
+    init_encoder_cache
 )
 from .camera_manager import (
     CameraMonitor, DeviceInfo, probe_capabilities,
@@ -115,6 +116,9 @@ class RavensPerchDaemon:
             init_db()
             add_log("INFO", "Ravens Perch starting")
 
+            # Initialize encoder cache path
+            init_encoder_cache(str(BASE_DIR / "data"))
+
             # Step 2: Start web UI early so users can access the page during init
             logger.info(f"Starting web UI on {WEB_UI_HOST}:{WEB_UI_PORT}...")
             self._start_web_ui()
@@ -122,22 +126,35 @@ class RavensPerchDaemon:
             # Step 3: Check dependencies
             self._check_dependencies()
 
-            # Step 4: Detect hardware encoders
-            logger.info("Detecting hardware encoders...")
-            self.encoders = detect_encoders()
-            encoder_list = [k for k, v in self.encoders.items() if v]
-            logger.info(f"Available encoders: {encoder_list}")
-            add_log("INFO", f"Available encoders: {encoder_list}")
+            # Step 4: Detect encoders and wait for MediaMTX in parallel
+            import concurrent.futures
 
-            # Step 5: Wait for MediaMTX
-            logger.info("Waiting for MediaMTX...")
-            if not wait_for_mediamtx(timeout=30):
-                logger.warning("MediaMTX not available - streams will not work")
-                add_log("WARNING", "MediaMTX not available")
-            else:
-                logger.info("MediaMTX is available")
+            def detect_encoders_task():
+                encoders = detect_encoders()
+                encoder_list = [k for k, v in encoders.items() if v]
+                logger.info(f"Available encoders: {encoder_list}")
+                add_log("INFO", f"Available encoders: {encoder_list}")
+                return encoders
 
-                # Step 5b: Clean up stale MediaMTX streams
+            def wait_mediamtx_task():
+                logger.info("Waiting for MediaMTX...")
+                available = wait_for_mediamtx(timeout=30)
+                if not available:
+                    logger.warning("MediaMTX not available - streams will not work")
+                    add_log("WARNING", "MediaMTX not available")
+                else:
+                    logger.info("MediaMTX is available")
+                return available
+
+            with concurrent.futures.ThreadPoolExecutor(max_workers=2) as executor:
+                encoder_future = executor.submit(detect_encoders_task)
+                mediamtx_future = executor.submit(wait_mediamtx_task)
+
+                self.encoders = encoder_future.result()
+                mediamtx_available = mediamtx_future.result()
+
+            # Step 5: Clean up stale MediaMTX streams (if available)
+            if mediamtx_available:
                 logger.info("Cleaning up stale MediaMTX streams...")
                 removed = remove_all_streams()
                 if removed > 0:
