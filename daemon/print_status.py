@@ -67,11 +67,9 @@ class PrintStatus:
         # Ensure we never return empty string
         if not result:
             result = "Printing..."
-        # Escape special characters for FFmpeg drawtext filter
-        # % is interpreted as strftime format, : can cause issues in some contexts
-        result = result.replace('%', '%%')
-        result = result.replace(':', '\\:')
-        return result
+        # Escape % for FFmpeg drawtext filter (% is interpreted as strftime format)
+        # Note: Don't escape : here - that's only needed for inline text, not textfile
+        return result.replace('%', '%%')
 
 
 class PrintStatusMonitor:
