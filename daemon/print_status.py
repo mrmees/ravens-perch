@@ -146,7 +146,6 @@ class PrintStatusMonitor:
         self._running = True
         self._thread = threading.Thread(target=self._monitor_loop, daemon=True)
         self._thread.start()
-        logger.info("Print status monitor started")
 
     def stop(self):
         """Stop the status monitoring thread."""
