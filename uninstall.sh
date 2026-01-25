@@ -14,7 +14,6 @@ BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
 INSTALL_DIR="${HOME}/ravens-perch"
-KLIPPER_CONFIG_DIR="${HOME}/printer_data/config"
 
 log_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -114,29 +113,52 @@ if sudo nginx -t 2>/dev/null; then
 fi
 log_success "Nginx configuration removed"
 
-# Remove Moonraker update_manager entry
-log_info "Removing Moonraker configuration..."
-moonraker_conf="${KLIPPER_CONFIG_DIR}/moonraker.conf"
-moonraker_asvc="${HOME}/printer_data/moonraker.asvc"
+# Remove printer UI integrations
+log_info "Removing printer UI integrations..."
+config_dir="${HOME}/printer_data/config"
 
-if [ -f "${moonraker_conf}" ]; then
-    if grep -q "\[update_manager ravens-perch\]" "${moonraker_conf}"; then
-        # Remove the ravens-perch section
-        sudo sed -i '/\[update_manager ravens-perch\]/,/^$/d' "${moonraker_conf}" 2>/dev/null || true
-        log_success "Removed from Moonraker configuration"
+# Remove Mainsail sidebar entry
+mainsail_sidebar="${config_dir}/.theme/sidebar.json"
+if [ -f "$mainsail_sidebar" ]; then
+    if grep -q "Ravens Perch" "$mainsail_sidebar" 2>/dev/null; then
+        log_info "Removing Ravens Perch from Mainsail sidebar..."
+        python3 - "$mainsail_sidebar" << 'PYTHON_SCRIPT' 2>/dev/null || true
+import sys
+import json
+
+sidebar_file = sys.argv[1]
+
+with open(sidebar_file, 'r') as f:
+    sidebar = json.load(f)
+
+# Remove Ravens Perch entry
+sidebar = [item for item in sidebar if item.get('title') != 'Ravens Perch']
+
+if sidebar:
+    with open(sidebar_file, 'w') as f:
+        json.dump(sidebar, f, indent=2)
+else:
+    # Empty array - delete the file
+    import os
+    os.remove(sidebar_file)
+PYTHON_SCRIPT
+        log_success "Removed Ravens Perch from Mainsail sidebar"
     fi
 fi
 
-# Remove services from moonraker.asvc
-if [ -f "${moonraker_asvc}" ]; then
-    log_info "Removing services from moonraker.asvc..."
-    for service in ravens-perch mediamtx; do
-        if grep -q "^${service}$" "${moonraker_asvc}"; then
-            sed -i "/^${service}$/d" "${moonraker_asvc}" 2>/dev/null || true
-            log_info "Removed ${service} from moonraker.asvc"
+# Remove Fluidd CSS
+fluidd_css="${config_dir}/.fluidd-theme/custom.css"
+if [ -f "$fluidd_css" ]; then
+    if grep -q "Ravens Perch Integration" "$fluidd_css" 2>/dev/null; then
+        log_info "Removing Ravens Perch CSS from Fluidd theme..."
+        # Remove the Ravens Perch section using sed
+        sed -i '/\/\* Ravens Perch Integration \*\//,/^$/d' "$fluidd_css" 2>/dev/null || true
+        # If file is now empty (just whitespace), remove it
+        if [ ! -s "$fluidd_css" ] || ! grep -q '[^[:space:]]' "$fluidd_css" 2>/dev/null; then
+            rm -f "$fluidd_css"
         fi
-    done
-    log_success "Service permissions removed"
+        log_success "Removed Ravens Perch CSS from Fluidd theme"
+    fi
 fi
 
 # Ask about keeping data
@@ -175,8 +197,7 @@ echo ""
 echo "The following have been removed:"
 echo "  - Systemd services (ravens-perch, mediamtx)"
 echo "  - Nginx configuration (/cameras/ location)"
-echo "  - Moonraker update_manager entry"
-echo "  - Moonraker service permissions (moonraker.asvc)"
+echo "  - Printer UI integrations (Mainsail sidebar, Fluidd CSS)"
 if [[ "$remove_all" == "y" || "$remove_all" == "Y" ]]; then
     echo "  - Install directory (${INSTALL_DIR})"
 else

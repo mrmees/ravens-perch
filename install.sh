@@ -17,32 +17,6 @@ NC='\033[0m' # No Color
 RAVENS_USER="${USER}"
 INSTALL_DIR="${HOME}/ravens-perch"
 MEDIAMTX_VERSION="v1.5.1"
-KLIPPER_CONFIG_DIR="${HOME}/printer_data/config"
-
-# Detect git origin URL (for Moonraker update_manager)
-detect_git_origin() {
-    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-    local origin_url=""
-
-    # Try to get origin from the source directory
-    if [ -d "${script_dir}/.git" ]; then
-        origin_url=$(git -C "${script_dir}" remote get-url origin 2>/dev/null)
-    fi
-
-    # Try install directory if source didn't have it
-    if [ -z "$origin_url" ] && [ -d "${INSTALL_DIR}/.git" ]; then
-        origin_url=$(git -C "${INSTALL_DIR}" remote get-url origin 2>/dev/null)
-    fi
-
-    # Fallback to default
-    if [ -z "$origin_url" ]; then
-        origin_url="https://github.com/mrmees/ravens-perch.git"
-    fi
-
-    echo "$origin_url"
-}
-
-GIT_ORIGIN_URL=""
 
 # Logging functions
 log_info() {
@@ -460,64 +434,149 @@ PYTHON_SCRIPT
     fi
 }
 
-# Add to Moonraker update_manager
-configure_moonraker() {
-    log_info "Configuring Moonraker update manager..."
+# Configure printer UI integrations (Mainsail/Fluidd)
+configure_printer_ui() {
+    local config_dir="${HOME}/printer_data/config"
 
-    local moonraker_conf="${KLIPPER_CONFIG_DIR}/moonraker.conf"
-    local moonraker_asvc="${HOME}/printer_data/moonraker.asvc"
+    # Check if printer_data exists
+    if [ ! -d "$config_dir" ]; then
+        log_info "No printer_data/config found, skipping UI integration"
+        return
+    fi
 
-    if [ -f "${moonraker_conf}" ]; then
-        if ! grep -q "\[update_manager ravens-perch\]" "${moonraker_conf}"; then
-            log_info "Adding ravens-perch to moonraker.conf..."
-            cat >> "${moonraker_conf}" << EOF
+    echo ""
+    log_info "Optional: Add Ravens Perch to your printer interface"
+    echo ""
 
-[update_manager ravens-perch]
-type: git_repo
-path: ${INSTALL_DIR}
-origin: ${GIT_ORIGIN_URL}
-primary_branch: main
-managed_services: ravens-perch mediamtx
+    # Mainsail integration
+    read -p "Add Ravens Perch to Mainsail sidebar? (y/N): " mainsail_choice
+    if [[ "$mainsail_choice" == "y" || "$mainsail_choice" == "Y" ]]; then
+        local mainsail_theme_dir="${config_dir}/.theme"
+        local mainsail_sidebar="${mainsail_theme_dir}/sidebar.json"
+
+        mkdir -p "$mainsail_theme_dir"
+
+        # Camera icon SVG path from Material Design Icons
+        local camera_icon="M12,10L11.06,12.06L9,13L11.06,13.94L12,16L12.94,13.94L15,13L12.94,12.06L12,10M20,5H16.83L15,3H9L7.17,5H4A2,2 0 0,0 2,7V19A2,2 0 0,0 4,21H20A2,2 0 0,0 22,19V7A2,2 0 0,0 20,5M20,19H4V7H8.05L9.88,5H14.12L15.95,7H20V19M12,8A5,5 0 0,0 7,13A5,5 0 0,0 12,18A5,5 0 0,0 17,13A5,5 0 0,0 12,8M12,16A3,3 0 0,1 9,13A3,3 0 0,1 12,10A3,3 0 0,1 15,13A3,3 0 0,1 12,16Z"
+
+        if [ -f "$mainsail_sidebar" ]; then
+            # File exists - check if we're already in it
+            if grep -q "Ravens Perch" "$mainsail_sidebar" 2>/dev/null; then
+                log_info "Ravens Perch already in Mainsail sidebar"
+            else
+                # Merge with existing file using Python
+                python3 - "$mainsail_sidebar" "$camera_icon" << 'PYTHON_SCRIPT'
+import sys
+import json
+
+sidebar_file = sys.argv[1]
+icon = sys.argv[2]
+
+with open(sidebar_file, 'r') as f:
+    sidebar = json.load(f)
+
+# Add Ravens Perch entry
+ravens_entry = {
+    "title": "Ravens Perch",
+    "href": "/cameras/",
+    "target": "_self",
+    "position": 25,
+    "icon": icon
+}
+
+# Check if already exists
+if not any(item.get('title') == 'Ravens Perch' for item in sidebar):
+    sidebar.append(ravens_entry)
+    with open(sidebar_file, 'w') as f:
+        json.dump(sidebar, f, indent=2)
+    print("Added Ravens Perch to existing sidebar.json")
+else:
+    print("Ravens Perch already in sidebar.json")
+PYTHON_SCRIPT
+                log_success "Added Ravens Perch to Mainsail sidebar"
+            fi
+        else
+            # Create new sidebar.json
+            cat > "$mainsail_sidebar" << EOF
+[
+  {
+    "title": "Ravens Perch",
+    "href": "/cameras/",
+    "target": "_self",
+    "position": 25,
+    "icon": "${camera_icon}"
+  }
+]
 EOF
-            log_success "Added to Moonraker update manager"
+            log_success "Created Mainsail sidebar with Ravens Perch link"
+        fi
+    fi
+
+    # Fluidd integration
+    read -p "Add Ravens Perch link to Fluidd? (y/N): " fluidd_choice
+    if [[ "$fluidd_choice" == "y" || "$fluidd_choice" == "Y" ]]; then
+        local fluidd_theme_dir="${config_dir}/.fluidd-theme"
+        local fluidd_css="${fluidd_theme_dir}/custom.css"
+
+        mkdir -p "$fluidd_theme_dir"
+
+        # CSS to add a Ravens Perch link banner
+        local ravens_css='/* Ravens Perch Integration */
+/* Adds a link banner to access Ravens Perch camera settings */
+
+/* Banner at top of camera settings section */
+#camera::after {
+  content: "Manage cameras with Ravens Perch";
+  display: block;
+  margin: 8px 16px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.15), rgba(var(--color-primary-rgb), 0.05));
+  border: 1px solid rgba(var(--color-primary-rgb), 0.3);
+  border-radius: 4px;
+  font-size: 14px;
+  color: var(--color-primary);
+  cursor: pointer;
+  text-align: center;
+}
+
+#camera::after:hover {
+  background: linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.25), rgba(var(--color-primary-rgb), 0.1));
+}
+
+/* Add clickable link using CSS trick with full-width anchor overlay */
+#camera {
+  position: relative;
+}
+
+#camera::before {
+  content: "→ /cameras/";
+  position: absolute;
+  right: 16px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  color: var(--color-primary);
+  opacity: 0.8;
+}
+'
+
+        if [ -f "$fluidd_css" ]; then
+            # Check if already added
+            if grep -q "Ravens Perch Integration" "$fluidd_css" 2>/dev/null; then
+                log_info "Ravens Perch CSS already in Fluidd theme"
+            else
+                # Append to existing file
+                echo "" >> "$fluidd_css"
+                echo "$ravens_css" >> "$fluidd_css"
+                log_success "Added Ravens Perch CSS to Fluidd theme"
+            fi
         else
-            log_info "Already configured in Moonraker"
+            # Create new custom.css
+            echo "$ravens_css" > "$fluidd_css"
+            log_success "Created Fluidd theme with Ravens Perch link"
         fi
 
-        # Add services to moonraker.asvc for service management permissions
-        if [ -f "${moonraker_asvc}" ]; then
-            log_info "Adding services to moonraker.asvc..."
-            for service in ravens-perch mediamtx; do
-                if ! grep -q "^${service}$" "${moonraker_asvc}"; then
-                    echo "${service}" >> "${moonraker_asvc}"
-                    log_info "Added ${service} to moonraker.asvc"
-                fi
-            done
-            log_success "Service permissions configured"
-        else
-            log_warn "moonraker.asvc not found at ${moonraker_asvc}"
-            log_info "To allow Moonraker to manage services, create the file and add:"
-            echo ""
-            echo "ravens-perch"
-            echo "mediamtx"
-            echo ""
-        fi
-    else
-        log_warn "moonraker.conf not found at ${moonraker_conf}"
-        log_info "To enable automatic updates, add to your moonraker.conf:"
-        echo ""
-        echo "[update_manager ravens-perch]"
-        echo "type: git_repo"
-        echo "path: ${INSTALL_DIR}"
-        echo "origin: ${GIT_ORIGIN_URL}"
-        echo "primary_branch: main"
-        echo "managed_services: ravens-perch mediamtx"
-        echo ""
-        log_info "And add to ${moonraker_asvc}:"
-        echo ""
-        echo "ravens-perch"
-        echo "mediamtx"
-        echo ""
+        log_info "Note: The Fluidd link is informational - navigate to /cameras/ for settings"
     fi
 }
 
@@ -572,9 +631,6 @@ main() {
 
     check_user
 
-    # Detect git origin before any file copying
-    GIT_ORIGIN_URL=$(detect_git_origin)
-
     if is_raspberry_pi; then
         log_info "Detected Raspberry Pi"
     elif is_rockchip; then
@@ -583,7 +639,6 @@ main() {
 
     log_info "Architecture: $(detect_arch)"
     log_info "Install directory: ${INSTALL_DIR}"
-    log_info "Git origin: ${GIT_ORIGIN_URL}"
     echo ""
 
     install_system_packages
@@ -595,7 +650,7 @@ main() {
     create_mediamtx_service
     create_ravens_service
     configure_nginx
-    configure_moonraker
+    configure_printer_ui
     start_services
 
     print_success
