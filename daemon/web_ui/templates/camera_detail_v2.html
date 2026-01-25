@@ -1,0 +1,1040 @@
+{% extends "base.html" %}
+
+{% block title %}{{ camera.friendly_name }} - Ravens Perch{% endblock %}
+
+{% block content %}
+<div class="page-header">
+    <a href="{{ url_for('cameras.dashboard') }}" class="back-link">&larr; Back to Cameras</a>
+    <h1 id="camera-name">{{ camera.friendly_name }}</h1>
+    <div class="header-status">
+        {% if camera.connected %}
+            {% if camera.stream_active %}
+                <span class="status-badge status-active">Live</span>
+            {% else %}
+                <span class="status-badge status-starting">Starting</span>
+            {% endif %}
+        {% else %}
+            <span class="status-badge status-offline">Offline</span>
+        {% endif %}
+    </div>
+</div>
+
+<div class="camera-layout-v2">
+    <!-- Action Buttons -->
+    <div class="camera-actions-bar">
+        {% if camera.connected %}
+            <button class="btn btn-secondary"
+                    hx-post="{{ url_for('cameras.restart_camera_stream', camera_id=camera.id) }}"
+                    hx-swap="none">
+                Restart Stream
+            </button>
+        {% endif %}
+        <a href="{{ camera.stream_urls.webrtc }}" target="_blank" class="btn btn-secondary">
+            Open in New Tab
+        </a>
+    </div>
+
+    <!-- Video Preview -->
+    <div class="preview-container-v2">
+        {% if camera.connected and camera.stream_active %}
+            <iframe src="{{ camera.stream_urls.webrtc }}"
+                    class="preview-iframe"
+                    allow="autoplay"
+                    allowfullscreen></iframe>
+        {% else %}
+            <img src="{{ url_for('cameras.snapshot', camera_id=camera.id) }}"
+                 alt="{{ camera.friendly_name }}"
+                 class="preview-image"
+                 id="preview-image">
+            <div class="preview-overlay">
+                {% if not camera.connected %}
+                    <span>Camera Disconnected</span>
+                {% else %}
+                    <span>Stream Starting...</span>
+                {% endif %}
+            </div>
+        {% endif %}
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="tabs-container-v2">
+        <!-- Mobile: Dropdown selector -->
+        <div class="tabs-mobile">
+            <select id="tab-select" class="tab-dropdown" onchange="switchTabMobile(this.value)">
+                <option value="basic" selected>Basic Settings</option>
+                <option value="encoding">Encoding</option>
+                <option value="overlay">Overlay</option>
+                {% if camera.connected %}
+                <option value="controls">Controls</option>
+                {% endif %}
+                <option value="info">Info</option>
+            </select>
+        </div>
+
+        <!-- Desktop: Horizontal tabs -->
+        <div class="tabs-desktop">
+            <button class="tab-btn active" data-tab="basic">Basic</button>
+            <button class="tab-btn" data-tab="encoding">Encoding</button>
+            <button class="tab-btn" data-tab="overlay">Overlay</button>
+            {% if camera.connected %}
+            <button class="tab-btn" data-tab="controls">Controls</button>
+            {% endif %}
+            <button class="tab-btn" data-tab="info">Info</button>
+        </div>
+
+        <!-- Tab Content -->
+        <div class="tabs-content-v2">
+            <!-- Basic Settings Tab -->
+            <div class="tab-panel active" id="tab-basic">
+                <form method="POST"
+                      action="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
+                      hx-post="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
+                      hx-swap="innerHTML"
+                      hx-target="#basic-status"
+                      class="settings-form">
+
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="friendly_name">Name</label>
+                            <input type="text"
+                                   id="friendly_name"
+                                   name="friendly_name"
+                                   value="{{ camera.friendly_name }}"
+                                   hx-post="{{ url_for('cameras.rename_camera', camera_id=camera.id) }}"
+                                   hx-trigger="blur changed"
+                                   hx-swap="innerHTML"
+                                   hx-target="#camera-name">
+                        </div>
+                        <div class="form-group">
+                            <label for="format">Input Format</label>
+                            <select id="format" name="format"
+                                    hx-get="{{ url_for('cameras.api_resolutions', camera_id=camera.id) }}"
+                                    hx-trigger="change"
+                                    hx-target="#resolution"
+                                    hx-include="#resolution, #framerate">
+                                {% for fmt in capabilities.keys() %}
+                                    <option value="{{ fmt }}"
+                                            {% if camera.settings and camera.settings.format == fmt %}selected{% endif %}>
+                                        {{ fmt|upper }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="resolution">Resolution</label>
+                            <select id="resolution" name="resolution"
+                                    hx-get="{{ url_for('cameras.api_framerates', camera_id=camera.id) }}"
+                                    hx-trigger="change"
+                                    hx-target="#framerate"
+                                    hx-include="[name='format'], #framerate, #standby_framerate">
+                                {% for res in resolutions %}
+                                    <option value="{{ res }}"
+                                            {% if camera.settings and camera.settings.resolution == res %}selected{% endif %}>
+                                        {{ res }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="framerate">Framerate</label>
+                            <select id="framerate" name="framerate">
+                                {% for fps in framerates %}
+                                    <option value="{{ fps }}"
+                                            {% if camera.settings and camera.settings.framerate == fps %}selected{% endif %}>
+                                        {{ fps }} fps
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group form-group-toggle">
+                        <label class="toggle-label">
+                            <span>Enable Camera</span>
+                            <div class="toggle-switch"
+                                 hx-post="{{ url_for('cameras.toggle_enable', camera_id=camera.id) }}"
+                                 hx-swap="outerHTML">
+                                <input type="checkbox"
+                                       {% if camera.enabled %}checked{% endif %}
+                                       disabled>
+                                <span class="toggle-slider"></span>
+                            </div>
+                        </label>
+                    </div>
+
+                    <div class="form-divider"></div>
+
+                    <div class="form-grid form-grid-half">
+                        <div class="form-group form-group-toggle">
+                            <label class="toggle-label">
+                                <span>Reduce framerate when idle</span>
+                                <input type="hidden" name="standby_enabled" value="0">
+                                <div class="toggle-switch">
+                                    <input type="checkbox"
+                                           id="standby_enabled"
+                                           name="standby_enabled"
+                                           value="1"
+                                           {% if camera.settings and camera.settings.standby_enabled %}checked{% endif %}
+                                           onchange="document.getElementById('standby_framerate').disabled = !this.checked;">
+                                    <span class="toggle-slider"></span>
+                                </div>
+                            </label>
+                            <p class="form-help">Lower framerate when printer is idle.</p>
+                        </div>
+                        <div class="form-group">
+                            <label for="standby_framerate">Idle Framerate</label>
+                            <select id="standby_framerate" name="standby_framerate"
+                                    {% if not (camera.settings and camera.settings.standby_enabled) %}disabled{% endif %}>
+                                {% for fps in framerates %}
+                                    <option value="{{ fps }}"
+                                            {% if camera.settings and camera.settings.standby_framerate == fps %}selected{% endif %}>
+                                        {{ fps }} fps
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="basic-status" class="form-status"></div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">Save Basic Settings</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Encoding Tab -->
+            <div class="tab-panel" id="tab-encoding">
+                <form method="POST"
+                      action="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
+                      hx-post="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
+                      hx-swap="innerHTML"
+                      hx-target="#encoding-status"
+                      class="settings-form">
+
+                    <div class="form-grid">
+                        <div class="form-group">
+                            <label for="encoder">Encoder</label>
+                            <select id="encoder" name="encoder" onchange="updateEncoderWarning(this)">
+                                <option value="libx264"
+                                        {% if camera.settings and camera.settings.encoder == 'libx264' %}selected{% endif %}>
+                                    Software (libx264)
+                                </option>
+                                {% if encoders.vaapi %}
+                                <option value="h264_vaapi"
+                                        {% if camera.settings and camera.settings.encoder == 'h264_vaapi' %}selected{% endif %}>
+                                    VAAPI (Intel/AMD GPU)
+                                </option>
+                                {% endif %}
+                                {% if encoders.rkmpp %}
+                                <option value="h264_rkmpp"
+                                        {% if camera.settings and camera.settings.encoder == 'h264_rkmpp' %}selected{% endif %}>
+                                    RKMPP (Rockchip)
+                                </option>
+                                {% endif %}
+                                {% if encoders.v4l2m2m %}
+                                <option value="h264_v4l2m2m"
+                                        {% if camera.settings and camera.settings.encoder == 'h264_v4l2m2m' %}selected{% endif %}>
+                                    V4L2M2M (Raspberry Pi)
+                                </option>
+                                {% endif %}
+                            </select>
+                            <p class="form-help">Hardware encoders reduce CPU usage.</p>
+                            <p class="form-help form-warning" id="rkmpp-warning" style="display: none;">
+                                RKMPP has limited support and may not work reliably.
+                            </p>
+                        </div>
+                        <div class="form-group">
+                            <label for="bitrate">Bitrate</label>
+                            <select id="bitrate" name="bitrate">
+                                {% for br in ['1M', '2M', '4M', '6M', '8M', '10M'] %}
+                                    <option value="{{ br }}"
+                                            {% if camera.settings and camera.settings.bitrate == br %}selected{% endif %}>
+                                        {{ br }}bps
+                                    </option>
+                                {% endfor %}
+                            </select>
+                            <p class="form-help">Higher = better quality, more bandwidth.</p>
+                        </div>
+                        <div class="form-group">
+                            <label for="rotation">Rotation</label>
+                            <select id="rotation" name="rotation">
+                                <option value="0" {% if camera.settings and camera.settings.rotation == 0 %}selected{% endif %}>None</option>
+                                <option value="90" {% if camera.settings and camera.settings.rotation == 90 %}selected{% endif %}>90&deg;</option>
+                                <option value="180" {% if camera.settings and camera.settings.rotation == 180 %}selected{% endif %}>180&deg;</option>
+                                <option value="270" {% if camera.settings and camera.settings.rotation == 270 %}selected{% endif %}>270&deg;</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="encoding-status" class="form-status"></div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">Save Encoding Settings</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Overlay Tab -->
+            <div class="tab-panel" id="tab-overlay">
+                <form method="POST"
+                      action="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
+                      hx-post="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
+                      hx-swap="innerHTML"
+                      hx-target="#overlay-status"
+                      class="settings-form">
+
+                    <div class="form-group form-group-toggle">
+                        <label class="toggle-label">
+                            <span>Enable Overlay</span>
+                            <label class="toggle-switch">
+                                <input type="checkbox" name="overlay_enabled" value="1"
+                                       {% if camera.settings and camera.settings.overlay_enabled %}checked{% endif %}>
+                                <span class="toggle-slider"></span>
+                            </label>
+                        </label>
+                    </div>
+
+                    <div class="form-grid form-grid-quad">
+                        <div class="form-group">
+                            <label for="overlay_font">Font</label>
+                            <div id="font-select-container"
+                                 hx-get="{{ url_for('cameras.api_fonts') }}?current={{ camera.settings.overlay_font|default('', true)|urlencode }}"
+                                 hx-trigger="load"
+                                 hx-target="this"
+                                 hx-swap="innerHTML">
+                                <select id="overlay_font" name="overlay_font">
+                                    <option value="">Loading...</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label for="overlay_font_size">Size</label>
+                            <select id="overlay_font_size" name="overlay_font_size">
+                                {% for size in [16, 20, 24, 28, 32, 36, 48, 64] %}
+                                    <option value="{{ size }}"
+                                            {% if camera.settings and camera.settings.overlay_font_size == size %}selected{% endif %}
+                                            {% if not camera.settings and size == 24 %}selected{% endif %}>
+                                        {{ size }}px
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="overlay_position">Position</label>
+                            <select id="overlay_position" name="overlay_position">
+                                {% set positions = [('top_left', 'Top Left'), ('top_center', 'Top Center'), ('top_right', 'Top Right'), ('bottom_left', 'Bottom Left'), ('bottom_center', 'Bottom Center'), ('bottom_right', 'Bottom Right')] %}
+                                {% for value, label in positions %}
+                                    <option value="{{ value }}"
+                                            {% if camera.settings and camera.settings.overlay_position == value %}selected{% endif %}
+                                            {% if not camera.settings and value == 'bottom_center' %}selected{% endif %}>
+                                        {{ label }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="overlay_color">Color</label>
+                            <select id="overlay_color" name="overlay_color">
+                                {% set colors = [('white', 'White'), ('yellow', 'Yellow'), ('cyan', 'Cyan'), ('green', 'Green'), ('red', 'Red'), ('orange', 'Orange')] %}
+                                {% for value, label in colors %}
+                                    <option value="{{ value }}"
+                                            {% if camera.settings and camera.settings.overlay_color == value %}selected{% endif %}
+                                            {% if not camera.settings and value == 'white' %}selected{% endif %}>
+                                        {{ label }}
+                                    </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-grid form-grid-triple">
+                        <div class="form-group form-group-toggle">
+                            <label class="toggle-label">
+                                <span>Multi-line</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" name="overlay_multiline" value="1"
+                                           {% if camera.settings and camera.settings.overlay_multiline %}checked{% endif %}>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </label>
+                        </div>
+                        <div class="form-group form-group-toggle">
+                            <label class="toggle-label">
+                                <span>Show Labels</span>
+                                <label class="toggle-switch">
+                                    <input type="checkbox" name="overlay_show_labels" value="1"
+                                           {% if camera.settings and camera.settings.overlay_show_labels != False %}checked{% endif %}>
+                                    <span class="toggle-slider"></span>
+                                </label>
+                            </label>
+                        </div>
+                        <div class="form-group">
+                            <label for="overlay_update_interval">Update Interval</label>
+                            <div class="range-with-value">
+                                <input type="range" id="overlay_update_interval" name="overlay_update_interval"
+                                       min="1" max="10" value="{{ settings.get('overlay_update_interval', 5) }}"
+                                       oninput="document.getElementById('interval-val').textContent = this.value + 's'">
+                                <span id="interval-val" class="range-value">{{ settings.get('overlay_update_interval', 5) }}s</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Stats to Display</label>
+                        <div class="checkbox-grid-v2">
+                            <label class="checkbox-label"><input type="checkbox" name="overlay_show_progress" value="1" {% if camera.settings and camera.settings.overlay_show_progress != False %}checked{% endif %}><span>Progress %</span></label>
+                            <label class="checkbox-label"><input type="checkbox" name="overlay_show_layer" value="1" {% if camera.settings and camera.settings.overlay_show_layer != False %}checked{% endif %}><span>Layer</span></label>
+                            <label class="checkbox-label"><input type="checkbox" name="overlay_show_eta" value="1" {% if camera.settings and camera.settings.overlay_show_eta != False %}checked{% endif %}><span>ETA</span></label>
+                            <label class="checkbox-label"><input type="checkbox" name="overlay_show_elapsed" value="1" {% if camera.settings and camera.settings.overlay_show_elapsed %}checked{% endif %}><span>Elapsed</span></label>
+                            <label class="checkbox-label"><input type="checkbox" name="overlay_show_filename" value="1" {% if camera.settings and camera.settings.overlay_show_filename %}checked{% endif %}><span>Filename</span></label>
+                            <label class="checkbox-label"><input type="checkbox" name="overlay_show_print_state" value="1" {% if camera.settings and camera.settings.overlay_show_print_state %}checked{% endif %}><span>State</span></label>
+                            <label class="checkbox-label"><input type="checkbox" name="overlay_show_hotend_temp" value="1" {% if camera.settings and camera.settings.overlay_show_hotend_temp %}checked{% endif %}><span>Hotend</span></label>
+                            <label class="checkbox-label"><input type="checkbox" name="overlay_show_bed_temp" value="1" {% if camera.settings and camera.settings.overlay_show_bed_temp %}checked{% endif %}><span>Bed</span></label>
+                            <label class="checkbox-label"><input type="checkbox" name="overlay_show_fan_speed" value="1" {% if camera.settings and camera.settings.overlay_show_fan_speed %}checked{% endif %}><span>Fan</span></label>
+                            <label class="checkbox-label"><input type="checkbox" name="overlay_show_print_speed" value="1" {% if camera.settings and camera.settings.overlay_show_print_speed %}checked{% endif %}><span>Speed</span></label>
+                            <label class="checkbox-label"><input type="checkbox" name="overlay_show_z_height" value="1" {% if camera.settings and camera.settings.overlay_show_z_height %}checked{% endif %}><span>Z Height</span></label>
+                            <label class="checkbox-label"><input type="checkbox" name="overlay_show_filament_used" value="1" {% if camera.settings and camera.settings.overlay_show_filament_used %}checked{% endif %}><span>Filament</span></label>
+                            <label class="checkbox-label"><input type="checkbox" name="overlay_show_current_time" value="1" {% if camera.settings and camera.settings.overlay_show_current_time %}checked{% endif %}><span>Time</span></label>
+                            <label class="checkbox-label"><input type="checkbox" name="overlay_show_live_velocity" value="1" {% if camera.settings and camera.settings.overlay_show_live_velocity %}checked{% endif %}><span>Velocity</span></label>
+                            <label class="checkbox-label"><input type="checkbox" name="overlay_show_flow_rate" value="1" {% if camera.settings and camera.settings.overlay_show_flow_rate %}checked{% endif %}><span>Flow</span></label>
+                            <label class="checkbox-label"><input type="checkbox" name="overlay_show_filament_type" value="1" {% if camera.settings and camera.settings.overlay_show_filament_type %}checked{% endif %}><span>Material</span></label>
+                        </div>
+                    </div>
+
+                    <div id="overlay-status" class="form-status"></div>
+                    <div class="form-actions">
+                        <button type="submit" class="btn btn-primary">Save Overlay Settings</button>
+                    </div>
+                </form>
+            </div>
+
+            <!-- Camera Controls Tab -->
+            {% if camera.connected %}
+            <div class="tab-panel" id="tab-controls">
+                <p class="form-help" style="margin-bottom: 0.5rem;">
+                    Brightness, contrast, exposure, and other hardware controls. Changes apply immediately.
+                </p>
+                <p class="form-help" style="margin-bottom: 1rem; font-style: italic;">
+                    Note: Some controls depend on others. For example, White Balance Temperature only applies when White Balance Automatic is disabled.
+                </p>
+                <div id="v4l2-controls"
+                     hx-get="{{ url_for('cameras.api_get_controls', camera_id=camera.id) }}"
+                     hx-trigger="load"
+                     hx-swap="innerHTML">
+                    <div class="loading-controls">Loading camera controls...</div>
+                </div>
+            </div>
+            {% endif %}
+
+            <!-- Info Tab -->
+            <div class="tab-panel" id="tab-info">
+                <div class="info-grid-v2">
+                    <div class="info-section">
+                        <h4>Stream URLs</h4>
+                        <div class="url-list">
+                            <div class="url-item"><label>WebRTC</label><code>{{ camera.stream_urls.webrtc }}</code></div>
+                            <div class="url-item"><label>RTSP</label><code>{{ camera.stream_urls.rtsp }}</code></div>
+                            <div class="url-item"><label>Snapshot</label><code>{{ camera.stream_urls.snapshot }}</code></div>
+                        </div>
+                    </div>
+
+                    <div class="info-section">
+                        <h4>Device</h4>
+                        <dl class="info-list">
+                            <dt>Hardware</dt><dd>{{ camera.hardware_name }}</dd>
+                            {% if camera.serial_number %}<dt>Serial</dt><dd>{{ camera.serial_number }}</dd>{% endif %}
+                            <dt>Path</dt><dd>{{ camera.device_path or 'Not connected' }}</dd>
+                            <dt>First Seen</dt><dd>{{ camera.first_seen }}</dd>
+                        </dl>
+                    </div>
+                </div>
+
+                {% if ffmpeg_cmd %}
+                <div class="info-section" style="margin-top: 1rem;">
+                    <h4>FFmpeg Command</h4>
+                    <div class="ffmpeg-command"><code>{{ ffmpeg_cmd }}</code></div>
+                </div>
+                {% endif %}
+
+                <div class="danger-section">
+                    <h4>Danger Zone</h4>
+                    <div class="danger-actions">
+                        <form action="{{ url_for('cameras.delete_camera', camera_id=camera.id) }}" method="POST"
+                              onsubmit="return confirm('Delete this camera?');">
+                            <button type="submit" class="btn btn-danger btn-sm">Delete</button>
+                        </form>
+                        <form action="{{ url_for('cameras.ignore_camera_route', camera_id=camera.id) }}" method="POST"
+                              onsubmit="return confirm('Ignore this camera permanently?');">
+                            <button type="submit" class="btn btn-danger btn-sm">Ignore</button>
+                        </form>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Mobile Sticky Save (appears per active form) -->
+    <div class="mobile-sticky-actions" id="mobile-sticky">
+        <button type="button" class="btn btn-primary btn-full" onclick="submitActiveForm()">
+            Save Changes
+        </button>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    // Tab switching for desktop
+    document.querySelectorAll('.tab-btn').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            switchTab(this.dataset.tab);
+        });
+    });
+
+    // Tab switching for mobile dropdown
+    function switchTabMobile(tabId) {
+        switchTab(tabId);
+    }
+
+    // Unified tab switch
+    function switchTab(tabId) {
+        // Update desktop buttons
+        document.querySelectorAll('.tab-btn').forEach(function(b) { b.classList.remove('active'); });
+        var activeBtn = document.querySelector('.tab-btn[data-tab="' + tabId + '"]');
+        if (activeBtn) activeBtn.classList.add('active');
+
+        // Update mobile dropdown
+        document.getElementById('tab-select').value = tabId;
+
+        // Update panels
+        document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
+        document.getElementById('tab-' + tabId).classList.add('active');
+
+        // Show/hide sticky save button based on whether tab has a form
+        updateStickyButton(tabId);
+    }
+
+    // Show sticky button only for tabs with forms
+    function updateStickyButton(tabId) {
+        var sticky = document.getElementById('mobile-sticky');
+        var hasForm = ['basic', 'encoding', 'overlay'].includes(tabId);
+        sticky.classList.toggle('visible', hasForm);
+    }
+
+    // Submit the active form from sticky button
+    function submitActiveForm() {
+        var activePanel = document.querySelector('.tab-panel.active');
+        if (activePanel) {
+            var form = activePanel.querySelector('form');
+            if (form) {
+                htmx.trigger(form, 'submit');
+            }
+        }
+    }
+
+    // Initialize sticky button state
+    updateStickyButton('basic');
+
+    // Refresh snapshot preview
+    var previewImage = document.getElementById('preview-image');
+    if (previewImage) {
+        setInterval(function() {
+            var src = previewImage.src.split('?')[0];
+            previewImage.src = src + '?t=' + Date.now();
+        }, 2000);
+    }
+
+    // Encoder warning
+    function updateEncoderWarning(select) {
+        var warning = document.getElementById('rkmpp-warning');
+        if (warning) warning.style.display = select.value === 'h264_rkmpp' ? 'block' : 'none';
+    }
+
+    // Selection warnings
+    document.body.addEventListener('htmx:afterRequest', function(event) {
+        var trigger = event.detail.xhr.getResponseHeader('HX-Trigger');
+        if (trigger === 'selectionChanged') {
+            // Could show a toast notification here
+        }
+    });
+
+    document.body.addEventListener('htmx:afterSwap', function(event) {
+        if (event.detail.target.id === 'resolution') {
+            var resolution = document.getElementById('resolution');
+            if (resolution) htmx.trigger(resolution, 'change');
+        }
+    });
+
+    document.addEventListener('DOMContentLoaded', function() {
+        var encoderSelect = document.getElementById('encoder');
+        if (encoderSelect) updateEncoderWarning(encoderSelect);
+    });
+</script>
+
+<style>
+    /* ========================================
+       RESPONSIVE CAMERA DETAIL V2
+       Mobile-first approach
+       ======================================== */
+
+    /* Base (Mobile) Styles */
+    .camera-layout-v2 {
+        max-width: 1000px;
+        margin: 0 auto;
+        padding-bottom: 80px; /* Space for sticky button */
+    }
+
+    /* Action buttons */
+    .camera-actions-bar {
+        display: flex;
+        gap: 0.5rem;
+        margin-bottom: 1rem;
+        flex-wrap: wrap;
+    }
+    .camera-actions-bar .btn {
+        flex: 1;
+        min-width: 120px;
+        text-align: center;
+    }
+
+    /* Video Preview */
+    .preview-container-v2 {
+        position: relative;
+        width: 100%;
+        aspect-ratio: 16/9;
+        background: var(--bg-tertiary);
+        border-radius: var(--radius);
+        overflow: hidden;
+        margin-bottom: 1rem;
+    }
+    .preview-container-v2 iframe,
+    .preview-container-v2 img {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+        border: none;
+    }
+    .preview-container-v2 .preview-overlay {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(0,0,0,0.5);
+        color: var(--text-secondary);
+    }
+
+    /* Tabs Container */
+    .tabs-container-v2 {
+        background: var(--bg-secondary);
+        border-radius: var(--radius);
+        overflow: hidden;
+    }
+
+    /* Mobile: Show dropdown, hide buttons */
+    .tabs-mobile {
+        display: block;
+        padding: 0.75rem;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .tab-dropdown {
+        width: 100%;
+        padding: 0.75rem 1rem;
+        font-size: 1rem;
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius);
+        color: var(--text-primary);
+        cursor: pointer;
+    }
+    .tabs-desktop {
+        display: none;
+    }
+
+    /* Tab Content */
+    .tabs-content-v2 {
+        padding: 1rem;
+    }
+    .tab-panel {
+        display: none;
+    }
+    .tab-panel.active {
+        display: block;
+    }
+
+    /* Form Styles - Mobile First (single column) */
+    .settings-form {
+        display: flex;
+        flex-direction: column;
+        gap: 1rem;
+    }
+
+    .form-grid {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+
+    .form-group {
+        display: flex;
+        flex-direction: column;
+        gap: 0.25rem;
+    }
+    .form-group label {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+    }
+    .form-group input,
+    .form-group select {
+        padding: 0.75rem;
+        font-size: 1rem;
+        min-height: 48px; /* Touch-friendly */
+        background: var(--bg-tertiary);
+        border: 1px solid var(--border-color);
+        border-radius: var(--radius-sm);
+        color: var(--text-primary);
+    }
+    .form-help {
+        font-size: 0.75rem;
+        color: var(--text-muted);
+        margin-top: 0.25rem;
+    }
+    .form-warning {
+        color: var(--warning);
+    }
+
+    .form-divider {
+        height: 1px;
+        background: var(--border-color);
+        margin: 0.5rem 0;
+    }
+
+    /* Toggle switches - make touch-friendly */
+    .form-group-toggle {
+        flex-direction: row;
+        align-items: center;
+        justify-content: space-between;
+    }
+    .toggle-label {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        width: 100%;
+        gap: 1rem;
+    }
+    .toggle-switch {
+        position: relative;
+        width: 52px;
+        height: 32px;
+        flex-shrink: 0;
+    }
+    .toggle-switch input {
+        opacity: 0;
+        width: 0;
+        height: 0;
+    }
+    .toggle-slider {
+        position: absolute;
+        cursor: pointer;
+        inset: 0;
+        background-color: var(--bg-tertiary);
+        border-radius: 32px;
+        transition: 0.2s;
+    }
+    .toggle-slider:before {
+        position: absolute;
+        content: "";
+        height: 24px;
+        width: 24px;
+        left: 4px;
+        bottom: 4px;
+        background-color: var(--text-muted);
+        border-radius: 50%;
+        transition: 0.2s;
+    }
+    .toggle-switch input:checked + .toggle-slider {
+        background-color: var(--accent-primary);
+    }
+    .toggle-switch input:checked + .toggle-slider:before {
+        transform: translateX(20px);
+        background-color: white;
+    }
+
+    /* Checkbox grid - 2 columns on mobile */
+    .checkbox-grid-v2 {
+        display: grid;
+        grid-template-columns: repeat(2, 1fr);
+        gap: 0.25rem;
+        background: var(--bg-primary);
+        padding: 0.5rem;
+        border-radius: var(--radius-sm);
+    }
+    .checkbox-label {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.5rem;
+        cursor: pointer;
+        border-radius: var(--radius-sm);
+        font-size: 0.875rem;
+        min-height: 44px; /* Touch-friendly */
+    }
+    .checkbox-label:hover {
+        background: var(--bg-hover);
+    }
+    .checkbox-label input {
+        width: 1.125rem;
+        height: 1.125rem;
+        flex-shrink: 0;
+    }
+
+    /* Range with value */
+    .range-with-value {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+    }
+    .range-with-value input[type="range"] {
+        flex: 1;
+        min-height: 44px;
+    }
+    .range-value {
+        min-width: 2.5rem;
+        text-align: right;
+        font-family: monospace;
+    }
+
+    /* Form actions */
+    .form-actions {
+        padding-top: 0.5rem;
+    }
+    .form-status {
+        min-height: 1.5rem;
+    }
+
+    /* Info section */
+    .info-grid-v2 {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+    }
+    .info-section h4 {
+        margin-bottom: 0.5rem;
+        font-size: 0.9rem;
+        color: var(--text-secondary);
+    }
+    .url-list .url-item {
+        padding: 0.5rem 0;
+        border-bottom: 1px solid var(--border-color);
+    }
+    .url-list .url-item:last-child {
+        border-bottom: none;
+    }
+    .url-list code {
+        font-size: 0.75rem;
+        word-break: break-all;
+    }
+    .info-list {
+        display: grid;
+        grid-template-columns: auto 1fr;
+        gap: 0.25rem 1rem;
+    }
+    .info-list dt {
+        color: var(--text-secondary);
+        font-size: 0.85rem;
+    }
+    .info-list dd {
+        font-size: 0.85rem;
+    }
+
+    /* FFmpeg command */
+    .ffmpeg-command {
+        background: var(--bg-primary);
+        padding: 0.75rem;
+        border-radius: var(--radius-sm);
+        overflow-x: auto;
+    }
+    .ffmpeg-command code {
+        font-size: 0.7rem;
+        white-space: pre-wrap;
+        word-break: break-all;
+    }
+
+    /* Danger section */
+    .danger-section {
+        margin-top: 1.5rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--border-color);
+    }
+    .danger-section h4 {
+        color: var(--error);
+        margin-bottom: 0.75rem;
+        font-size: 0.9rem;
+    }
+    .danger-actions {
+        display: flex;
+        gap: 0.5rem;
+        flex-wrap: wrap;
+    }
+    .btn-sm {
+        padding: 0.5rem 1rem;
+        font-size: 0.875rem;
+        min-height: 44px;
+    }
+
+    /* Mobile sticky save button */
+    .mobile-sticky-actions {
+        position: fixed;
+        bottom: 0;
+        left: 0;
+        right: 0;
+        padding: 1rem;
+        background: var(--bg-secondary);
+        border-top: 1px solid var(--border-color);
+        transform: translateY(100%);
+        transition: transform 0.2s ease;
+        z-index: 100;
+    }
+    .mobile-sticky-actions.visible {
+        transform: translateY(0);
+    }
+    .btn-full {
+        width: 100%;
+        padding: 1rem;
+        font-size: 1rem;
+    }
+
+    /* ========================================
+       TABLET BREAKPOINT (576px+)
+       ======================================== */
+    @media (min-width: 576px) {
+        .camera-layout-v2 {
+            padding-bottom: 0;
+        }
+
+        /* 2 columns for form grids */
+        .form-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+        .form-grid-half {
+            grid-template-columns: repeat(2, 1fr);
+        }
+        .form-grid-triple {
+            grid-template-columns: repeat(3, 1fr);
+        }
+
+        /* 3 columns for checkbox grid */
+        .checkbox-grid-v2 {
+            grid-template-columns: repeat(3, 1fr);
+        }
+
+        /* 2 columns for info */
+        .info-grid-v2 {
+            grid-template-columns: repeat(2, 1fr);
+        }
+
+        /* Hide mobile sticky on tablet+ */
+        .mobile-sticky-actions {
+            display: none;
+        }
+    }
+
+    /* ========================================
+       DESKTOP BREAKPOINT (768px+)
+       ======================================== */
+    @media (min-width: 768px) {
+        /* Show tab buttons, hide dropdown */
+        .tabs-mobile {
+            display: none;
+        }
+        .tabs-desktop {
+            display: flex;
+            border-bottom: 1px solid var(--border-color);
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        .tab-btn {
+            flex: 1;
+            min-width: max-content;
+            padding: 0.875rem 1.25rem;
+            background: none;
+            border: none;
+            color: var(--text-secondary);
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: color 0.2s, background-color 0.2s;
+            border-bottom: 2px solid transparent;
+        }
+        .tab-btn:hover {
+            color: var(--text-primary);
+            background: var(--bg-hover);
+        }
+        .tab-btn.active {
+            color: var(--accent-primary);
+            border-bottom-color: var(--accent-primary);
+        }
+
+        .tabs-content-v2 {
+            padding: 1.5rem;
+        }
+
+        /* 4 columns for checkbox grid */
+        .checkbox-grid-v2 {
+            grid-template-columns: repeat(4, 1fr);
+        }
+
+        /* Quad grid for overlay settings */
+        .form-grid-quad {
+            grid-template-columns: repeat(4, 1fr);
+        }
+
+        /* Smaller inputs on desktop */
+        .form-group input,
+        .form-group select {
+            padding: 0.5rem 0.75rem;
+            font-size: 0.9rem;
+            min-height: auto;
+        }
+
+        /* Smaller toggle */
+        .toggle-switch {
+            width: 44px;
+            height: 24px;
+        }
+        .toggle-slider:before {
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+        }
+        .toggle-switch input:checked + .toggle-slider:before {
+            transform: translateX(20px);
+        }
+
+        /* Smaller checkboxes */
+        .checkbox-label {
+            padding: 0.35rem 0.5rem;
+            font-size: 0.8rem;
+            min-height: auto;
+        }
+        .checkbox-label input {
+            width: 0.9rem;
+            height: 0.9rem;
+        }
+
+        .btn-sm {
+            padding: 0.35rem 0.75rem;
+            font-size: 0.8rem;
+            min-height: auto;
+        }
+    }
+
+    /* ========================================
+       WIDE DESKTOP (1024px+)
+       ======================================== */
+    @media (min-width: 1024px) {
+        .form-grid-quad {
+            grid-template-columns: repeat(4, 1fr);
+        }
+    }
+</style>
+{% endblock %}

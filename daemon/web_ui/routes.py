@@ -253,6 +253,72 @@ def camera_detail(camera_id: int):
     )
 
 
+@bp.route('/<int:camera_id>/v2')
+def camera_detail_v2(camera_id: int):
+    """Camera detail page - responsive v2 layout (experimental)."""
+    camera = get_camera_with_settings(camera_id)
+    if not camera:
+        flash("Camera not found", "error")
+        return redirect(url_for('cameras.dashboard'))
+
+    camera['stream_active'] = is_stream_active(str(camera_id))
+    camera['stream_urls'] = get_stream_urls(str(camera_id), get_system_ip())
+
+    # Get capabilities for dropdowns
+    caps = get_camera_capabilities(camera_id)
+    capabilities = caps['capabilities'] if caps else {}
+
+    # Build resolution options from capabilities
+    resolutions = []
+    if camera['settings'] and camera['settings'].get('format'):
+        fmt = camera['settings']['format']
+        if fmt in capabilities:
+            resolutions = list(capabilities[fmt].keys())
+
+    if not resolutions:
+        resolutions = COMMON_RESOLUTIONS
+
+    # Get encoders
+    encoders = detect_encoders()
+
+    # Build current FFmpeg command for display
+    ffmpeg_cmd = None
+    if camera['connected'] and camera['device_path'] and camera['settings']:
+        settings = camera['settings'].copy()
+        encoder = settings.get('encoder') or 'libx264'
+        v4l2_controls = settings.get('v4l2_controls', {})
+
+        overlay_path = None
+        print_monitor = get_print_monitor()
+        if settings.get('overlay_enabled') and print_monitor:
+            overlay_path = str(print_monitor.get_overlay_path(str(camera_id)))
+
+        if settings.get('standby_enabled') and settings.get('standby_framerate') and print_monitor:
+            if print_monitor.effective_state == 'standby':
+                settings['framerate'] = settings['standby_framerate']
+
+        ffmpeg_cmd = build_ffmpeg_command(
+            camera['device_path'],
+            settings,
+            str(camera_id),
+            encoder,
+            v4l2_controls=v4l2_controls,
+            overlay_path=overlay_path
+        )
+
+    return render_template(
+        'camera_detail_v2.html',
+        camera=camera,
+        capabilities=capabilities,
+        resolutions=resolutions,
+        framerates=COMMON_FRAMERATES,
+        encoders=encoders,
+        system_ip=get_system_ip(),
+        ffmpeg_cmd=ffmpeg_cmd,
+        settings=get_all_settings()
+    )
+
+
 @bp.route('/<int:camera_id>/settings', methods=['POST'])
 def update_settings(camera_id: int):
     """Update camera settings."""
