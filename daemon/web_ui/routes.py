@@ -216,7 +216,7 @@ def camera_detail(camera_id: int):
     # Build current FFmpeg command for display
     ffmpeg_cmd = None
     if camera['connected'] and camera['device_path'] and camera['settings']:
-        settings = camera['settings']
+        settings = camera['settings'].copy()  # Copy to avoid modifying original
         encoder = settings.get('encoder') or 'libx264'
         v4l2_controls = settings.get('v4l2_controls', {})
 
@@ -225,6 +225,16 @@ def camera_detail(camera_id: int):
         print_monitor = get_print_monitor()
         if settings.get('overlay_enabled') and print_monitor:
             overlay_path = str(print_monitor.get_overlay_path(str(camera_id)))
+
+        # Apply dynamic framerate based on current printer state
+        printing_fps = settings.get('printing_framerate')
+        standby_fps = settings.get('standby_framerate')
+        if (printing_fps or standby_fps) and print_monitor:
+            base_fps = settings.get('framerate', 30)
+            if print_monitor.effective_state == 'printing':
+                settings['framerate'] = printing_fps or base_fps
+            else:
+                settings['framerate'] = standby_fps or base_fps
 
         ffmpeg_cmd = build_ffmpeg_command(
             camera['device_path'],
