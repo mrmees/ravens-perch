@@ -342,6 +342,18 @@ def update_settings(camera_id: int):
             # Get V4L2 controls to apply at stream start
             v4l2_controls = current_settings.get('v4l2_controls', {})
 
+            # Apply dynamic framerate based on current printer state
+            printing_fps = current_settings.get('printing_framerate')
+            standby_fps = current_settings.get('standby_framerate')
+            if printing_fps or standby_fps:
+                # Dynamic framerate is configured - apply based on current state
+                if print_monitor:
+                    base_fps = current_settings.get('framerate', 30)
+                    if print_monitor.effective_state == 'printing':
+                        current_settings['framerate'] = printing_fps or base_fps
+                    else:
+                        current_settings['framerate'] = standby_fps or base_fps
+
             # Get overlay path if enabled
             overlay_path = None
             if current_settings.get('overlay_enabled') and print_monitor:
@@ -455,6 +467,16 @@ def restart_camera_stream(camera_id: int):
     print_monitor = get_print_monitor()
     if settings.get('overlay_enabled') and print_monitor:
         overlay_path = str(print_monitor.get_overlay_path(str(camera_id)))
+
+    # Apply dynamic framerate based on current printer state
+    printing_fps = settings.get('printing_framerate')
+    standby_fps = settings.get('standby_framerate')
+    if (printing_fps or standby_fps) and print_monitor:
+        base_fps = settings.get('framerate', 30)
+        if print_monitor.effective_state == 'printing':
+            settings['framerate'] = printing_fps or base_fps
+        else:
+            settings['framerate'] = standby_fps or base_fps
 
     ffmpeg_cmd = build_ffmpeg_command(
         camera['device_path'],

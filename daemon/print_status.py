@@ -100,6 +100,15 @@ class PrintStatusMonitor:
         with self._lock:
             return self._status
 
+    @property
+    def effective_state(self) -> str:
+        """Get the current effective state for framerate switching.
+
+        Returns 'printing' or 'standby'. This reflects the state after
+        any delay timers have been applied.
+        """
+        return self._previous_state
+
     def set_state_change_callback(self, callback: Callable[[str, str], None]):
         """
         Set callback for print state changes.
