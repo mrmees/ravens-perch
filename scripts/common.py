@@ -722,14 +722,40 @@ def get_device_capabilities(device_path):
 def is_capture_device(device_path):
     """
     Check if a video device is a real capture device (camera).
-    Excludes hardware codecs (Memory-to-Memory devices) like rkvdec, hantro-vpu, rockchip-rga.
+    Excludes hardware codecs, ISPs, and other internal video processing devices.
     """
     caps = get_device_capabilities(device_path)
     if caps is None:
         return False
-    
+
     # Must have Video Capture capability and NOT be a Memory-to-Memory device
-    return caps.get("video_capture", False) and not caps.get("memory_to_memory", False)
+    if not caps.get("video_capture", False) or caps.get("memory_to_memory", False):
+        return False
+
+    # Filter out hardware codec/ISP devices by driver or card name
+    # These are internal video processing devices, not cameras
+    codec_patterns = [
+        'bcm2835-codec',   # Raspberry Pi codec
+        'bcm2835-isp',     # Raspberry Pi ISP
+        'rpi-hevc',        # Raspberry Pi HEVC decoder
+        'rkvdec', 'rkvenc', 'rkisp',  # Rockchip codecs
+        'rga',             # Rockchip RGA
+        'hantro',          # Hantro codec
+        'cedrus',          # Allwinner Cedrus
+        'vchiq',           # Raspberry Pi VCHIQ
+        'm2m', 'mem2mem',  # Memory-to-memory devices
+        'decoder', 'encoder',
+        '-dec', '-enc',    # Common codec suffixes
+    ]
+
+    driver = (caps.get("driver") or "").lower()
+    card = (caps.get("card") or "").lower()
+
+    for pattern in codec_patterns:
+        if pattern in driver or pattern in card:
+            return False
+
+    return True
 
 def get_primary_video_devices():
     """

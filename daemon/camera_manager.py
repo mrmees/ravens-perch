@@ -164,15 +164,39 @@ def get_device_info(device_path: str) -> Optional[DeviceInfo]:
 def is_capture_device(device_path: str) -> bool:
     """Check if a V4L2 device is a video capture device (not metadata/codec)."""
     try:
-        # Filter out hardware codec devices by path name
-        path_lower = device_path.lower()
-        codec_patterns = ['dec', 'enc', 'm2m', 'isp', 'iep', 'rga']
+        # Get device info first to check driver/card name
+        result = subprocess.run(
+            ["v4l2-ctl", "--device", device_path, "--info"],
+            capture_output=True,
+            text=True,
+            timeout=5
+        )
+
+        if result.returncode != 0:
+            return False
+
+        info_output = result.stdout.lower()
+
+        # Filter out hardware codec/ISP devices by driver or card name
+        # These are internal video processing devices, not cameras
+        codec_patterns = [
+            'bcm2835-codec',   # Raspberry Pi codec
+            'bcm2835-isp',     # Raspberry Pi ISP
+            'rpi-hevc',        # Raspberry Pi HEVC decoder
+            'rkvdec', 'rkvenc', 'rkisp',  # Rockchip codecs
+            'rga',             # Rockchip RGA
+            'hantro',          # Hantro codec
+            'cedrus',          # Allwinner Cedrus
+            'm2m', 'mem2mem',  # Memory-to-memory devices
+            'decoder', 'encoder',
+            '-dec', '-enc',    # Common codec suffixes
+        ]
         for pattern in codec_patterns:
-            if pattern in path_lower:
-                logger.debug(f"Skipping codec device: {device_path}")
+            if pattern in info_output:
+                logger.debug(f"Skipping codec/ISP device: {device_path} (matched: {pattern})")
                 return False
 
-        # Use udevadm to check for capture capability - most reliable method
+        # Use udevadm to check for capture capability
         result = subprocess.run(
             ["udevadm", "info", device_path],
             capture_output=True,
@@ -201,14 +225,6 @@ def is_capture_device(device_path: str) -> bool:
             return False
 
         output = result.stdout
-
-        # Filter out hardware codec devices by card name
-        card_patterns = ['rkvdec', 'rkvenc', 'rkisp', 'rga', 'hantro', 'cedrus',
-                         'decoder', 'encoder', 'm2m', 'mem2mem', 'isp']
-        for pattern in card_patterns:
-            if pattern in output.lower():
-                logger.debug(f"Skipping codec device by card name: {device_path}")
-                return False
 
         # Must have Video Capture capability (not just Output or M2M)
         if "Video Capture" not in output:
