@@ -25,32 +25,43 @@
                 <span>Ravens Perch</span>
             </a>
         </div>
-        <div class="nav-links">
+
+        <!-- Right side: theme toggle + hamburger (mobile) -->
+        <div class="nav-actions">
+            <button class="theme-toggle-btn" id="theme-toggle" title="Toggle theme">
+                <!-- Sun icon (shown in dark mode) -->
+                <svg class="theme-icon-light" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <circle cx="12" cy="12" r="5"></circle>
+                    <line x1="12" y1="1" x2="12" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="23"></line>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                    <line x1="1" y1="12" x2="3" y2="12"></line>
+                    <line x1="21" y1="12" x2="23" y2="12"></line>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                </svg>
+                <!-- Moon icon (shown in light mode) -->
+                <svg class="theme-icon-dark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                    <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+                </svg>
+            </button>
+
+            <!-- Hamburger button (mobile only) -->
+            <button class="nav-hamburger" id="nav-hamburger" aria-label="Toggle menu" aria-expanded="false">
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
+                <span class="hamburger-line"></span>
+            </button>
+        </div>
+
+        <!-- Desktop nav links (inline) / Mobile nav links (dropdown) -->
+        <div class="nav-links" id="nav-links">
             <a href="{{ url_for('cameras.dashboard') }}" class="{% if request.endpoint == 'cameras.dashboard' %}active{% endif %}">Cameras</a>
             <a href="{{ url_for('cameras.settings_page') }}" class="{% if request.endpoint == 'cameras.settings_page' %}active{% endif %}">Settings</a>
             <a href="{{ url_for('cameras.logs_page') }}" class="{% if request.endpoint == 'cameras.logs_page' %}active{% endif %}">Logs</a>
             <a href="{{ url_for('cameras.help_page') }}" class="{% if request.endpoint == 'cameras.help_page' %}active{% endif %}">Help</a>
             <a href="{{ url_for('cameras.troubleshooting_page') }}" class="{% if request.endpoint == 'cameras.troubleshooting_page' %}active{% endif %}">Troubleshooting</a>
-            <div class="theme-toggle">
-                <button class="theme-toggle-btn" id="theme-toggle" title="Toggle theme">
-                    <!-- Sun icon (shown in dark mode) -->
-                    <svg class="theme-icon-light" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <circle cx="12" cy="12" r="5"></circle>
-                        <line x1="12" y1="1" x2="12" y2="3"></line>
-                        <line x1="12" y1="21" x2="12" y2="23"></line>
-                        <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
-                        <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
-                        <line x1="1" y1="12" x2="3" y2="12"></line>
-                        <line x1="21" y1="12" x2="23" y2="12"></line>
-                        <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
-                        <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
-                    </svg>
-                    <!-- Moon icon (shown in light mode) -->
-                    <svg class="theme-icon-dark" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
-                    </svg>
-                </button>
-            </div>
         </div>
     </nav>
 
