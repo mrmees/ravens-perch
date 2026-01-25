@@ -45,8 +45,10 @@ class PrintStatus:
 
     def format_overlay_text(self) -> str:
         """Format status for FFmpeg overlay."""
-        if not self.is_printing and self.state != "complete":
-            return ""
+        if not self.is_printing:
+            if self.state == "complete":
+                return "Complete"
+            return "Ready"
 
         lines = []
 
