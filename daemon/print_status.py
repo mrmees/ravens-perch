@@ -176,6 +176,8 @@ class PrintStatusMonitor:
 
     def _poll_status(self):
         """Poll Moonraker for current print status."""
+        filename_changed = False
+        new_filename = ""
         try:
             # Query all needed objects
             # print_stats, display_status, virtual_sdcard for basic info
@@ -231,10 +233,7 @@ class PrintStatusMonitor:
                 new_filename = print_stats.get("filename", "")
                 old_filename = self._status.filename
                 self._status.filename = new_filename
-
-                # Fetch filament type from file metadata when filename changes
-                if new_filename and new_filename != old_filename:
-                    self._fetch_filament_type(new_filename)
+                filename_changed = new_filename and new_filename != old_filename
 
                 # Time
                 self._status.time_elapsed = int(print_stats.get("print_duration", 0))
@@ -285,6 +284,10 @@ class PrintStatusMonitor:
                     self._status.time_remaining = int(total_estimated - self._status.time_elapsed)
                 else:
                     self._status.time_remaining = 0
+
+            # Fetch filament type outside the lock (HTTP request can be slow)
+            if filename_changed:
+                self._fetch_filament_type(new_filename)
 
         except requests.RequestException as e:
             logger.debug(f"Failed to poll Moonraker: {e}")
