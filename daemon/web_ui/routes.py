@@ -309,7 +309,8 @@ def update_settings(camera_id: int):
             settings[stat] = request.form[stat] == '1'
 
     if 'standby_enabled' in request.form:
-        settings['standby_enabled'] = request.form['standby_enabled'] == '1'
+        # Check if '1' is in the list of values (checkbox + hidden input)
+        settings['standby_enabled'] = '1' in request.form.getlist('standby_enabled')
         if settings['standby_enabled'] and 'standby_framerate' in request.form:
             val = request.form['standby_framerate']
             settings['standby_framerate'] = int(val) if val else None
