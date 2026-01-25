@@ -43,6 +43,39 @@ fi
 
 echo ""
 
+# Remove Ravens Perch cameras from Moonraker (before stopping services)
+log_info "Removing Ravens Perch cameras from Moonraker..."
+MOONRAKER_URL="http://127.0.0.1:7125"
+
+# Get list of webcams and remove any registered by Ravens Perch
+webcams=$(curl -s "${MOONRAKER_URL}/server/webcams/list" 2>/dev/null)
+if [ -n "$webcams" ]; then
+    # Extract UIDs of Ravens Perch cameras (those with /cameras/ in stream URL or ravens in name)
+    echo "$webcams" | python3 -c "
+import sys, json
+try:
+    data = json.load(sys.stdin)
+    webcams = data.get('result', {}).get('webcams', [])
+    for cam in webcams:
+        stream_url = cam.get('stream_url', '')
+        name = cam.get('name', '').lower()
+        uid = cam.get('uid', '')
+        # Identify Ravens Perch cameras by stream URL pattern or name
+        if '/cameras/' in stream_url or 'ravens' in name or uid.startswith('ravens-'):
+            print(uid)
+except:
+    pass
+" 2>/dev/null | while read uid; do
+        if [ -n "$uid" ]; then
+            log_info "Removing camera: $uid"
+            curl -s -X DELETE "${MOONRAKER_URL}/server/webcams/delete?uid=${uid}" >/dev/null 2>&1 || true
+        fi
+    done
+    log_success "Ravens Perch cameras removed from Moonraker"
+else
+    log_info "Moonraker not accessible or no webcams found"
+fi
+
 # Stop services
 log_info "Stopping services..."
 for service in ravens-perch mediamtx; do
