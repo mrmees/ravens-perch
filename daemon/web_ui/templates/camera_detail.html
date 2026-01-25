@@ -478,6 +478,22 @@
                     </label>
                 </div>
 
+                <h4 style="margin: 1.5rem 0 0.75rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Update Settings</h4>
+
+                <!-- Overlay Update Interval -->
+                <div class="form-group">
+                    <label for="overlay_update_interval">Overlay Update Interval</label>
+                    <input type="range"
+                           id="overlay_update_interval"
+                           name="overlay_update_interval"
+                           min="1"
+                           max="10"
+                           value="{{ settings.get('overlay_update_interval', 5) }}"
+                           oninput="document.getElementById('overlay_interval_value').textContent = this.value + 's'">
+                    <span id="overlay_interval_value" class="range-value">{{ settings.get('overlay_update_interval', 5) }}s</span>
+                    <p class="form-help">How often to update the overlay text (1-10 seconds). Affects all cameras.</p>
+                </div>
+
                 <h4 style="margin: 1.5rem 0 0.75rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Dynamic Framerate</h4>
 
                 <!-- Printing Framerate -->

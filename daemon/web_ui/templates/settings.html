@@ -59,19 +59,6 @@
                 </select>
             </div>
 
-            <div class="form-group">
-                <label for="overlay_update_interval">Overlay Update Interval</label>
-                <input type="range"
-                       id="overlay_update_interval"
-                       name="overlay_update_interval"
-                       min="1"
-                       max="10"
-                       value="{{ settings.get('overlay_update_interval', 5) }}"
-                       oninput="document.getElementById('overlay_interval_value').textContent = this.value + 's'">
-                <span id="overlay_interval_value" class="range-value">{{ settings.get('overlay_update_interval', 5) }}s</span>
-                <p class="form-help">How often to update the print status overlay text (1-10 seconds).</p>
-            </div>
-
             <div id="settings-status"></div>
 
             <button type="submit" class="btn btn-primary">Save Settings</button>

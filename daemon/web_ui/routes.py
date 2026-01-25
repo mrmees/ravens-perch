@@ -238,7 +238,8 @@ def camera_detail(camera_id: int):
         framerates=COMMON_FRAMERATES,
         encoders=encoders,
         system_ip=get_system_ip(),
-        ffmpeg_cmd=ffmpeg_cmd
+        ffmpeg_cmd=ffmpeg_cmd,
+        settings=get_all_settings()
     )
 
 
@@ -306,6 +307,15 @@ def update_settings(camera_id: int):
     if 'standby_framerate' in request.form:
         val = request.form['standby_framerate']
         settings['standby_framerate'] = int(val) if val else None
+
+    # Handle global overlay update interval
+    if 'overlay_update_interval' in request.form:
+        interval = int(request.form['overlay_update_interval'])
+        interval = max(1, min(10, interval))
+        set_setting('overlay_update_interval', interval)
+        print_monitor = get_print_monitor()
+        if print_monitor:
+            print_monitor.set_poll_interval(float(interval))
 
     # Save settings
     save_camera_settings(camera_id, settings)
@@ -594,15 +604,6 @@ def update_global_settings():
 
     if 'log_level' in request.form:
         set_setting('log_level', request.form['log_level'])
-
-    if 'overlay_update_interval' in request.form:
-        interval = int(request.form['overlay_update_interval'])
-        interval = max(1, min(10, interval))  # Clamp to 1-10
-        set_setting('overlay_update_interval', interval)
-        # Update the print monitor's poll interval at runtime
-        print_monitor = get_print_monitor()
-        if print_monitor:
-            print_monitor.set_poll_interval(float(interval))
 
     add_log("INFO", "Global settings updated")
 
