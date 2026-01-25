@@ -68,7 +68,10 @@ def init_db():
                 rotation INTEGER DEFAULT 0,
                 v4l2_controls TEXT,
                 audio_enabled BOOLEAN DEFAULT FALSE,
-                audio_device TEXT
+                audio_device TEXT,
+                overlay_enabled BOOLEAN DEFAULT FALSE,
+                printing_framerate INTEGER,
+                standby_framerate INTEGER
             )
         """)
 
@@ -118,6 +121,25 @@ def init_db():
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_cameras_connected ON cameras(connected)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_logs_timestamp ON logs(timestamp DESC)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_logs_level ON logs(level)")
+
+        # Migrations: Add new columns to existing tables if they don't exist
+        # Check existing columns in camera_settings
+        cursor.execute("PRAGMA table_info(camera_settings)")
+        existing_columns = {row['name'] for row in cursor.fetchall()}
+
+        new_columns = [
+            ("overlay_enabled", "BOOLEAN DEFAULT FALSE"),
+            ("printing_framerate", "INTEGER"),
+            ("standby_framerate", "INTEGER"),
+        ]
+
+        for col_name, col_def in new_columns:
+            if col_name not in existing_columns:
+                try:
+                    cursor.execute(f"ALTER TABLE camera_settings ADD COLUMN {col_name} {col_def}")
+                    logger.info(f"Added column {col_name} to camera_settings")
+                except Exception as e:
+                    logger.debug(f"Column {col_name} may already exist: {e}")
 
         conn.commit()
         logger.info("Database initialized successfully")
@@ -290,7 +312,8 @@ def save_camera_settings(camera_id: int, settings_dict: Dict) -> bool:
     """Save settings for a camera."""
     allowed_fields = {
         'format', 'resolution', 'framerate', 'encoder', 'bitrate',
-        'preset', 'rotation', 'v4l2_controls', 'audio_enabled', 'audio_device'
+        'preset', 'rotation', 'v4l2_controls', 'audio_enabled', 'audio_device',
+        'overlay_enabled', 'printing_framerate', 'standby_framerate'
     }
     settings_dict = {k: v for k, v in settings_dict.items() if k in allowed_fields}
 

@@ -32,6 +32,7 @@ from ..camera_manager import (
     get_v4l2_controls, set_v4l2_control, get_v4l2_control_value
 )
 from ..bandwidth import get_camera_bandwidth_stats
+from ..print_status import get_monitor as get_print_monitor
 from ..config import COMMON_RESOLUTIONS, COMMON_FRAMERATES
 
 logger = logging.getLogger(__name__)
@@ -213,12 +214,20 @@ def camera_detail(camera_id: int):
         settings = camera['settings']
         encoder = settings.get('encoder') or 'libx264'
         v4l2_controls = settings.get('v4l2_controls', {})
+
+        # Get overlay path if enabled
+        overlay_path = None
+        print_monitor = get_print_monitor()
+        if settings.get('overlay_enabled') and print_monitor:
+            overlay_path = str(print_monitor.get_overlay_path(str(camera_id)))
+
         ffmpeg_cmd = build_ffmpeg_command(
             camera['device_path'],
             settings,
             str(camera_id),
             encoder,
-            v4l2_controls=v4l2_controls
+            v4l2_controls=v4l2_controls,
+            overlay_path=overlay_path
         )
 
     return render_template(
@@ -256,9 +265,28 @@ def update_settings(camera_id: int):
     if 'rotation' in request.form:
         settings['rotation'] = int(request.form['rotation'])
 
+    # Print integration settings
+    if 'overlay_enabled' in request.form:
+        settings['overlay_enabled'] = request.form['overlay_enabled'] == '1'
+    elif 'printing_framerate' in request.form or 'standby_framerate' in request.form:
+        # If print settings form submitted without checkbox, it means disabled
+        settings['overlay_enabled'] = False
+
+    if 'printing_framerate' in request.form:
+        val = request.form['printing_framerate']
+        settings['printing_framerate'] = int(val) if val else None
+    if 'standby_framerate' in request.form:
+        val = request.form['standby_framerate']
+        settings['standby_framerate'] = int(val) if val else None
+
     # Save settings
     save_camera_settings(camera_id, settings)
     add_log("INFO", f"Settings updated for camera {camera['friendly_name']}", camera_id)
+
+    # Update print monitor overlay setting if changed
+    print_monitor = get_print_monitor()
+    if print_monitor and 'overlay_enabled' in settings:
+        print_monitor.set_camera_overlay(str(camera_id), settings.get('overlay_enabled', False))
 
     # Rebuild and update stream
     if camera['connected'] and camera['enabled']:
@@ -266,12 +294,19 @@ def update_settings(camera_id: int):
         if current_settings and camera['device_path']:
             # Get V4L2 controls to apply at stream start
             v4l2_controls = current_settings.get('v4l2_controls', {})
+
+            # Get overlay path if enabled
+            overlay_path = None
+            if current_settings.get('overlay_enabled') and print_monitor:
+                overlay_path = str(print_monitor.get_overlay_path(str(camera_id)))
+
             ffmpeg_cmd = build_ffmpeg_command(
                 camera['device_path'],
                 current_settings,
                 str(camera_id),
                 current_settings.get('encoder', 'libx264'),
-                v4l2_controls=v4l2_controls
+                v4l2_controls=v4l2_controls,
+                overlay_path=overlay_path
             )
             add_or_update_stream(str(camera_id), ffmpeg_cmd)
 
@@ -368,12 +403,19 @@ def restart_camera_stream(camera_id: int):
     settings = camera['settings'] or {}
     v4l2_controls = settings.get('v4l2_controls') or {}
 
+    # Get overlay path if enabled
+    overlay_path = None
+    print_monitor = get_print_monitor()
+    if settings.get('overlay_enabled') and print_monitor:
+        overlay_path = str(print_monitor.get_overlay_path(str(camera_id)))
+
     ffmpeg_cmd = build_ffmpeg_command(
         camera['device_path'],
         settings,
         str(camera_id),
         settings.get('encoder', 'libx264'),
-        v4l2_controls=v4l2_controls
+        v4l2_controls=v4l2_controls,
+        overlay_path=overlay_path
     )
 
     success, error = add_or_update_stream(str(camera_id), ffmpeg_cmd)

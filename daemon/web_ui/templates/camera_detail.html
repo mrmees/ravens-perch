@@ -231,6 +231,73 @@
             </form>
         </details>
 
+        <!-- Print Integration -->
+        <details class="settings-card">
+            <summary>Print Integration</summary>
+            <p class="form-help" style="margin-bottom: 1rem;">
+                Display print progress on the video feed and automatically adjust framerate during prints.
+                Requires Moonraker connection.
+            </p>
+
+            <form method="POST"
+                  action="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
+                  hx-post="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
+                  hx-swap="innerHTML"
+                  hx-target="#print-settings-status">
+
+                <!-- Overlay Toggle -->
+                <div class="form-group">
+                    <label class="toggle-label">
+                        <span>Show Print Status Overlay</span>
+                        <label class="toggle-switch">
+                            <input type="checkbox"
+                                   name="overlay_enabled"
+                                   value="1"
+                                   {% if camera.settings and camera.settings.overlay_enabled %}checked{% endif %}>
+                            <span class="toggle-slider"></span>
+                        </label>
+                    </label>
+                    <p class="form-help">Display progress %, layer, and time remaining on the video feed.</p>
+                </div>
+
+                <!-- Printing Framerate -->
+                <div class="form-group">
+                    <label for="printing_framerate">Printing Framerate</label>
+                    <select id="printing_framerate" name="printing_framerate">
+                        <option value="">Use default</option>
+                        {% for fps in [5, 10, 15, 20, 24, 30, 60] %}
+                            <option value="{{ fps }}"
+                                    {% if camera.settings and camera.settings.printing_framerate == fps %}selected{% endif %}>
+                                {{ fps }} fps
+                            </option>
+                        {% endfor %}
+                    </select>
+                    <p class="form-help">Framerate to use while actively printing.</p>
+                </div>
+
+                <!-- Standby Framerate -->
+                <div class="form-group">
+                    <label for="standby_framerate">Standby Framerate</label>
+                    <select id="standby_framerate" name="standby_framerate">
+                        <option value="">Use default</option>
+                        {% for fps in [1, 2, 5, 10, 15] %}
+                            <option value="{{ fps }}"
+                                    {% if camera.settings and camera.settings.standby_framerate == fps %}selected{% endif %}>
+                                {{ fps }} fps
+                            </option>
+                        {% endfor %}
+                    </select>
+                    <p class="form-help">Lower framerate when not printing to save bandwidth and CPU.</p>
+                </div>
+
+                <div id="print-settings-status"></div>
+
+                <button type="submit" class="btn btn-primary btn-block">
+                    Save Print Settings
+                </button>
+            </form>
+        </details>
+
         <!-- Camera Controls (V4L2) -->
         {% if camera.connected %}
         <details class="settings-card advanced-settings">

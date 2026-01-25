@@ -297,7 +297,8 @@ def build_ffmpeg_command(
     settings: Dict,
     stream_name: str,
     encoder_type: str = 'libx264',
-    v4l2_controls: Optional[Dict[str, int]] = None
+    v4l2_controls: Optional[Dict[str, int]] = None,
+    overlay_path: Optional[str] = None
 ) -> str:
     """
     Build complete FFmpeg command string for streaming.
@@ -308,6 +309,7 @@ def build_ffmpeg_command(
         stream_name: Name for the RTSP stream
         encoder_type: Encoder to use (libx264, h264_vaapi, h264_v4l2m2m)
         v4l2_controls: Optional dict of V4L2 controls to apply before streaming
+        overlay_path: Optional path to text file for print status overlay
 
     Returns: Complete FFmpeg command string (may be wrapped in shell for V4L2 controls)
     """
@@ -352,6 +354,23 @@ def build_ffmpeg_command(
         filters.append("transpose=1,transpose=1")
     elif rotation == 270:
         filters.append("transpose=2")
+
+    # Print status overlay (after rotation, before hardware upload)
+    if overlay_path:
+        # drawtext filter with text file that reloads every second
+        # Position: bottom center with padding
+        # Font: monospace, white text with black outline for readability
+        drawtext = (
+            f"drawtext=textfile='{overlay_path}'"
+            f":reload=1"
+            f":fontcolor=white"
+            f":fontsize=24"
+            f":borderw=2"
+            f":bordercolor=black"
+            f":x=(w-text_w)/2"
+            f":y=h-th-20"
+        )
+        filters.append(drawtext)
 
     # Hardware upload last (for VAAPI)
     if encoder_type == 'h264_vaapi':

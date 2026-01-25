@@ -38,6 +38,7 @@ from .moonraker_client import (
     detect_moonraker_url, register_camera, unregister_camera,
     build_stream_url, build_snapshot_url, get_system_ip
 )
+from .print_status import init_monitor, get_monitor, stop_monitor
 from . import db
 
 # Configure logging
@@ -94,6 +95,7 @@ class RavensPerchDaemon:
         self.running = False
         self.encoders = {}
         self.moonraker_url = None
+        self.print_monitor = None
 
     def start(self):
         """Start the daemon and all components."""
@@ -158,6 +160,19 @@ class RavensPerchDaemon:
                 logger.warning("Moonraker not found - webcam registration disabled")
                 add_log("WARNING", "Moonraker not found")
 
+            # Step 5c: Initialize print status monitor (if Moonraker available)
+            if self.moonraker_url:
+                logger.info("Initializing print status monitor...")
+                self.print_monitor = init_monitor(
+                    moonraker_url=self.moonraker_url,
+                    data_dir=str(BASE_DIR),
+                    poll_interval=2.0,
+                    standby_delay=30.0
+                )
+                self.print_monitor.set_state_change_callback(self._on_print_state_change)
+                self.print_monitor.start()
+                logger.info("Print status monitor started")
+
             # Step 6: Mark all cameras as disconnected initially
             self._reset_camera_states()
 
@@ -194,6 +209,10 @@ class RavensPerchDaemon:
         """Stop the daemon gracefully."""
         logger.info("Shutting down Ravens Perch...")
         self.running = False
+
+        # Stop print status monitor
+        if self.print_monitor:
+            self.print_monitor.stop()
 
         # Stop camera monitor
         if self.camera_monitor:
@@ -315,12 +334,32 @@ class RavensPerchDaemon:
             encoder = settings.get('encoder', 'libx264')
             v4l2_controls = settings.get('v4l2_controls') or {}
 
+            # Handle print status overlay
+            overlay_path = None
+            if settings.get('overlay_enabled') and self.print_monitor:
+                self.print_monitor.set_camera_overlay(str(camera_id), True)
+                overlay_path = str(self.print_monitor.get_overlay_path(str(camera_id)))
+
+            # Determine framerate based on current print state
+            stream_settings = settings.copy()
+            if self.print_monitor:
+                status = self.print_monitor.status
+                if status.is_printing:
+                    # Use printing framerate if set
+                    if settings.get('printing_framerate'):
+                        stream_settings['framerate'] = settings['printing_framerate']
+                else:
+                    # Use standby framerate if set
+                    if settings.get('standby_framerate'):
+                        stream_settings['framerate'] = settings['standby_framerate']
+
             ffmpeg_cmd = build_ffmpeg_command(
                 device_info.path,
-                settings,
+                stream_settings,
                 str(camera_id),
                 encoder,
-                v4l2_controls=v4l2_controls
+                v4l2_controls=v4l2_controls,
+                overlay_path=overlay_path
             )
 
             # Register stream with MediaMTX
@@ -386,6 +425,73 @@ class RavensPerchDaemon:
 
         except Exception as e:
             logger.error(f"Error handling camera disconnection: {e}", exc_info=True)
+
+    def _on_print_state_change(self, old_state: str, new_state: str):
+        """Handle print state changes (printing <-> standby) for framerate switching."""
+        logger.info(f"Print state changed: {old_state} -> {new_state}")
+
+        try:
+            # Get all connected cameras
+            cameras = db.get_all_cameras_with_settings()
+
+            for camera in cameras:
+                if not camera['connected'] or not camera['device_path']:
+                    continue
+
+                settings = camera['settings'] or {}
+
+                # Check if this camera has different framerates configured
+                printing_fps = settings.get('printing_framerate')
+                standby_fps = settings.get('standby_framerate')
+
+                if not printing_fps and not standby_fps:
+                    # No dynamic framerate configured for this camera
+                    continue
+
+                # Determine which framerate to use
+                base_fps = settings.get('framerate', 30)
+                if new_state == 'printing':
+                    target_fps = printing_fps or base_fps
+                else:
+                    target_fps = standby_fps or base_fps
+
+                current_fps = settings.get('framerate', base_fps)
+
+                if target_fps == current_fps:
+                    # No change needed
+                    continue
+
+                logger.info(f"Switching camera {camera['id']} from {current_fps}fps to {target_fps}fps")
+
+                # Build new FFmpeg command with updated framerate
+                new_settings = settings.copy()
+                new_settings['framerate'] = target_fps
+
+                # Get overlay path if enabled
+                overlay_path = None
+                if settings.get('overlay_enabled') and self.print_monitor:
+                    overlay_path = str(self.print_monitor.get_overlay_path(str(camera['id'])))
+
+                v4l2_controls = settings.get('v4l2_controls') or {}
+
+                ffmpeg_cmd = build_ffmpeg_command(
+                    camera['device_path'],
+                    new_settings,
+                    str(camera['id']),
+                    settings.get('encoder', 'libx264'),
+                    v4l2_controls=v4l2_controls,
+                    overlay_path=overlay_path
+                )
+
+                # Restart stream with new command
+                success, error = add_or_update_stream(str(camera['id']), ffmpeg_cmd)
+                if success:
+                    add_log("INFO", f"Switched to {new_state} framerate ({target_fps}fps)", camera['id'])
+                else:
+                    logger.error(f"Failed to switch framerate for camera {camera['id']}: {error}")
+
+        except Exception as e:
+            logger.error(f"Error handling print state change: {e}", exc_info=True)
 
 
 def main():
