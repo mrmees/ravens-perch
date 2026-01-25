@@ -499,6 +499,9 @@
 
         // Show/hide save buttons based on whether tab has settings
         updateSaveButtons(tabId);
+
+        // Clear any status message when switching tabs
+        clearSettingsStatus();
     }
 
     // Show save buttons only for tabs that have settings
@@ -523,6 +526,25 @@
             htmx.trigger(form, 'submit');
         }
     }
+
+    // Clear the settings status message (called when changes are made)
+    function clearSettingsStatus() {
+        var status = document.getElementById('settings-status');
+        if (status) {
+            status.innerHTML = '';
+        }
+    }
+
+    // Clear status when any form input changes
+    document.getElementById('settings-form').addEventListener('change', clearSettingsStatus);
+    document.getElementById('settings-form').addEventListener('input', clearSettingsStatus);
+
+    // Clear status when v4l2 controls change (they're outside the form)
+    document.body.addEventListener('htmx:afterRequest', function(event) {
+        if (event.detail.pathInfo && event.detail.pathInfo.requestPath.includes('/api/controls/')) {
+            clearSettingsStatus();
+        }
+    });
 
     // Initialize save button visibility
     updateSaveButtons('basic');
