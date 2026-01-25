@@ -104,6 +104,17 @@
 
             <button type="submit" class="btn btn-primary">Save Appearance</button>
         </form>
+
+        <div class="form-group" style="margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--border-color);">
+            <label>Footer Poem</label>
+            <p class="form-help" style="margin-bottom: 0.5rem;">
+                The footer displays lines from Edgar Allan Poe's "The Raven" (1845).
+            </p>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="resetPoem()">
+                Restart Poem
+            </button>
+            <span id="poem-reset-status"></span>
+        </div>
     </div>
 
     <div class="settings-card">
@@ -328,5 +339,24 @@ function detectThemeColors() {
 
 // Auto-detect theme colors on page load
 document.addEventListener('DOMContentLoaded', detectThemeColors);
+
+// Reset poem to beginning
+function resetPoem() {
+    fetch('{{ url_for("cameras.api_reset_poem") }}', { method: 'POST' })
+        .then(r => r.json())
+        .then(data => {
+            const status = document.getElementById('poem-reset-status');
+            if (data.success) {
+                status.textContent = 'Poem restarted!';
+                status.style.color = 'var(--accent-primary)';
+                setTimeout(() => { status.textContent = ''; }, 3000);
+            }
+        })
+        .catch(err => {
+            const status = document.getElementById('poem-reset-status');
+            status.textContent = 'Failed to reset';
+            status.style.color = 'var(--error)';
+        });
+}
 </script>
 {% endblock %}

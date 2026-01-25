@@ -1428,6 +1428,13 @@ def api_detect_theme():
     return jsonify(themes)
 
 
+@bp.route('/api/reset-poem', methods=['POST'])
+def api_reset_poem():
+    """Reset The Raven poem to the beginning."""
+    set_setting('raven_position', 0)
+    return jsonify({'success': True, 'message': 'Poem reset to beginning'})
+
+
 @bp.route('/api/fonts')
 def api_fonts():
     """Get list of available system fonts."""
