@@ -1438,3 +1438,73 @@ details.settings-card > *:not(summary) {
     font-style: italic;
     padding: 1rem 0;
 }
+
+/* Rejected Cameras Section */
+.rejected-cameras-section {
+    margin-top: 2rem;
+    padding: 1.5rem;
+    background-color: rgba(255, 152, 0, 0.08);
+    border: 1px solid var(--warning);
+    border-radius: var(--radius);
+}
+
+.section-title.warning-title {
+    color: var(--warning);
+    margin-bottom: 1rem;
+    font-size: 1.1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.rejected-cameras-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-bottom: 1rem;
+}
+
+.rejected-camera-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 0.75rem 1rem;
+    background-color: var(--bg-secondary);
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color);
+}
+
+.rejected-camera-icon {
+    color: var(--warning);
+    flex-shrink: 0;
+}
+
+.rejected-camera-info {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    min-width: 0;
+}
+
+.rejected-camera-name {
+    font-weight: 500;
+    color: var(--text-primary);
+}
+
+.rejected-camera-path {
+    font-family: 'Consolas', 'Monaco', monospace;
+    font-size: 0.8rem;
+    color: var(--text-muted);
+}
+
+.rejected-camera-reason {
+    font-size: 0.85rem;
+    color: var(--warning);
+}
+
+.rejected-cameras-help {
+    color: var(--text-secondary);
+    font-size: 0.85rem;
+    line-height: 1.5;
+    margin: 0;
+}

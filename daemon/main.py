@@ -28,7 +28,7 @@ from .hardware import (
 )
 from .camera_manager import (
     CameraMonitor, DeviceInfo, probe_capabilities,
-    auto_configure
+    auto_configure, add_rejected_camera, remove_rejected_camera
 )
 from .stream_manager import (
     wait_for_available as wait_for_mediamtx,
@@ -326,6 +326,14 @@ class RavensPerchDaemon:
                         f"Cameras without unique serial numbers are not supported.",
                         camera['id']
                     )
+                    # Track this rejected camera for display in the UI
+                    add_rejected_camera(
+                        device_path=device_info.path,
+                        hardware_name=device_info.hardware_name,
+                        hardware_id=device_info.hardware_id,
+                        reason="Duplicate camera - no unique serial number",
+                        existing_camera_id=camera['id']
+                    )
                     return
 
                 # Existing camera - update connection status
@@ -435,6 +443,9 @@ class RavensPerchDaemon:
     def _on_camera_disconnected(self, device_path: str):
         """Handle camera disconnection event."""
         logger.info(f"Camera disconnected: {device_path}")
+
+        # Always try to remove from rejected cameras list (in case it was rejected)
+        remove_rejected_camera(device_path)
 
         try:
             # Find camera by device path

@@ -93,6 +93,35 @@
     {% endif %}
 </div>
 
+{% if rejected_cameras %}
+<div class="rejected-cameras-section">
+    <h3 class="section-title warning-title">Unsupported Cameras</h3>
+    <div class="rejected-cameras-list">
+        {% for rejected in rejected_cameras %}
+        <div class="rejected-camera-card">
+            <div class="rejected-camera-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="8" x2="12" y2="12"></line>
+                    <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                </svg>
+            </div>
+            <div class="rejected-camera-info">
+                <span class="rejected-camera-name">{{ rejected.hardware_name }}</span>
+                <span class="rejected-camera-path">{{ rejected.device_path }}</span>
+                <span class="rejected-camera-reason">{{ rejected.reason }}</span>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    <p class="rejected-cameras-help">
+        These cameras have the same identifier as another connected camera.
+        Cameras without unique serial numbers cannot be used simultaneously.
+        Unplug one of the duplicate cameras to resolve this issue.
+    </p>
+</div>
+{% endif %}
+
 {% if cameras %}
 <div class="info-panel">
     <h4>Quick Info</h4>

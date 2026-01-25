@@ -29,7 +29,8 @@ from ..moonraker_client import (
 from ..hardware import estimate_cpu_capability, detect_encoders, get_platform_info, clear_encoder_cache
 from ..camera_manager import (
     find_video_devices, get_device_info, probe_capabilities, auto_configure,
-    get_v4l2_controls, set_v4l2_control, get_v4l2_control_value
+    get_v4l2_controls, set_v4l2_control, get_v4l2_control_value,
+    get_rejected_cameras
 )
 from ..bandwidth import get_camera_bandwidth_stats
 from ..print_status import get_monitor as get_print_monitor
@@ -52,9 +53,13 @@ def dashboard():
         camera['stream_active'] = is_stream_active(str(camera['id']))
         camera['stream_urls'] = get_stream_urls(str(camera['id']), get_system_ip())
 
+    # Get any rejected cameras (e.g., duplicates)
+    rejected = get_rejected_cameras()
+
     return render_template(
         'dashboard.html',
         cameras=cameras,
+        rejected_cameras=rejected,
         system_ip=get_system_ip()
     )
 

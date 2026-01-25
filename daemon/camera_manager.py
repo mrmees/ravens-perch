@@ -29,6 +29,64 @@ class DeviceInfo:
     hardware_id: str
 
 
+@dataclass
+class RejectedCamera:
+    """Information about a camera that was rejected (e.g., duplicate)."""
+    device_path: str
+    hardware_name: str
+    hardware_id: str
+    reason: str
+    existing_camera_id: Optional[int] = None
+
+
+# Thread-safe storage for rejected cameras
+_rejected_cameras: Dict[str, RejectedCamera] = {}
+_rejected_lock = threading.Lock()
+
+
+def add_rejected_camera(device_path: str, hardware_name: str, hardware_id: str,
+                        reason: str, existing_camera_id: Optional[int] = None):
+    """Track a camera that was rejected during setup."""
+    with _rejected_lock:
+        _rejected_cameras[device_path] = RejectedCamera(
+            device_path=device_path,
+            hardware_name=hardware_name,
+            hardware_id=hardware_id,
+            reason=reason,
+            existing_camera_id=existing_camera_id
+        )
+    logger.debug(f"Added rejected camera: {device_path} - {reason}")
+
+
+def remove_rejected_camera(device_path: str):
+    """Remove a rejected camera (e.g., when unplugged)."""
+    with _rejected_lock:
+        if device_path in _rejected_cameras:
+            del _rejected_cameras[device_path]
+            logger.debug(f"Removed rejected camera: {device_path}")
+
+
+def get_rejected_cameras() -> List[Dict]:
+    """Get list of all currently rejected cameras."""
+    with _rejected_lock:
+        return [
+            {
+                'device_path': rc.device_path,
+                'hardware_name': rc.hardware_name,
+                'hardware_id': rc.hardware_id,
+                'reason': rc.reason,
+                'existing_camera_id': rc.existing_camera_id,
+            }
+            for rc in _rejected_cameras.values()
+        ]
+
+
+def clear_rejected_cameras():
+    """Clear all rejected cameras (e.g., on restart)."""
+    with _rejected_lock:
+        _rejected_cameras.clear()
+
+
 def get_device_info(device_path: str) -> Optional[DeviceInfo]:
     """
     Get device information for a V4L2 device.
