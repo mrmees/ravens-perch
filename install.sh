@@ -19,6 +19,31 @@ INSTALL_DIR="${HOME}/ravens-perch"
 MEDIAMTX_VERSION="v1.5.1"
 KLIPPER_CONFIG_DIR="${HOME}/printer_data/config"
 
+# Detect git origin URL (for Moonraker update_manager)
+detect_git_origin() {
+    local script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+    local origin_url=""
+
+    # Try to get origin from the source directory
+    if [ -d "${script_dir}/.git" ]; then
+        origin_url=$(git -C "${script_dir}" remote get-url origin 2>/dev/null)
+    fi
+
+    # Try install directory if source didn't have it
+    if [ -z "$origin_url" ] && [ -d "${INSTALL_DIR}/.git" ]; then
+        origin_url=$(git -C "${INSTALL_DIR}" remote get-url origin 2>/dev/null)
+    fi
+
+    # Fallback to default
+    if [ -z "$origin_url" ]; then
+        origin_url="https://github.com/mrmees/ravens-perch.git"
+    fi
+
+    echo "$origin_url"
+}
+
+GIT_ORIGIN_URL=""
+
 # Logging functions
 log_info() {
     echo -e "${BLUE}[INFO]${NC} $1"
@@ -435,7 +460,7 @@ configure_moonraker() {
 [update_manager ravens-perch]
 type: git_repo
 path: ${INSTALL_DIR}
-origin: https://github.com/USER/ravens-perch.git
+origin: ${GIT_ORIGIN_URL}
 primary_branch: main
 managed_services: ravens-perch mediamtx
 EOF
@@ -469,7 +494,7 @@ EOF
         echo "[update_manager ravens-perch]"
         echo "type: git_repo"
         echo "path: ${INSTALL_DIR}"
-        echo "origin: https://github.com/USER/ravens-perch.git"
+        echo "origin: ${GIT_ORIGIN_URL}"
         echo "primary_branch: main"
         echo "managed_services: ravens-perch mediamtx"
         echo ""
@@ -532,6 +557,9 @@ main() {
 
     check_user
 
+    # Detect git origin before any file copying
+    GIT_ORIGIN_URL=$(detect_git_origin)
+
     if is_raspberry_pi; then
         log_info "Detected Raspberry Pi"
     elif is_rockchip; then
@@ -540,6 +568,7 @@ main() {
 
     log_info "Architecture: $(detect_arch)"
     log_info "Install directory: ${INSTALL_DIR}"
+    log_info "Git origin: ${GIT_ORIGIN_URL}"
     echo ""
 
     install_system_packages
