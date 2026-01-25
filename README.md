@@ -2,7 +2,7 @@
 
 **Zero-touch camera management for Klipper-based 3D printers**
 
-Cameras are automatically detected, optimally configured, and registered with Moonraker without user intervention. A web UI at `/cameras/` provides optional customization.
+Cameras are automatically detected, optimally configured, and registered with Moonraker without user intervention. Features print status overlays, dynamic framerate switching, and a web UI for customization.
 
 ---
 
@@ -14,16 +14,23 @@ Cameras are automatically detected, optimally configured, and registered with Mo
 - **Moonraker Integration**: Cameras automatically appear in Fluidd/Mainsail
 - **Persistent Settings**: Camera configurations survive reboots and reconnections
 
+### Print Integration
+- **Live Print Status Overlay**: Display print progress, temperatures, and more directly on the video feed
+- **16+ Overlay Options**: Progress %, layer, ETA, elapsed time, filename, hotend/bed temps, fan speed, print state, filament used, current time, print speed, Z height, head speed, flow rate, filament type
+- **Customizable Appearance**: Font selection, size, color, position, and layout options
+- **Dynamic Framerate**: Automatically switch between high framerate during prints and low framerate on standby to save resources
+
 ### Web Interface
 - **Dashboard**: View all cameras with live status and thumbnails
 - **Per-Camera Settings**: Adjust resolution, framerate, rotation, and more
-- **Advanced Options**: Encoder selection, bitrate, V4L2 controls
+- **Camera Controls**: Real-time adjustment of brightness, contrast, exposure, and other V4L2 controls
+- **Advanced Options**: Encoder selection, bitrate, input format
 - **Log Viewer**: Monitor system activity
 - **Dark Theme**: Matches Fluidd/Mainsail aesthetic
 
 ### Streaming
 - **MediaMTX Backend**: RTSP, WebRTC, and HLS streaming
-- **Hardware Acceleration**: VAAPI (Intel/AMD), V4L2M2M (Raspberry Pi)
+- **Hardware Acceleration**: VAAPI (Intel/AMD), V4L2M2M (Raspberry Pi), RKMPP (Rockchip)
 - **JPEG Snapshots**: On-demand snapshots with caching
 - **Quality Tiers**: Automatic quality adjustment based on CPU capability
 
@@ -32,7 +39,7 @@ Cameras are automatically detected, optimally configured, and registered with Mo
 ## Requirements
 
 ### System
-- Linux (Debian/Ubuntu-based, Raspberry Pi OS)
+- Linux (Debian/Ubuntu-based, Raspberry Pi OS, Armbian)
 - Python 3.8+
 - FFmpeg
 - v4l-utils
@@ -41,7 +48,8 @@ Cameras are automatically detected, optimally configured, and registered with Mo
 ### Supported Platforms
 - Raspberry Pi 3/4/5
 - x86_64 (Intel/AMD)
-- ARM64 (Orange Pi, etc.)
+- ARM64 (Orange Pi, Radxa, BTT CB1/CB2, etc.)
+- Rockchip RK3566/RK3568/RK3588 (with RKMPP hardware encoding)
 
 ---
 
@@ -51,22 +59,45 @@ Cameras are automatically detected, optimally configured, and registered with Mo
 
 If you're currently using Crowsnest for camera streaming, you'll need to disable it before running Ravens Perch. Both applications try to access the same camera devices, which will cause conflicts.
 
-**Temporarily disable Crowsnest (recommended for testing):**
+**Step 1: Stop the Crowsnest service**
 ```bash
 sudo systemctl stop crowsnest
 sudo systemctl disable crowsnest
 ```
 
-**To re-enable Crowsnest later:**
-```bash
-sudo systemctl enable crowsnest
-sudo systemctl start crowsnest
+**Step 2: Configuration files (optional)**
+
+No changes to `printer.cfg` or `moonraker.conf` are strictly required. However, you may want to:
+
+**Comment out existing webcam entries** in `moonraker.conf` or `webcams.conf` to avoid seeing duplicate/offline cameras in Fluidd/Mainsail:
+```ini
+# [webcam my_camera]
+# location: printer
+# stream_url: /webcam/?action=stream
+# snapshot_url: /webcam/?action=snapshot
 ```
 
-**Note:** You should also stop Ravens Perch before re-enabling Crowsnest:
+**The Crowsnest update_manager entry can remain** - it won't cause any issues:
+```ini
+[update_manager crowsnest]
+type: git_repo
+path: ~/crowsnest
+...
+```
+
+Ravens Perch will register its own webcams with Moonraker automatically.
+
+**To switch back to Crowsnest later:**
 ```bash
+# Stop Ravens Perch
 sudo systemctl stop ravens-perch
 sudo systemctl disable ravens-perch
+
+# Re-enable Crowsnest
+sudo systemctl enable crowsnest
+sudo systemctl start crowsnest
+
+# Uncomment your webcam entries in moonraker.conf if you commented them out
 ```
 
 ---
@@ -77,14 +108,14 @@ sudo systemctl disable ravens-perch
 
 ```bash
 cd ~
-git clone https://github.com/mrmees/ravens-perch-v2.git ravens-perch
+git clone https://github.com/mrmees/ravens-perch.git ravens-perch
 cd ravens-perch
 bash install.sh
 ```
 
 The installer will:
-1. Install system dependencies
-2. Download MediaMTX
+1. Install system dependencies (FFmpeg, v4l-utils, etc.)
+2. Download and configure MediaMTX
 3. Create Python virtual environment
 4. Initialize the database
 5. Configure systemd services
@@ -98,9 +129,9 @@ After installation:
 http://<your-ip>/cameras/
 ```
 
-Or directly:
+Or directly (bypassing nginx):
 ```
-http://<your-ip>:8585/cameras/
+http://<your-ip>:5000/
 ```
 
 ---
@@ -127,7 +158,7 @@ Ravens Perch automatically selects quality based on your system:
 | High (8-9) | 1920x1080  | 30 fps    | 6 Mbps  |
 | Excellent (10) | 1920x1080 | 60 fps | 8 Mbps  |
 
-Hardware encoders (VAAPI, V4L2M2M) boost your CPU rating.
+Hardware encoders (VAAPI, V4L2M2M, RKMPP) boost your effective CPU rating.
 
 ---
 
@@ -139,37 +170,107 @@ Hardware encoders (VAAPI, V4L2M2M) boost your CPU rating.
 - Live/Offline status indicators
 - Thumbnail previews (auto-refresh)
 - Quick access to configuration
+- Scan button to detect new cameras
 
 ### Camera Detail (`/cameras/<id>`)
 
 **Basic Settings:**
-- Friendly name
+- Friendly name (auto-syncs with Moonraker)
 - Resolution (populated from camera capabilities)
 - Framerate
 - Enable/disable toggle
 
 **Advanced Settings:**
 - Input format (MJPEG, H.264, YUYV)
-- Encoder (libx264, VAAPI, V4L2M2M)
-- Bitrate
+- Encoder (Software, VAAPI, V4L2M2M, RKMPP)
+- Bitrate (1M - 10M)
 - Rotation (0°, 90°, 180°, 270°)
+
+**Print Integration:**
+- Enable/disable print status overlay
+- Overlay appearance (font, size, color, position)
+- Stats to display (16+ options):
+  - Progress %, Layer, ETA, Elapsed Time
+  - Filename, Print State
+  - Hotend Temp, Bed Temp, Fan Speed
+  - Print Speed, Z Height
+  - Head Speed (live velocity), Flow Rate
+  - Filament Used, Filament Type, Current Time
+- Multi-line or single-line layout
+- Show/hide labels
+- Overlay update interval (1-10 seconds)
+- Dynamic framerate (printing vs standby)
+
+**Camera Controls:**
+- Real-time V4L2 control adjustment
+- Brightness, contrast, saturation
+- Exposure, gain, white balance
+- Focus (for supported cameras)
+- Changes apply immediately and persist
 
 **Stream URLs:**
 - WebRTC, RTSP, and snapshot URLs displayed
-- Click to copy
+- Current FFmpeg command shown
 
 ### Settings (`/cameras/settings`)
 
 - CPU threshold for quality reduction
 - Moonraker URL configuration
-- Log level
-- System information
+- Log level (Debug, Info, Warning, Error)
+- System information and encoder status
 
 ### Logs (`/cameras/logs`)
 
 - Filterable by level (Info, Warning, Error)
 - Camera-specific log entries
-- Auto-refresh
+- Timestamps and context
+
+---
+
+## Print Status Overlay
+
+The print status overlay displays real-time information from Moonraker directly on your camera feed.
+
+### Available Stats
+
+| Stat | Description |
+|------|-------------|
+| Progress % | Current print completion percentage |
+| Layer | Current layer / total layers |
+| ETA | Estimated time remaining |
+| Elapsed Time | Time since print started |
+| Filename | Current print file name |
+| Print State | Printing, Paused, etc. |
+| Hotend Temp | Current / target hotend temperature |
+| Bed Temp | Current / target bed temperature |
+| Fan Speed | Part cooling fan percentage |
+| Print Speed | Current speed factor percentage |
+| Z Height | Current Z position |
+| Head Speed | Live toolhead velocity (mm/s) |
+| Flow Rate | Live extruder velocity (mm/s) |
+| Filament Used | Total filament extruded |
+| Filament Type | From gcode metadata (PLA, PETG, etc.) |
+| Current Time | System clock |
+
+### Appearance Options
+
+- **Font**: Select from any installed system font
+- **Size**: 16px to 64px
+- **Color**: White, Yellow, Cyan, Green, Red, Orange
+- **Position**: Top/Bottom + Left/Center/Right
+- **Layout**: Single line or multi-line
+- **Labels**: Show or hide stat labels
+
+---
+
+## Dynamic Framerate
+
+Save CPU and bandwidth by automatically reducing framerate when not printing:
+
+- **Printing Framerate**: Higher FPS during active prints (e.g., 30 fps)
+- **Standby Framerate**: Lower FPS when idle (e.g., 5 fps)
+
+The switch happens automatically with a configurable delay after print completion.
 
 ---
 
@@ -233,6 +334,13 @@ Camera settings persist in SQLite. Survives reboots and reinstalls.
 
 Streams are managed dynamically via the MediaMTX API - no manual editing needed.
 
+### Overlay Files
+```
+~/ravens-perch/data/overlays/camera_<id>.txt
+```
+
+Text files updated by the print status monitor, read by FFmpeg's drawtext filter.
+
 ---
 
 ## Uninstallation
@@ -265,6 +373,11 @@ sudo usermod -aG video $USER
 # Log out and back in
 ```
 
+**Check if another application is using the camera:**
+```bash
+sudo fuser /dev/video0
+```
+
 ### Stream Not Starting
 
 **Check Ravens Perch logs:**
@@ -273,9 +386,21 @@ sudo journalctl -u ravens-perch -n 50
 ```
 
 **Common issues:**
-- Camera in use by another application
-- Unsupported format/resolution
-- FFmpeg errors (check logs)
+- Camera in use by another application (Crowsnest, etc.)
+- Unsupported format/resolution combination
+- FFmpeg errors (check logs for details)
+
+### Overlay Not Updating
+
+**Check Moonraker connection:**
+```bash
+curl http://localhost:7125/printer/objects/query?print_stats
+```
+
+**Check overlay files are being written:**
+```bash
+cat ~/ravens-perch/data/overlays/camera_*.txt
+```
 
 ### Web UI Not Accessible
 
@@ -287,15 +412,32 @@ sudo systemctl status nginx
 
 **Direct access (bypass nginx):**
 ```
-http://<ip>:8585/cameras/
+http://<ip>:5000/
 ```
 
 ### High CPU Usage
 
 1. Check if hardware encoder is detected (Settings page)
-2. Lower resolution in camera settings
-3. Reduce framerate
-4. Lower bitrate
+2. Enable hardware encoder in camera settings if available
+3. Lower resolution
+4. Reduce framerate
+5. Lower bitrate
+6. Use standby framerate feature when not printing
+
+---
+
+## Hardware Encoders
+
+Ravens Perch automatically detects and uses hardware encoders when available:
+
+| Platform | Encoder | Notes |
+|----------|---------|-------|
+| Intel (6th gen+) | VAAPI | Excellent performance |
+| AMD (APU/GPU) | VAAPI | Excellent performance |
+| Raspberry Pi 4/5 | V4L2M2M | Good performance |
+| Rockchip RK35xx | RKMPP | Experimental support |
+
+Hardware encoding dramatically reduces CPU usage and allows higher quality streams.
 
 ---
 
@@ -307,21 +449,23 @@ ravens-perch/
 │   ├── main.py              # Entry point, orchestration
 │   ├── config.py            # Configuration constants
 │   ├── db.py                # SQLite database layer
-│   ├── camera_manager.py    # Detection, auto-config
-│   ├── stream_manager.py    # MediaMTX API
-│   ├── moonraker_client.py  # Moonraker API
-│   ├── snapshot_server.py   # JPEG snapshots
+│   ├── camera_manager.py    # Detection, probing, auto-config
+│   ├── stream_manager.py    # FFmpeg commands, MediaMTX API
+│   ├── moonraker_client.py  # Moonraker webcam API
+│   ├── print_status.py      # Overlay text generation
+│   ├── snapshot_server.py   # JPEG snapshot capture
 │   ├── hardware.py          # Encoder detection
+│   ├── bandwidth.py         # Bandwidth estimation
 │   └── web_ui/
 │       ├── app.py           # Flask application
 │       ├── routes.py        # Route handlers
 │       ├── templates/       # Jinja2 templates
 │       └── static/          # CSS, JS
-├── mediamtx/                # MediaMTX binary
-├── data/                    # SQLite database
+├── mediamtx/                # MediaMTX binary and config
+├── data/                    # SQLite database, overlay files
 ├── logs/                    # Log files
-├── install.sh
-└── uninstall.sh
+├── install.sh               # Installation script
+└── uninstall.sh             # Uninstallation script
 ```
 
 ---
@@ -338,38 +482,18 @@ Contributions welcome! Please:
 
 ## License
 
-MIT License
-
-Copyright (c) 2025 mrmees
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+MIT License - See LICENSE file for details.
 
 ---
 
 ## Acknowledgments
 
-- **bluenviron**: [MediaMTX](https://github.com/bluenviron/mediamtx)
-- **Klipper/Moonraker**: 3D printer firmware and API
-- **Fluidd/Mainsail**: Web interfaces for Klipper
+- [MediaMTX](https://github.com/bluenviron/mediamtx) by bluenviron
+- [Klipper](https://github.com/Klipper3d/klipper) and [Moonraker](https://github.com/Arksine/moonraker)
+- [Fluidd](https://github.com/fluidd-core/fluidd) and [Mainsail](https://github.com/mainsail-crew/mainsail)
 
 ---
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/mrmees/ravens-perch-v2/issues)
+- **Issues**: [GitHub Issues](https://github.com/mrmees/ravens-perch/issues)
