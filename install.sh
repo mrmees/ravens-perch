@@ -104,9 +104,10 @@ migrate_from_crowsnest() {
     echo "Ravens Perch can replace crowsnest for camera management."
     echo "This will:"
     echo "  - Stop and disable the crowsnest service"
-    echo "  - Comment out crowsnest in moonraker.conf (reversible)"
+    echo "  - Rename crowsnest.conf to crowsnest.backup"
+    echo "  - Comment out crowsnest in moonraker.conf"
     echo "  - Clear existing camera configurations from Moonraker"
-    echo "  - Back up your current camera settings"
+    echo "  - All changes are reversible during uninstall"
     echo ""
     read -p "Migrate from crowsnest to Ravens Perch? (y/N): " migrate_choice
 
@@ -131,6 +132,14 @@ migrate_from_crowsnest() {
 
     # Create migration marker
     echo "$(date -Iseconds)" > "${backup_dir}/migration_date"
+
+    # Rename crowsnest.conf to disable its camera definitions
+    local crowsnest_conf="${KLIPPER_CONFIG_DIR}/crowsnest.conf"
+    if [ -f "$crowsnest_conf" ]; then
+        log_info "Renaming crowsnest.conf to crowsnest.backup..."
+        mv "$crowsnest_conf" "${crowsnest_conf%.conf}.backup"
+        log_success "Renamed crowsnest.conf to crowsnest.backup"
+    fi
 
     # Backup current cameras from Moonraker
     log_info "Backing up camera configuration from Moonraker..."

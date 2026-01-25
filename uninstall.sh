@@ -205,6 +205,15 @@ PYTHON_SCRIPT
             fi
         fi
 
+        # Restore crowsnest.conf from backup
+        crowsnest_backup="${KLIPPER_CONFIG_DIR}/crowsnest.backup"
+        crowsnest_conf="${KLIPPER_CONFIG_DIR}/crowsnest.conf"
+        if [ -f "$crowsnest_backup" ] && [ ! -f "$crowsnest_conf" ]; then
+            log_info "Restoring crowsnest.conf from backup..."
+            mv "$crowsnest_backup" "$crowsnest_conf"
+            log_success "Restored crowsnest.conf"
+        fi
+
         # Re-enable and start crowsnest service
         log_info "Re-enabling crowsnest service..."
         if systemctl list-unit-files crowsnest.service >/dev/null 2>&1; then
