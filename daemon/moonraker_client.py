@@ -319,7 +319,7 @@ def print_to_console(message: str) -> bool:
 
 def announce_management_url() -> None:
     """
-    Print the Ravens Perch management URL to the Klipper console.
+    Announce the Ravens Perch management URL via Moonraker notification.
     Called on service startup.
     """
     # Get hostname
@@ -359,10 +359,12 @@ def announce_management_url() -> None:
         url_hostname = f"http://{hostname}:{port}/cameras/"
         url_ip = f"http://{ip}:{port}/cameras/"
 
-    # Print to console
-    print_to_console("Ravens Perch camera manager available at:")
-    print_to_console(f"  {url_hostname}")
-    print_to_console(f"  {url_ip}")
+    # Send as notification
+    send_notification(
+        "Ravens Perch",
+        f"Camera manager available at:\n{url_hostname}\n{url_ip}",
+        "info"
+    )
 
 
 def send_notification(title: str, message: str, level: str = "info") -> bool:
