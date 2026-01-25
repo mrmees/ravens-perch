@@ -18,19 +18,6 @@
               hx-target="#settings-status">
 
             <div class="form-group">
-                <label for="cpu_threshold">CPU Threshold (%)</label>
-                <input type="range"
-                       id="cpu_threshold"
-                       name="cpu_threshold"
-                       min="10"
-                       max="80"
-                       value="{{ settings.get('cpu_threshold', 30) }}"
-                       oninput="document.getElementById('cpu_threshold_value').textContent = this.value + '%'">
-                <span id="cpu_threshold_value" class="range-value">{{ settings.get('cpu_threshold', 30) }}%</span>
-                <p class="form-help">Quality will be reduced if CPU usage exceeds this threshold.</p>
-            </div>
-
-            <div class="form-group">
                 <label for="moonraker_url">Moonraker URL</label>
                 <input type="text"
                        id="moonraker_url"

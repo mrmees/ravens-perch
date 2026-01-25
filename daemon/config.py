@@ -30,8 +30,7 @@ MOONRAKER_FALLBACK_URLS = [
     "http://127.0.0.1:7125",
 ]
 
-# CPU and performance
-DEFAULT_CPU_THRESHOLD = 30  # Percent
+# Performance
 DEBOUNCE_DELAY = 2.0  # Seconds after device events
 
 # Quality tiers (based on CPU capability rating 1-10)

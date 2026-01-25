@@ -682,9 +682,6 @@ def settings_page():
 @bp.route('/settings', methods=['POST'])
 def update_global_settings():
     """Update global settings."""
-    if 'cpu_threshold' in request.form:
-        set_setting('cpu_threshold', int(request.form['cpu_threshold']))
-
     if 'moonraker_url' in request.form:
         set_setting('moonraker_url', request.form['moonraker_url'])
 
