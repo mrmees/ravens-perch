@@ -599,8 +599,8 @@ configure_printer_ui() {
 
         mkdir -p "$mainsail_theme_dir"
 
-        # Camera icon SVG path from Material Design Icons
-        local camera_icon="M12,10L11.06,12.06L9,13L11.06,13.94L12,16L12.94,13.94L15,13L12.94,12.06L12,10M20,5H16.83L15,3H9L7.17,5H4A2,2 0 0,0 2,7V19A2,2 0 0,0 4,21H20A2,2 0 0,0 22,19V7A2,2 0 0,0 20,5M20,19H4V7H8.05L9.88,5H14.12L15.95,7H20V19M12,8A5,5 0 0,0 7,13A5,5 0 0,0 12,18A5,5 0 0,0 17,13A5,5 0 0,0 12,8M12,16A3,3 0 0,1 9,13A3,3 0 0,1 12,10A3,3 0 0,1 15,13A3,3 0 0,1 12,16Z"
+        # Bird/Raven icon SVG path from Material Design Icons (mdi:bird)
+        local raven_icon="M23 11.5L19.95 10.37C19.69 9.22 19.04 8.56 19.04 8.56C17.4 6.92 14.75 6.92 13.11 8.56L11.63 10.04L5 3C4 7 5 11 7.45 14.22L2 19.5C2 19.5 10.89 21.5 16.07 17.45C18.83 15.29 19.45 14.03 19.84 12.7L23 11.5M17.71 11.72C17.32 12.11 16.68 12.11 16.29 11.72C15.9 11.33 15.9 10.7 16.29 10.31C16.68 9.92 17.32 9.92 17.71 10.31C18.1 10.7 18.1 11.33 17.71 11.72Z"
 
         if [ -f "$mainsail_navi" ]; then
             # File exists - check if we're already in it
@@ -608,7 +608,7 @@ configure_printer_ui() {
                 log_info "Ravens Perch already in Mainsail sidebar"
             else
                 # Merge with existing file using Python
-                python3 - "$mainsail_navi" "$camera_icon" << 'PYTHON_SCRIPT'
+                python3 - "$mainsail_navi" "$raven_icon" << 'PYTHON_SCRIPT'
 import sys
 import json
 
@@ -647,7 +647,7 @@ PYTHON_SCRIPT
     "href": "/cameras/",
     "target": "_self",
     "position": 25,
-    "icon": "${camera_icon}"
+    "icon": "${raven_icon}"
   }
 ]
 EOF
