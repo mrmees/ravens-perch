@@ -369,15 +369,18 @@ create_venv() {
     # Activate and install packages
     source venv/bin/activate
 
-    pip install --upgrade pip wheel setuptools -q
+    log_info "Upgrading pip, wheel, setuptools..."
+    pip install --upgrade pip wheel setuptools
 
     # Install core requirements
-    pip install flask requests psutil ruamel.yaml -q
+    log_info "Installing core packages: flask, requests, psutil, ruamel.yaml..."
+    pip install flask requests psutil ruamel.yaml
 
     # Install optional packages (may fail on some platforms)
-    pip install pyudev -q 2>/dev/null || log_warn "pyudev not installed (using polling fallback)"
-    pip install av -q 2>/dev/null || log_warn "PyAV not installed (using ffmpeg fallback for snapshots)"
-    pip install pyturbojpeg -q 2>/dev/null || log_warn "pyturbojpeg not installed (using PIL fallback)"
+    log_info "Installing optional packages..."
+    pip install pyudev 2>/dev/null || log_warn "pyudev not installed (using polling fallback)"
+    pip install av 2>/dev/null || log_warn "PyAV not installed (using ffmpeg fallback for snapshots)"
+    pip install pyturbojpeg 2>/dev/null || log_warn "pyturbojpeg not installed (using PIL fallback)"
 
     deactivate
 
