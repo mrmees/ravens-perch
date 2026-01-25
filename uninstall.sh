@@ -119,11 +119,11 @@ log_info "Removing printer UI integrations..."
 config_dir="${HOME}/printer_data/config"
 
 # Remove Mainsail sidebar entry
-mainsail_sidebar="${config_dir}/.theme/sidebar.json"
-if [ -f "$mainsail_sidebar" ]; then
-    if grep -q "Ravens Perch" "$mainsail_sidebar" 2>/dev/null; then
+mainsail_navi="${config_dir}/.theme/navi.json"
+if [ -f "$mainsail_navi" ]; then
+    if grep -q "Ravens Perch" "$mainsail_navi" 2>/dev/null; then
         log_info "Removing Ravens Perch from Mainsail sidebar..."
-        python3 - "$mainsail_sidebar" << 'PYTHON_SCRIPT' 2>/dev/null || true
+        python3 - "$mainsail_navi" << 'PYTHON_SCRIPT' 2>/dev/null || true
 import sys
 import json
 

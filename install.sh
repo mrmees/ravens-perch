@@ -595,20 +595,20 @@ configure_printer_ui() {
     read -p "Add Ravens Perch to Mainsail sidebar? (y/N): " mainsail_choice
     if [[ "$mainsail_choice" == "y" || "$mainsail_choice" == "Y" ]]; then
         local mainsail_theme_dir="${config_dir}/.theme"
-        local mainsail_sidebar="${mainsail_theme_dir}/sidebar.json"
+        local mainsail_navi="${mainsail_theme_dir}/navi.json"
 
         mkdir -p "$mainsail_theme_dir"
 
         # Camera icon SVG path from Material Design Icons
         local camera_icon="M12,10L11.06,12.06L9,13L11.06,13.94L12,16L12.94,13.94L15,13L12.94,12.06L12,10M20,5H16.83L15,3H9L7.17,5H4A2,2 0 0,0 2,7V19A2,2 0 0,0 4,21H20A2,2 0 0,0 22,19V7A2,2 0 0,0 20,5M20,19H4V7H8.05L9.88,5H14.12L15.95,7H20V19M12,8A5,5 0 0,0 7,13A5,5 0 0,0 12,18A5,5 0 0,0 17,13A5,5 0 0,0 12,8M12,16A3,3 0 0,1 9,13A3,3 0 0,1 12,10A3,3 0 0,1 15,13A3,3 0 0,1 12,16Z"
 
-        if [ -f "$mainsail_sidebar" ]; then
+        if [ -f "$mainsail_navi" ]; then
             # File exists - check if we're already in it
-            if grep -q "Ravens Perch" "$mainsail_sidebar" 2>/dev/null; then
+            if grep -q "Ravens Perch" "$mainsail_navi" 2>/dev/null; then
                 log_info "Ravens Perch already in Mainsail sidebar"
             else
                 # Merge with existing file using Python
-                python3 - "$mainsail_sidebar" "$camera_icon" << 'PYTHON_SCRIPT'
+                python3 - "$mainsail_navi" "$camera_icon" << 'PYTHON_SCRIPT'
 import sys
 import json
 
@@ -632,15 +632,15 @@ if not any(item.get('title') == 'Ravens Perch' for item in sidebar):
     sidebar.append(ravens_entry)
     with open(sidebar_file, 'w') as f:
         json.dump(sidebar, f, indent=2)
-    print("Added Ravens Perch to existing sidebar.json")
+    print("Added Ravens Perch to existing navi.json")
 else:
-    print("Ravens Perch already in sidebar.json")
+    print("Ravens Perch already in navi.json")
 PYTHON_SCRIPT
                 log_success "Added Ravens Perch to Mainsail sidebar"
             fi
         else
-            # Create new sidebar.json
-            cat > "$mainsail_sidebar" << EOF
+            # Create new navi.json
+            cat > "$mainsail_navi" << EOF
 [
   {
     "title": "Ravens Perch",
