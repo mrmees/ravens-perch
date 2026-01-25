@@ -621,15 +621,18 @@
         text-align: center;
     }
 
-    /* Video Preview */
+    /* Video Preview - sticky on all screen sizes */
     .preview-container-v2 {
-        position: relative;
+        position: sticky;
+        top: 0.5rem;
+        z-index: 10;
         width: 100%;
         aspect-ratio: 16/9;
         background: var(--bg-tertiary);
         border-radius: var(--radius);
         overflow: hidden;
         margin-bottom: 1rem;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     }
     .preview-container-v2 iframe,
     .preview-container-v2 img {
@@ -934,14 +937,6 @@
     @media (min-width: 576px) {
         .camera-layout-v2 {
             padding-bottom: 0;
-        }
-
-        /* Sticky video preview */
-        .preview-container-v2 {
-            position: sticky;
-            top: 0.5rem;
-            z-index: 10;
-            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
         }
 
         /* 2 columns for form grids */
