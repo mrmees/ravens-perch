@@ -2,9 +2,12 @@
     Settings saved successfully.
 </div>
 
-{% if ffmpeg_cmd is defined %}
 <div id="ffmpeg-command-section" hx-swap-oob="true" class="info-section" style="margin-top: 1rem;">
+    {% if ffmpeg_cmd %}
     <h4>FFmpeg Command</h4>
     <div class="ffmpeg-command"><code>{{ ffmpeg_cmd }}</code></div>
+    {% else %}
+    <h4>FFmpeg Command</h4>
+    <div class="ffmpeg-command"><code class="text-muted">Stream not active</code></div>
+    {% endif %}
 </div>
-{% endif %}
