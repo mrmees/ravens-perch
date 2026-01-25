@@ -696,13 +696,18 @@ def update_global_settings():
 
     # Appearance settings
     if 'accent_color' in request.form:
-        accent_color = request.form['accent_color']
+        accent_color = request.form['accent_color'].upper()
         # Validate hex color format
         if accent_color and accent_color.startswith('#') and len(accent_color) == 7:
             set_setting('accent_color', accent_color)
         elif not accent_color:
             # Clear the setting if empty
             set_setting('accent_color', None)
+
+    if 'custom_accent_color' in request.form:
+        custom_color = request.form['custom_accent_color'].upper()
+        if custom_color and custom_color.startswith('#') and len(custom_color) == 7:
+            set_setting('custom_accent_color', custom_color)
 
     add_log("INFO", "Global settings updated")
 
