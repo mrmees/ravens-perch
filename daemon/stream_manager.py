@@ -376,10 +376,15 @@ def build_ffmpeg_command(
         # Determine border color for contrast
         border_color = 'black' if color in ('white', 'yellow', 'cyan') else 'white'
 
+        # Escape path for FFmpeg filter (colons and backslashes need escaping)
+        escaped_path = overlay_path.replace('\\', '/').replace(':', '\\:')
+
         # drawtext filter with text file that reloads every second
+        # Use fontconfig font name for cross-platform compatibility
         drawtext = (
-            f"drawtext=textfile='{overlay_path}'"
+            f"drawtext=textfile='{escaped_path}'"
             f":reload=1"
+            f":font=monospace"
             f":fontcolor={color}"
             f":fontsize={font_size}"
             f":borderw=2"
@@ -454,6 +459,10 @@ def build_ffmpeg_command(
     ])
 
     ffmpeg_cmd = " ".join(cmd_parts)
+
+    if overlay_path:
+        logger.info(f"Built FFmpeg command with overlay: {overlay_path}")
+        logger.debug(f"Full FFmpeg command: {ffmpeg_cmd}")
 
     # If V4L2 controls are provided, wrap command to apply them first
     if v4l2_controls:
