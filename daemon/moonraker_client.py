@@ -359,10 +359,10 @@ def announce_management_url() -> None:
         url_hostname = f"http://{hostname}:{port}/cameras/"
         url_ip = f"http://{ip}:{port}/cameras/"
 
-    # Print to console using M118
-    print_to_console("Ravens Perch camera manager available at:")
-    print_to_console(f"  {url_hostname}")
+    # Print to console (reverse order since console displays newest first)
     print_to_console(f"  {url_ip}")
+    print_to_console(f"  {url_hostname}")
+    print_to_console("Ravens Perch camera manager available at:")
 
 
 def send_notification(title: str, message: str, level: str = "info") -> bool:
