@@ -352,49 +352,51 @@ configure_nginx() {
     # Create a backup
     sudo cp "$target_conf" "${target_conf}.ravens-perch.bak"
 
-    # Use sed to insert before the first /webcam/ location or before the final }
-    # This is more reliable than trying to parse brace matching
-    if grep -q "location /webcam" "$target_conf"; then
-        # Insert before the first webcam location
-        sudo sed -i '/location \/webcam/i\
-    # Ravens Perch Camera UI\
-    location /cameras/ {\
-        proxy_pass http://127.0.0.1:8585/cameras/;\
-        proxy_http_version 1.1;\
-        proxy_set_header Host $host;\
-        proxy_set_header X-Real-IP $remote_addr;\
-        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\
-        proxy_set_header X-Forwarded-Proto $scheme;\
-    }\
-' "$target_conf"
-    else
-        # Insert before the final closing brace using Python (more reliable)
-        sudo python3 << PYTHON_SCRIPT
-with open('${target_conf}', 'r') as f:
-    lines = f.readlines()
+    # Use Python for reliable multiline insertion (sed is too fragile for this)
+    sudo python3 - "${target_conf}" << 'PYTHON_SCRIPT'
+import sys
+
+target_conf = sys.argv[1]
+
+with open(target_conf, 'r') as f:
+    content = f.read()
 
 location_block = '''
     # Ravens Perch Camera UI
     location /cameras/ {
         proxy_pass http://127.0.0.1:8585/cameras/;
         proxy_http_version 1.1;
-        proxy_set_header Host \$host;
-        proxy_set_header X-Real-IP \$remote_addr;
-        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
-        proxy_set_header X-Forwarded-Proto \$scheme;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
     }
 '''
 
-# Find the last line that is just "}"
-for i in range(len(lines) - 1, -1, -1):
-    if lines[i].strip() == '}':
-        lines.insert(i, location_block + '\n')
-        break
+# Try to insert before the first "location /webcam" line
+if 'location /webcam' in content:
+    # Find the line and insert before it
+    lines = content.split('\n')
+    for i, line in enumerate(lines):
+        if 'location /webcam' in line:
+            # Insert the block before this line
+            lines.insert(i, location_block.strip())
+            break
+    content = '\n'.join(lines)
+else:
+    # Insert before the final closing brace
+    lines = content.split('\n')
+    for i in range(len(lines) - 1, -1, -1):
+        if lines[i].strip() == '}':
+            lines.insert(i, location_block.strip())
+            break
+    content = '\n'.join(lines)
 
-with open('${target_conf}', 'w') as f:
-    f.writelines(lines)
+with open(target_conf, 'w') as f:
+    f.write(content)
+
+print("Location block added successfully")
 PYTHON_SCRIPT
-    fi
 
     # Verify the block was added
     if grep -q "location /cameras/" "$target_conf"; then
