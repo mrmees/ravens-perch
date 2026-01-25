@@ -312,54 +312,38 @@ EOF
 configure_nginx() {
     log_info "Configuring nginx..."
 
-    # Create standalone config file
-    sudo tee /etc/nginx/conf.d/ravens-perch.conf > /dev/null << 'EOF'
-# Ravens Perch Camera UI - standalone config
-# This is included via the main nginx config
-EOF
+    # Create the location block content
+    local location_block='
+    # Ravens Perch Camera UI
+    location /cameras/ {
+        proxy_pass http://127.0.0.1:8585/cameras/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }'
 
-    # Try to find and modify the main server block
+    # Try to find the active nginx config
     local configs=(
+        "/etc/nginx/sites-enabled/fluidd"
+        "/etc/nginx/sites-enabled/mainsail"
         "/etc/nginx/sites-available/fluidd"
         "/etc/nginx/sites-available/mainsail"
         "/etc/nginx/sites-enabled/default"
-        "/etc/nginx/nginx.conf"
     )
 
-    local found=0
+    local target_conf=""
     for conf in "${configs[@]}"; do
         if [ -f "$conf" ]; then
-            if ! grep -q "location /cameras/" "$conf" 2>/dev/null; then
-                log_info "Adding /cameras/ location to ${conf}..."
-
-                # Create a backup
-                sudo cp "$conf" "${conf}.bak"
-
-                # Try to insert the location block
-                # This sed command inserts before the last closing brace of a server block
-                sudo sed -i '/^[[:space:]]*server[[:space:]]*{/,/^[[:space:]]*}[[:space:]]*$/{
-                    /^[[:space:]]*}[[:space:]]*$/i\
-\    # Ravens Perch Camera UI\
-\    location /cameras/ {\
-\        proxy_pass http://127.0.0.1:8585/cameras/;\
-\        proxy_http_version 1.1;\
-\        proxy_set_header Host $host;\
-\        proxy_set_header X-Real-IP $remote_addr;\
-\        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;\
-\        proxy_set_header X-Forwarded-Proto $scheme;\
-\    }
-                }' "$conf" 2>/dev/null && found=1 || true
-            else
-                log_info "/cameras/ location already in ${conf}"
-                found=1
-            fi
+            target_conf="$conf"
             break
         fi
     done
 
-    if [ $found -eq 0 ]; then
-        log_warn "Could not auto-configure nginx."
-        log_info "Please add the following to your nginx server block:"
+    if [ -z "$target_conf" ]; then
+        log_warn "Could not find nginx site configuration."
+        log_info "Please manually add the following to your nginx server block:"
         echo ""
         echo "    location /cameras/ {"
         echo "        proxy_pass http://127.0.0.1:8585/cameras/;"
@@ -370,14 +354,94 @@ EOF
         echo "        proxy_set_header X-Forwarded-Proto \$scheme;"
         echo "    }"
         echo ""
+        return
+    fi
+
+    # Check if already configured
+    if grep -q "location /cameras/" "$target_conf" 2>/dev/null; then
+        log_info "/cameras/ location already configured in ${target_conf}"
+    else
+        log_info "Adding /cameras/ location to ${target_conf}..."
+
+        # Create a backup
+        sudo cp "$target_conf" "${target_conf}.ravens-perch.bak"
+
+        # Use Python for reliable config modification (more reliable than sed)
+        sudo python3 << PYTHON_SCRIPT
+import re
+
+with open('${target_conf}', 'r') as f:
+    content = f.read()
+
+# Check if already has the location
+if 'location /cameras/' in content:
+    print("Already configured")
+else:
+    # Find the last location block or the server block closing brace
+    # Insert before the final closing brace of the server block
+
+    location_block = '''
+    # Ravens Perch Camera UI
+    location /cameras/ {
+        proxy_pass http://127.0.0.1:8585/cameras/;
+        proxy_http_version 1.1;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+'''
+
+    # Find the position to insert (before the last closing brace)
+    # Look for pattern: whitespace + } at end (server block close)
+    lines = content.split('\n')
+    insert_idx = -1
+    brace_count = 0
+    in_server = False
+
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if stripped.startswith('server') and '{' in stripped:
+            in_server = True
+            brace_count = 1
+        elif in_server:
+            brace_count += line.count('{') - line.count('}')
+            if brace_count == 0:
+                insert_idx = i
+                break
+
+    if insert_idx > 0:
+        lines.insert(insert_idx, location_block)
+        content = '\n'.join(lines)
+
+        with open('${target_conf}', 'w') as f:
+            f.write(content)
+        print("Configuration added successfully")
+    else:
+        print("Could not find insertion point")
+        exit(1)
+PYTHON_SCRIPT
+
+        if [ $? -eq 0 ]; then
+            log_success "Added /cameras/ location to nginx config"
+        else
+            log_warn "Failed to auto-configure nginx"
+            log_info "Please manually add the location block to ${target_conf}"
+        fi
     fi
 
     # Test and reload nginx
     if sudo nginx -t 2>/dev/null; then
         sudo systemctl reload nginx || true
-        log_success "Nginx configured"
+        log_success "Nginx configured and reloaded"
     else
-        log_warn "Nginx config test failed - please check configuration"
+        log_warn "Nginx config test failed"
+        log_info "Restoring backup..."
+        if [ -f "${target_conf}.ravens-perch.bak" ]; then
+            sudo cp "${target_conf}.ravens-perch.bak" "$target_conf"
+            sudo nginx -t && sudo systemctl reload nginx
+        fi
+        log_info "Please manually configure nginx for /cameras/ location"
     fi
 }
 

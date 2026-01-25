@@ -131,7 +131,7 @@ http://<your-ip>/cameras/
 
 Or directly (bypassing nginx):
 ```
-http://<your-ip>:5000/
+http://<your-ip>:8585/
 ```
 
 ---
@@ -412,7 +412,7 @@ sudo systemctl status nginx
 
 **Direct access (bypass nginx):**
 ```
-http://<ip>:5000/
+http://<ip>:8585/
 ```
 
 ### High CPU Usage
