@@ -663,65 +663,12 @@ EOF
 
         mkdir -p "$fluidd_theme_dir"
 
-        # Detect Fluidd port from nginx config
-        local fluidd_port="80"
-        for conf in /etc/nginx/sites-enabled/* /etc/nginx/sites-available/* /etc/nginx/conf.d/*; do
-            if [ -f "$conf" ]; then
-                if grep -qi "fluidd" "$conf" 2>/dev/null || [[ "$(basename "$conf")" == *fluidd* ]]; then
-                    local detected_port=$(grep -oP 'listen\s+\K\d+' "$conf" 2>/dev/null | head -1)
-                    if [ -n "$detected_port" ]; then
-                        fluidd_port="$detected_port"
-                        break
-                    fi
-                fi
-            fi
-        done
-
-        # Get hostname for full URL
-        local machine_hostname=$(hostname -f 2>/dev/null || hostname)
-        # Append .local if it's a simple hostname without domain
-        if [[ ! "$machine_hostname" == *.* ]]; then
-            machine_hostname="${machine_hostname}.local"
-        fi
-
-        # Get IP address as fallback
-        local machine_ip=$(hostname -I 2>/dev/null | awk '{print $1}')
-        if [ -z "$machine_ip" ]; then
-            machine_ip=$(ip route get 1 2>/dev/null | awk '{print $7; exit}')
-        fi
-
-        # Build the full URLs
-        local ravens_url="http://${machine_hostname}"
-        local ravens_url_ip="http://${machine_ip}"
-        if [ "$fluidd_port" != "80" ]; then
-            ravens_url="${ravens_url}:${fluidd_port}"
-            ravens_url_ip="${ravens_url_ip}:${fluidd_port}"
-        fi
-        ravens_url="${ravens_url}/cameras/"
-        ravens_url_ip="${ravens_url_ip}/cameras/"
-
-        # CSS to add a Ravens Perch link banner
-        local ravens_css="/* Ravens Perch Integration */
-/* Adds a link banner to access Ravens Perch camera settings */
-
-/* Banner at top of camera settings section */
-#camera::after {
-  content: \"Manage cameras with Ravens Perch → ${ravens_url} (or ${ravens_url_ip})\";
-  display: block;
-  margin: 8px 16px;
-  padding: 12px 16px;
-  background: linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.15), rgba(var(--color-primary-rgb), 0.05));
-  border: 1px solid rgba(var(--color-primary-rgb), 0.3);
-  border-radius: 4px;
-  font-size: 14px;
-  color: var(--color-primary);
-  text-align: center;
-}
-
-#camera::after:hover {
-  background: linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.25), rgba(var(--color-primary-rgb), 0.1));
-}
-"
+        # CSS import that pulls dynamic CSS from Ravens Perch
+        # This ensures the URL always reflects current hostname/IP
+        local ravens_css='/* Ravens Perch Integration */
+/* Import dynamic CSS from Ravens Perch (updates with current IP/hostname) */
+@import url("/cameras/api/fluidd-theme.css");
+'
 
         if [ -f "$fluidd_css" ]; then
             # Check if already added
@@ -739,8 +686,7 @@ EOF
             log_success "Created Fluidd theme with Ravens Perch link"
         fi
 
-        log_info "Ravens Perch URL: ${ravens_url}"
-        log_info "Ravens Perch URL (IP): ${ravens_url_ip}"
+        log_success "Fluidd will display Ravens Perch link with current IP/hostname"
     fi
 }
 

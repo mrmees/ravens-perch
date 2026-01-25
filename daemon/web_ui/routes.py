@@ -286,6 +286,60 @@ def inject_printer_uis():
     return {'printer_uis': detect_printer_uis()}
 
 
+# ============ Dynamic CSS for Fluidd ============
+
+@bp.route('/api/fluidd-theme.css')
+def fluidd_theme_css():
+    """
+    Serve dynamic CSS for Fluidd integration.
+    This allows the CSS to always have current hostname/IP.
+    """
+    import socket
+
+    # Get current hostname
+    hostname = socket.getfqdn()
+    if '.' not in hostname:
+        hostname = f"{hostname}.local"
+
+    # Get current IP
+    ip = get_system_ip()
+
+    # Detect Fluidd port from nginx
+    printer_uis = detect_printer_uis()
+    port = printer_uis.get('fluidd') or '80'
+
+    # Build URLs
+    if port == '80':
+        url_hostname = f"http://{hostname}/cameras/"
+        url_ip = f"http://{ip}/cameras/"
+    else:
+        url_hostname = f"http://{hostname}:{port}/cameras/"
+        url_ip = f"http://{ip}:{port}/cameras/"
+
+    css = f"""/* Ravens Perch Integration - Dynamic CSS */
+/* This file is served dynamically to always show current network info */
+
+/* Banner at top of camera settings section */
+#camera::after {{
+  content: "Manage cameras with Ravens Perch → {url_hostname} (or {url_ip})";
+  display: block;
+  margin: 8px 16px;
+  padding: 12px 16px;
+  background: linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.15), rgba(var(--color-primary-rgb), 0.05));
+  border: 1px solid rgba(var(--color-primary-rgb), 0.3);
+  border-radius: 4px;
+  font-size: 14px;
+  color: var(--color-primary);
+  text-align: center;
+}}
+
+#camera::after:hover {{
+  background: linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.25), rgba(var(--color-primary-rgb), 0.1));
+}}
+"""
+    return Response(css, mimetype='text/css')
+
+
 # ============ Dashboard ============
 
 @bp.route('/')
