@@ -265,6 +265,7 @@
                     <div class="form-group form-group-toggle">
                         <label class="toggle-label">
                             <span>Enable Overlay</span>
+                            <input type="hidden" name="overlay_enabled" value="0">
                             <label class="toggle-switch">
                                 <input type="checkbox" name="overlay_enabled" value="1"
                                        {% if camera.settings and camera.settings.overlay_enabled %}checked{% endif %}>
@@ -330,6 +331,7 @@
                         <div class="form-group form-group-toggle">
                             <label class="toggle-label">
                                 <span>Multi-line</span>
+                                <input type="hidden" name="overlay_multiline" value="0">
                                 <label class="toggle-switch">
                                     <input type="checkbox" name="overlay_multiline" value="1"
                                            {% if camera.settings and camera.settings.overlay_multiline %}checked{% endif %}>
@@ -340,6 +342,7 @@
                         <div class="form-group form-group-toggle">
                             <label class="toggle-label">
                                 <span>Show Labels</span>
+                                <input type="hidden" name="overlay_show_labels" value="0">
                                 <label class="toggle-switch">
                                     <input type="checkbox" name="overlay_show_labels" value="1"
                                            {% if camera.settings and camera.settings.overlay_show_labels != False %}checked{% endif %}>

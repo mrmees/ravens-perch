@@ -342,7 +342,8 @@ def update_settings(camera_id: int):
 
     # Print integration settings
     if 'overlay_enabled' in request.form:
-        settings['overlay_enabled'] = request.form['overlay_enabled'] == '1'
+        # Check if '1' is in the list of values (checkbox + hidden input)
+        settings['overlay_enabled'] = '1' in request.form.getlist('overlay_enabled')
 
     # Overlay customization
     if 'overlay_font_size' in request.form:
@@ -354,9 +355,9 @@ def update_settings(camera_id: int):
     if 'overlay_font' in request.form:
         settings['overlay_font'] = request.form['overlay_font'] or None
     if 'overlay_multiline' in request.form:
-        settings['overlay_multiline'] = request.form['overlay_multiline'] == '1'
+        settings['overlay_multiline'] = '1' in request.form.getlist('overlay_multiline')
     if 'overlay_show_labels' in request.form:
-        settings['overlay_show_labels'] = request.form['overlay_show_labels'] == '1'
+        settings['overlay_show_labels'] = '1' in request.form.getlist('overlay_show_labels')
 
     # Overlay stat toggles
     overlay_stats = [
