@@ -510,14 +510,36 @@ def get_stream_urls(camera_id: str, host: str = "127.0.0.1") -> Dict[str, str]:
     }
 
 
-def add_or_update_stream(camera_id: str, ffmpeg_command: str) -> Tuple[bool, Optional[str]]:
-    """Add a stream, or update it if it already exists."""
+def add_or_update_stream(camera_id: str, ffmpeg_command: str, force: bool = False) -> Tuple[bool, Optional[str]]:
+    """Add a stream, or update it if it already exists.
+
+    Args:
+        camera_id: The camera ID
+        ffmpeg_command: The FFmpeg command to run
+        force: If True, restart even if the command hasn't changed
+
+    Returns:
+        Tuple of (success, error_message)
+    """
     # Try to add first
     success, error = add_stream(camera_id, ffmpeg_command)
 
     if not success and error and "already exists" in error.lower():
-        # Stream exists - remove and re-add to restart with new settings
-        # Just patching the config doesn't restart the running FFmpeg process
+        # Stream exists - check if the command has actually changed
+        if not force:
+            client = get_client()
+            path_name = camera_id.replace(' ', '_').lower()
+            get_success, data, _ = client.api_request(f"/v3/config/paths/get/{path_name}")
+
+            if get_success and data:
+                current_command = data.get('runOnInit', '')
+                if current_command == ffmpeg_command:
+                    # Command hasn't changed - no need to restart
+                    logger.debug(f"Stream {camera_id} command unchanged, skipping restart")
+                    return True, None
+
+        # Command changed or force=True - remove and re-add to restart
+        logger.info(f"Restarting stream {camera_id} with updated configuration")
         remove_stream(camera_id)
         time.sleep(0.3)  # Brief delay to ensure cleanup
         return add_stream(camera_id, ffmpeg_command)

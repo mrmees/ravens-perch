@@ -465,7 +465,8 @@ def restart_camera_stream(camera_id: int):
         overlay_path=overlay_path
     )
 
-    success, error = add_or_update_stream(str(camera_id), ffmpeg_cmd)
+    # Force restart since user explicitly requested it
+    success, error = add_or_update_stream(str(camera_id), ffmpeg_cmd, force=True)
 
     if success:
         add_log("INFO", f"Stream restarted for camera {camera['friendly_name']}", camera_id)
