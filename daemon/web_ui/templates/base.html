@@ -109,6 +109,42 @@
     </footer>
 
     <script src="{{ url_for('static', filename='js/app.js') }}"></script>
+    <script>
+    // Dynamically adjust poem text size to fit without wrapping
+    (function() {
+        function fitRavenQuote() {
+            var quote = document.querySelector('.raven-quote');
+            var lines = document.querySelectorAll('.raven-line');
+            if (!quote || lines.length === 0) return;
+
+            var container = quote.parentElement;
+            var maxWidth = container.clientWidth;
+            var fontSize = 14; // Start at base size (0.875rem = 14px)
+            var minFontSize = 9;
+
+            // Reset to starting size
+            quote.style.fontSize = fontSize + 'px';
+
+            // Reduce font size until all lines fit
+            while (fontSize > minFontSize) {
+                var fits = true;
+                for (var i = 0; i < lines.length; i++) {
+                    if (lines[i].scrollWidth > maxWidth) {
+                        fits = false;
+                        break;
+                    }
+                }
+                if (fits) break;
+                fontSize -= 0.5;
+                quote.style.fontSize = fontSize + 'px';
+            }
+        }
+
+        // Run on load and resize
+        document.addEventListener('DOMContentLoaded', fitRavenQuote);
+        window.addEventListener('resize', fitRavenQuote);
+    })();
+    </script>
     {% block scripts %}{% endblock %}
 </body>
 </html>
