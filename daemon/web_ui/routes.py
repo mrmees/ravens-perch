@@ -55,6 +55,15 @@ def darken_color(hex_color: str, factor: float = 0.15) -> str:
     return f'#{r:02x}{g:02x}{b:02x}'
 
 
+def get_contrast_text_color(hex_color: str) -> str:
+    """Return black or white text color based on background luminance."""
+    hex_color = hex_color.lstrip('#')
+    r, g, b = int(hex_color[0:2], 16), int(hex_color[2:4], 16), int(hex_color[4:6], 16)
+    # Calculate relative luminance using sRGB coefficients
+    luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255
+    return '#000000' if luminance > 0.5 else '#ffffff'
+
+
 @bp.context_processor
 def inject_accent_color():
     """Inject accent color into all templates."""
@@ -63,7 +72,13 @@ def inject_accent_color():
     if accent:
         # Generate hover color (slightly darker)
         hover = darken_color(accent, 0.15)
-        return {'accent_color': accent, 'accent_color_hover': hover}
+        # Generate contrasting text color for readability
+        text = get_contrast_text_color(accent)
+        return {
+            'accent_color': accent,
+            'accent_color_hover': hover,
+            'accent_text_color': text
+        }
     return {}
 
 

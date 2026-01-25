@@ -311,12 +311,12 @@ a:hover {
 
 .btn-primary {
     background-color: var(--accent-primary);
-    color: white;
+    color: var(--accent-text, white);
 }
 
 .btn-primary:hover {
     background-color: var(--accent-hover);
-    color: white;
+    color: var(--accent-text, white);
 }
 
 .btn-secondary {
@@ -879,7 +879,7 @@ details.settings-card > *:not(summary) {
 
 .level-info {
     background-color: var(--accent-primary);
-    color: white;
+    color: var(--accent-text, white);
 }
 
 .level-warning {
