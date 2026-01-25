@@ -91,6 +91,7 @@ a:hover {
 
 .nav-links {
     display: flex;
+    align-items: center;
     gap: 1.5rem;
 }
 
@@ -140,19 +141,17 @@ a:hover {
     height: 20px;
 }
 
-/* Hide the inactive icon */
-[data-theme="dark"] .theme-icon-dark,
-:root:not([data-theme="light"]) .theme-icon-dark {
+/* Icon visibility: show sun in dark mode, moon in light mode */
+.theme-icon-light {
+    display: block;
+}
+
+.theme-icon-dark {
     display: none;
 }
 
 [data-theme="light"] .theme-icon-light {
     display: none;
-}
-
-[data-theme="dark"] .theme-icon-light,
-:root:not([data-theme="light"]) .theme-icon-light {
-    display: block;
 }
 
 [data-theme="light"] .theme-icon-dark {
