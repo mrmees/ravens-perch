@@ -61,26 +61,42 @@
               hx-swap="innerHTML"
               hx-target="#appearance-status">
 
-            <div class="form-group">
-                <label>Quick Select</label>
-                <div id="detected-colors" class="detected-colors">
-                    <span class="text-muted">Detecting Mainsail/Fluidd themes...</span>
-                </div>
-            </div>
+            <input type="hidden" id="accent_color" name="accent_color" value="{{ settings.get('accent_color', '#4a9eff') }}">
 
             <div class="form-group">
-                <label for="accent_color">Custom Color</label>
-                <div class="color-picker-row">
-                    <input type="color"
-                           id="accent_color"
-                           name="accent_color"
-                           value="{{ settings.get('accent_color', '#4a9eff') }}"
-                           class="color-input">
-                    <span class="color-value" id="color-value">{{ settings.get('accent_color', '#4a9eff') }}</span>
+                <label>Accent Color</label>
+                <div class="color-options-list">
+                    <!-- Custom color option -->
+                    <div class="color-option-row" data-color-type="custom">
+                        <span class="color-option-label">Custom</span>
+                        <input type="color"
+                               id="custom_color_picker"
+                               value="{{ settings.get('accent_color', '#4a9eff') }}"
+                               class="color-input">
+                        <span class="color-value" id="custom-color-value">{{ settings.get('accent_color', '#4a9eff') }}</span>
+                    </div>
+
+                    <!-- Mainsail color option (populated by JS if detected) -->
+                    <div class="color-option-row" id="mainsail-option" style="display: none;" data-color-type="mainsail">
+                        <span class="color-option-label">Mainsail</span>
+                        <span class="color-swatch" id="mainsail-swatch"></span>
+                        <span class="color-value" id="mainsail-color-value"></span>
+                    </div>
+
+                    <!-- Fluidd color option (populated by JS if detected) -->
+                    <div class="color-option-row" id="fluidd-option" style="display: none;" data-color-type="fluidd">
+                        <span class="color-option-label">Fluidd</span>
+                        <span class="color-swatch" id="fluidd-swatch"></span>
+                        <span class="color-value" id="fluidd-color-value"></span>
+                    </div>
+
+                    <!-- Default color option -->
+                    <div class="color-option-row" data-color-type="default" data-color="#4a9eff">
+                        <span class="color-option-label">Default</span>
+                        <span class="color-swatch" style="background-color: #4a9eff;"></span>
+                        <span class="color-value">#4a9eff</span>
+                    </div>
                 </div>
-                <p class="form-help">
-                    Choose a custom accent color or select from detected themes above.
-                </p>
             </div>
 
             <div id="appearance-status"></div>
@@ -183,99 +199,105 @@
 
 {% block scripts %}
 <script>
-// Update displayed color value when picker changes
-document.getElementById('accent_color').addEventListener('input', function(e) {
-    document.getElementById('color-value').textContent = e.target.value;
+const currentColor = '{{ settings.get("accent_color", "#4a9eff") }}';
+
+// Update hidden input and display when custom color picker changes
+document.getElementById('custom_color_picker').addEventListener('input', function(e) {
+    document.getElementById('accent_color').value = e.target.value;
+    document.getElementById('custom-color-value').textContent = e.target.value;
+    updateActiveRow('custom');
 });
 
-function detectThemeColors() {
-    const container = document.getElementById('detected-colors');
-    const currentColor = '{{ settings.get("accent_color", "#4a9eff") }}';
+// Handle clicking on color option rows (except custom which uses the picker)
+document.querySelectorAll('.color-option-row').forEach(row => {
+    row.addEventListener('click', function(e) {
+        // Don't trigger if clicking directly on the color picker
+        if (e.target.type === 'color') return;
 
+        const colorType = this.dataset.colorType;
+        if (colorType === 'custom') {
+            // For custom, trigger the color picker
+            document.getElementById('custom_color_picker').click();
+        } else {
+            // For preset colors, get the color and apply it
+            let color;
+            if (colorType === 'default') {
+                color = '#4a9eff';
+            } else if (colorType === 'mainsail') {
+                color = this.dataset.color;
+            } else if (colorType === 'fluidd') {
+                color = this.dataset.color;
+            }
+            if (color) {
+                document.getElementById('accent_color').value = color;
+                document.getElementById('custom_color_picker').value = color;
+                document.getElementById('custom-color-value').textContent = color;
+                updateActiveRow(colorType);
+            }
+        }
+    });
+});
+
+function updateActiveRow(activeType) {
+    document.querySelectorAll('.color-option-row').forEach(row => {
+        row.classList.remove('color-option-row-active');
+    });
+    const activeRow = document.querySelector(`.color-option-row[data-color-type="${activeType}"]`);
+    if (activeRow) {
+        activeRow.classList.add('color-option-row-active');
+    }
+}
+
+function detectThemeColors() {
     fetch('{{ url_for("cameras.api_detect_theme") }}')
         .then(r => r.json())
         .then(data => {
-            container.innerHTML = '';
-
-            // Add default color option
-            const defaultBtn = document.createElement('button');
-            defaultBtn.type = 'button';
-            defaultBtn.className = 'btn btn-sm color-option';
-            defaultBtn.style.backgroundColor = '#4a9eff';
-            defaultBtn.style.color = '#ffffff';
-            defaultBtn.textContent = 'Default';
-            if (currentColor === '#4a9eff') defaultBtn.classList.add('color-option-active');
-            defaultBtn.onclick = function() { setAccentColor('#4a9eff'); };
-            container.appendChild(defaultBtn);
-
             if (data.mainsail) {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'btn btn-sm color-option';
-                btn.style.backgroundColor = data.mainsail;
-                btn.style.color = getContrastColor(data.mainsail);
-                btn.textContent = 'Mainsail';
-                if (currentColor.toLowerCase() === data.mainsail.toLowerCase()) btn.classList.add('color-option-active');
-                btn.onclick = function() { setAccentColor(data.mainsail); };
-                container.appendChild(btn);
+                const row = document.getElementById('mainsail-option');
+                row.style.display = 'flex';
+                row.dataset.color = data.mainsail;
+                document.getElementById('mainsail-swatch').style.backgroundColor = data.mainsail;
+                document.getElementById('mainsail-color-value').textContent = data.mainsail;
+
+                // Check if this is the active color
+                if (currentColor.toLowerCase() === data.mainsail.toLowerCase()) {
+                    updateActiveRow('mainsail');
+                }
             }
 
             if (data.fluidd) {
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'btn btn-sm color-option';
-                btn.style.backgroundColor = data.fluidd;
-                btn.style.color = getContrastColor(data.fluidd);
-                btn.textContent = 'Fluidd';
-                if (currentColor.toLowerCase() === data.fluidd.toLowerCase()) btn.classList.add('color-option-active');
-                btn.onclick = function() { setAccentColor(data.fluidd); };
-                container.appendChild(btn);
+                const row = document.getElementById('fluidd-option');
+                row.style.display = 'flex';
+                row.dataset.color = data.fluidd;
+                document.getElementById('fluidd-swatch').style.backgroundColor = data.fluidd;
+                document.getElementById('fluidd-color-value').textContent = data.fluidd;
+
+                // Check if this is the active color
+                if (currentColor.toLowerCase() === data.fluidd.toLowerCase()) {
+                    updateActiveRow('fluidd');
+                }
             }
 
-            if (!data.mainsail && !data.fluidd) {
-                const note = document.createElement('span');
-                note.className = 'text-muted';
-                note.style.marginLeft = '0.5rem';
-                note.textContent = '(No Mainsail/Fluidd themes detected)';
-                container.appendChild(note);
+            // Determine which row should be active on load
+            if (currentColor === '#4a9eff') {
+                updateActiveRow('default');
+            } else if (data.mainsail && currentColor.toLowerCase() === data.mainsail.toLowerCase()) {
+                updateActiveRow('mainsail');
+            } else if (data.fluidd && currentColor.toLowerCase() === data.fluidd.toLowerCase()) {
+                updateActiveRow('fluidd');
+            } else {
+                updateActiveRow('custom');
             }
         })
         .catch(err => {
-            container.innerHTML = '<span class="text-muted">Failed to detect theme colors.</span>';
+            console.error('Failed to detect theme colors:', err);
+            // Still set active row for custom/default
+            if (currentColor === '#4a9eff') {
+                updateActiveRow('default');
+            } else {
+                updateActiveRow('custom');
+            }
         });
-}
-
-function setAccentColor(color) {
-    document.getElementById('accent_color').value = color;
-    document.getElementById('color-value').textContent = color;
-
-    // Update active state on buttons
-    document.querySelectorAll('.color-option').forEach(btn => {
-        btn.classList.remove('color-option-active');
-        if (btn.style.backgroundColor === color ||
-            rgbToHex(btn.style.backgroundColor).toLowerCase() === color.toLowerCase()) {
-            btn.classList.add('color-option-active');
-        }
-    });
-}
-
-function getContrastColor(hexColor) {
-    const hex = hexColor.replace('#', '');
-    const r = parseInt(hex.substr(0, 2), 16);
-    const g = parseInt(hex.substr(2, 2), 16);
-    const b = parseInt(hex.substr(4, 2), 16);
-    const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
-    return luminance > 0.5 ? '#000000' : '#ffffff';
-}
-
-function rgbToHex(rgb) {
-    if (rgb.startsWith('#')) return rgb;
-    const match = rgb.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
-    if (!match) return rgb;
-    return '#' + [match[1], match[2], match[3]].map(x => {
-        const hex = parseInt(x).toString(16);
-        return hex.length === 1 ? '0' + hex : hex;
-    }).join('');
 }
 
 // Auto-detect theme colors on page load

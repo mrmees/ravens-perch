@@ -1707,32 +1707,46 @@ details.settings-card > *:not(summary) {
     min-width: 70px;
 }
 
-.detected-colors {
+/* Color Options List (Appearance Settings) */
+.color-options-list {
     display: flex;
-    flex-wrap: wrap;
+    flex-direction: column;
     gap: 0.5rem;
-    margin-top: 0.75rem;
-    padding: 0.75rem;
-    background-color: var(--bg-tertiary);
-    border-radius: var(--radius-sm);
 }
 
-.color-option {
-    display: inline-flex;
+.color-option-row {
+    display: flex;
     align-items: center;
-    gap: 0.5rem;
-    padding: 0.5rem 0.75rem;
+    gap: 0.75rem;
+    padding: 0.625rem 0.75rem;
+    background-color: var(--bg-tertiary);
     border: 1px solid var(--border-color);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: border-color 0.2s, background-color 0.2s;
+}
+
+.color-option-row:hover {
+    background-color: var(--bg-hover);
+    border-color: var(--text-muted);
+}
+
+.color-option-row-active {
+    border-color: var(--accent-primary);
+    background-color: var(--bg-hover);
+}
+
+.color-option-label {
+    min-width: 70px;
+    font-size: 0.875rem;
     font-weight: 500;
-    transition: transform 0.1s, box-shadow 0.2s;
+    color: var(--text-primary);
 }
 
-.color-option:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 2px 8px var(--shadow);
-}
-
-.color-option-active {
-    outline: 2px solid var(--text-primary);
-    outline-offset: 2px;
+.color-swatch {
+    width: 36px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    border: 1px solid var(--border-color);
+    flex-shrink: 0;
 }
