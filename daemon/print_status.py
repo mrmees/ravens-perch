@@ -75,13 +75,15 @@ class PrintStatusMonitor:
         self,
         moonraker_url: str = "http://localhost:7125",
         data_dir: str = None,
-        poll_interval: float = 2.0,
+        printing_poll_interval: float = 10.0,
+        standby_poll_interval: float = 30.0,
         standby_delay: float = 30.0
     ):
         self.moonraker_url = moonraker_url.rstrip('/')
         self.data_dir = Path(data_dir) if data_dir else Path.home() / ".ravens-perch"
         self.overlay_dir = self.data_dir / "overlays"
-        self.poll_interval = poll_interval
+        self.printing_poll_interval = printing_poll_interval
+        self.standby_poll_interval = standby_poll_interval
         self.standby_delay = standby_delay
 
         self._status = PrintStatus()
@@ -148,7 +150,7 @@ class PrintStatusMonitor:
         logger.info("Print status monitor stopped")
 
     def _monitor_loop(self):
-        """Main monitoring loop."""
+        """Main monitoring loop with dynamic polling interval."""
         while self._running:
             try:
                 self._poll_status()
@@ -157,7 +159,14 @@ class PrintStatusMonitor:
             except Exception as e:
                 logger.error(f"Error in print status monitor: {e}")
 
-            time.sleep(self.poll_interval)
+            # Use shorter interval when printing, longer when idle
+            with self._lock:
+                is_printing = self._status.is_printing
+
+            if is_printing:
+                time.sleep(self.printing_poll_interval)
+            else:
+                time.sleep(self.standby_poll_interval)
 
     def _poll_status(self):
         """Poll Moonraker for current print status."""
@@ -303,7 +312,8 @@ def get_monitor() -> Optional[PrintStatusMonitor]:
 def init_monitor(
     moonraker_url: str,
     data_dir: str = None,
-    poll_interval: float = 2.0,
+    printing_poll_interval: float = 10.0,
+    standby_poll_interval: float = 30.0,
     standby_delay: float = 30.0
 ) -> PrintStatusMonitor:
     """Initialize the global print status monitor."""
@@ -311,7 +321,8 @@ def init_monitor(
     _monitor = PrintStatusMonitor(
         moonraker_url=moonraker_url,
         data_dir=data_dir,
-        poll_interval=poll_interval,
+        printing_poll_interval=printing_poll_interval,
+        standby_poll_interval=standby_poll_interval,
         standby_delay=standby_delay
     )
     return _monitor

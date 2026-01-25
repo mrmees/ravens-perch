@@ -166,7 +166,8 @@ class RavensPerchDaemon:
                 self.print_monitor = init_monitor(
                     moonraker_url=self.moonraker_url,
                     data_dir=str(BASE_DIR),
-                    poll_interval=2.0,
+                    printing_poll_interval=10.0,
+                    standby_poll_interval=30.0,
                     standby_delay=30.0
                 )
                 self.print_monitor.set_state_change_callback(self._on_print_state_change)
