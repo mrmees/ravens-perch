@@ -374,6 +374,18 @@ def update_settings(camera_id: int):
         if stat in request.form:
             settings[stat] = request.form[stat] == '1'
 
+    # V4L2 controls from form (prefixed with 'v4l2_')
+    v4l2_controls = {}
+    for key in request.form:
+        if key.startswith('v4l2_'):
+            control_name = key[5:]  # Remove 'v4l2_' prefix
+            try:
+                v4l2_controls[control_name] = int(request.form[key])
+            except (ValueError, TypeError):
+                pass  # Skip invalid values
+    if v4l2_controls:
+        settings['v4l2_controls'] = v4l2_controls
+
     if 'standby_enabled' in request.form:
         # Check if '1' is in the list of values (checkbox + hidden input)
         settings['standby_enabled'] = '1' in request.form.getlist('standby_enabled')
@@ -1098,9 +1110,58 @@ def api_set_control(camera_id: int, control_name: str):
     })
 
 
+@bp.route('/api/controls/<int:camera_id>/<control_name>/preview', methods=['POST'])
+def api_preview_control(camera_id: int, control_name: str):
+    """Apply a V4L2 control value for preview only (no database save).
+
+    This allows users to see the effect of control changes in real-time
+    without committing them. The actual save happens with the form submission.
+    """
+    camera = get_camera_by_id(camera_id)
+    if not camera:
+        return jsonify({'error': 'Camera not found'}), 404
+
+    if not camera['connected'] or not camera['device_path']:
+        return jsonify({'error': 'Camera not connected'}), 400
+
+    # Get value from request (try form data first, then JSON)
+    value = request.form.get('value')
+    if value is None:
+        data = request.get_json() or {}
+        value = data.get('value')
+
+    if value is None:
+        return jsonify({'error': 'Value required'}), 400
+
+    try:
+        value = int(value)
+    except (ValueError, TypeError):
+        return jsonify({'error': 'Invalid value'}), 400
+
+    # Apply to camera for preview only - no database save
+    success = set_v4l2_control(camera['device_path'], control_name, value)
+
+    if not success:
+        return jsonify({'error': 'Failed to apply control'}), 500
+
+    # Get the actual current value from camera to confirm
+    actual_value = get_v4l2_control_value(camera['device_path'], control_name)
+
+    return jsonify({
+        'success': True,
+        'control': control_name,
+        'value': value,
+        'actual': actual_value
+    })
+
+
 @bp.route('/api/controls/<int:camera_id>/<control_name>/reset', methods=['POST'])
 def api_reset_control(camera_id: int, control_name: str):
-    """Reset a V4L2 control to its default value."""
+    """Reset a V4L2 control to its default value (preview only, no save).
+
+    This applies the default value for preview. The actual save happens
+    with the form submission.
+    """
     camera = get_camera_by_id(camera_id)
     if not camera:
         return jsonify({'error': 'Camera not found'}), 404
@@ -1117,20 +1178,11 @@ def api_reset_control(camera_id: int, control_name: str):
     if default_value is None:
         return jsonify({'error': 'No default value available'}), 400
 
-    # Apply default value
+    # Apply default value for preview only - no database save
     success = set_v4l2_control(camera['device_path'], control_name, default_value)
 
     if not success:
         return jsonify({'error': 'Failed to reset control'}), 500
-
-    # Remove from saved settings
-    settings = get_camera_settings(camera_id) or {}
-    v4l2_controls = settings.get('v4l2_controls', {}) or {}
-    if control_name in v4l2_controls:
-        del v4l2_controls[control_name]
-        save_camera_settings(camera_id, {'v4l2_controls': v4l2_controls})
-
-    add_log("INFO", f"Reset {control_name} to default for camera {camera['friendly_name']}", camera_id)
 
     return jsonify({
         'success': True,

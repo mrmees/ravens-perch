@@ -7,7 +7,7 @@
             <button type="button" class="btn-reset-ctrl"
                     hx-post="{{ url_for('cameras.api_reset_control', camera_id=camera_id, control_name=name) }}"
                     hx-swap="none"
-                    onclick="document.getElementById('ctrl-{{ name }}').value = '{{ info.default }}';"
+                    onclick="document.getElementById('ctrl-{{ name }}').value = '{{ info.default }}'; document.getElementById('v4l2-{{ name }}').value = '{{ info.default }}';"
                     title="Reset to default ({{ info.options.get(info.default, info.default) }})">
                 Reset
             </button>
@@ -15,7 +15,7 @@
             <button type="button" class="btn-reset-ctrl"
                     hx-post="{{ url_for('cameras.api_reset_control', camera_id=camera_id, control_name=name) }}"
                     hx-swap="none"
-                    onclick="var cb = document.getElementById('ctrl-{{ name }}'); cb.checked = {{ 'true' if info.default == 1 else 'false' }}; document.getElementById('ctrl-{{ name }}-hidden').disabled = cb.checked;"
+                    onclick="var cb = document.getElementById('ctrl-{{ name }}'); cb.checked = {{ 'true' if info.default == 1 else 'false' }}; document.getElementById('v4l2-{{ name }}').value = cb.checked ? '1' : '0';"
                     title="Reset to default ({{ 'On' if info.default == 1 else 'Off' }})">
                 Reset
             </button>
@@ -23,7 +23,7 @@
             <button type="button" class="btn-reset-ctrl"
                     hx-post="{{ url_for('cameras.api_reset_control', camera_id=camera_id, control_name=name) }}"
                     hx-swap="none"
-                    onclick="document.getElementById('ctrl-{{ name }}').value = {{ info.default }}; document.getElementById('val-{{ name }}').textContent = {{ info.default }};"
+                    onclick="document.getElementById('ctrl-{{ name }}').value = {{ info.default }}; document.getElementById('val-{{ name }}').textContent = {{ info.default }}; document.getElementById('v4l2-{{ name }}').value = {{ info.default }};"
                     title="Reset to default ({{ info.default }})">
                 Reset
             </button>
@@ -32,12 +32,14 @@
 
         {% if info.type == 'menu' and info.options %}
         <!-- Menu control -->
+        <input type="hidden" name="v4l2_{{ name }}" id="v4l2-{{ name }}" value="{{ info.value }}">
         <select id="ctrl-{{ name }}"
-                name="value"
                 class="control-select-compact"
-                hx-post="{{ url_for('cameras.api_set_control', camera_id=camera_id, control_name=name) }}"
+                hx-post="{{ url_for('cameras.api_preview_control', camera_id=camera_id, control_name=name) }}"
                 hx-trigger="change"
-                hx-swap="none">
+                hx-swap="none"
+                hx-vals='js:{value: event.target.value}'
+                onchange="document.getElementById('v4l2-{{ name }}').value = this.value;">
             {% for opt_value, opt_label in info.options.items()|sort %}
             <option value="{{ opt_value }}" {% if info.value == opt_value %}selected{% endif %}>
                 {{ opt_label }}
@@ -48,18 +50,16 @@
         {% elif info.type == 'bool' %}
         <!-- Boolean control -->
         <div class="control-bool-compact">
-            <input type="hidden" name="value" value="0" id="ctrl-{{ name }}-hidden">
+            <input type="hidden" name="v4l2_{{ name }}" id="v4l2-{{ name }}" value="{{ info.value }}">
             <label class="toggle-switch-sm">
                 <input type="checkbox"
                        id="ctrl-{{ name }}"
-                       name="value"
-                       value="1"
                        {% if info.value == 1 %}checked{% endif %}
-                       hx-post="{{ url_for('cameras.api_set_control', camera_id=camera_id, control_name=name) }}"
+                       hx-post="{{ url_for('cameras.api_preview_control', camera_id=camera_id, control_name=name) }}"
                        hx-trigger="change"
                        hx-swap="none"
-                       hx-include="#ctrl-{{ name }}-hidden"
-                       onclick="document.getElementById('ctrl-{{ name }}-hidden').disabled = this.checked;">
+                       hx-vals='js:{value: event.target.checked ? "1" : "0"}'
+                       onchange="document.getElementById('v4l2-{{ name }}').value = this.checked ? '1' : '0';">
                 <span class="toggle-slider-sm"></span>
             </label>
         </div>
@@ -67,18 +67,19 @@
         {% else %}
         <!-- Integer control (slider) -->
         <div class="control-slider-compact">
+            <input type="hidden" name="v4l2_{{ name }}" id="v4l2-{{ name }}" value="{{ info.value }}">
             <input type="range"
                    id="ctrl-{{ name }}"
-                   name="value"
                    min="{{ info.min }}"
                    max="{{ info.max }}"
                    step="{{ info.step|default(1) }}"
                    value="{{ info.value }}"
                    class="control-range-compact"
-                   oninput="document.getElementById('val-{{ name }}').textContent = this.value"
-                   hx-post="{{ url_for('cameras.api_set_control', camera_id=camera_id, control_name=name) }}"
+                   oninput="document.getElementById('val-{{ name }}').textContent = this.value; document.getElementById('v4l2-{{ name }}').value = this.value;"
+                   hx-post="{{ url_for('cameras.api_preview_control', camera_id=camera_id, control_name=name) }}"
                    hx-trigger="change"
-                   hx-swap="none">
+                   hx-swap="none"
+                   hx-vals='js:{value: event.target.value}'>
             <span id="val-{{ name }}" class="control-val">{{ info.value }}</span>
         </div>
         {% endif %}

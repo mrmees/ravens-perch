@@ -379,18 +379,11 @@
 
             </div>
 
-            <!-- Save Button for all settings -->
-            <div class="form-actions-global">
-                <div id="settings-status" class="form-status"></div>
-                <button type="submit" class="btn btn-primary btn-save-all">Save Settings</button>
-            </div>
-        </form>
-
-            <!-- Camera Controls Tab (outside form - auto-saves) -->
+            <!-- Camera Controls Tab -->
             {% if camera.connected %}
             <div class="tab-panel" id="tab-controls">
                 <p class="form-help" style="margin-bottom: 0.5rem;">
-                    Brightness, contrast, exposure, and other hardware controls. Changes apply immediately.
+                    Brightness, contrast, exposure, and other hardware controls. Adjustments preview immediately.
                 </p>
                 <p class="form-help" style="margin-bottom: 1rem; font-style: italic;">
                     Note: Some controls depend on others. For example, White Balance Temperature only applies when White Balance Automatic is disabled.
@@ -403,6 +396,13 @@
                 </div>
             </div>
             {% endif %}
+
+            <!-- Save Button for all settings -->
+            <div class="form-actions-global">
+                <div id="settings-status" class="form-status"></div>
+                <button type="submit" class="btn btn-primary btn-save-all">Save Settings</button>
+            </div>
+        </form>
 
             <!-- Info Tab (outside form - read-only) -->
             <div class="tab-panel" id="tab-info">
@@ -496,7 +496,7 @@
     function updateSaveButtons(tabId) {
         var sticky = document.getElementById('mobile-sticky');
         var globalSave = document.querySelector('.form-actions-global');
-        var hasSettings = ['basic', 'encoding', 'overlay'].includes(tabId);
+        var hasSettings = ['basic', 'encoding', 'overlay', 'controls'].includes(tabId);
 
         // Mobile sticky button
         sticky.classList.toggle('visible', hasSettings);
