@@ -272,6 +272,14 @@ def update_settings(camera_id: int):
         # If print settings form submitted without checkbox, it means disabled
         settings['overlay_enabled'] = False
 
+    # Overlay customization
+    if 'overlay_font_size' in request.form:
+        settings['overlay_font_size'] = int(request.form['overlay_font_size'])
+    if 'overlay_position' in request.form:
+        settings['overlay_position'] = request.form['overlay_position']
+    if 'overlay_color' in request.form:
+        settings['overlay_color'] = request.form['overlay_color']
+
     if 'printing_framerate' in request.form:
         val = request.form['printing_framerate']
         settings['printing_framerate'] = int(val) if val else None

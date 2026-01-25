@@ -357,18 +357,35 @@ def build_ffmpeg_command(
 
     # Print status overlay (after rotation, before hardware upload)
     if overlay_path:
+        # Get overlay customization settings
+        font_size = settings.get('overlay_font_size') or 24
+        position = settings.get('overlay_position') or 'bottom_center'
+        color = settings.get('overlay_color') or 'white'
+
+        # Map position to x/y coordinates
+        position_map = {
+            'top_left': ('20', '20'),
+            'top_center': ('(w-text_w)/2', '20'),
+            'top_right': ('w-text_w-20', '20'),
+            'bottom_left': ('20', 'h-th-20'),
+            'bottom_center': ('(w-text_w)/2', 'h-th-20'),
+            'bottom_right': ('w-text_w-20', 'h-th-20'),
+        }
+        x_pos, y_pos = position_map.get(position, ('(w-text_w)/2', 'h-th-20'))
+
+        # Determine border color for contrast
+        border_color = 'black' if color in ('white', 'yellow', 'cyan') else 'white'
+
         # drawtext filter with text file that reloads every second
-        # Position: bottom center with padding
-        # Font: monospace, white text with black outline for readability
         drawtext = (
             f"drawtext=textfile='{overlay_path}'"
             f":reload=1"
-            f":fontcolor=white"
-            f":fontsize=24"
+            f":fontcolor={color}"
+            f":fontsize={font_size}"
             f":borderw=2"
-            f":bordercolor=black"
-            f":x=(w-text_w)/2"
-            f":y=h-th-20"
+            f":bordercolor={border_color}"
+            f":x={x_pos}"
+            f":y={y_pos}"
         )
         filters.append(drawtext)
 

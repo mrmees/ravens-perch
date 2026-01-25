@@ -260,6 +260,64 @@
                     <p class="form-help">Display progress %, layer, and time remaining on the video feed.</p>
                 </div>
 
+                <!-- Overlay Font Size -->
+                <div class="form-group">
+                    <label for="overlay_font_size">Overlay Text Size</label>
+                    <select id="overlay_font_size" name="overlay_font_size">
+                        {% for size in [16, 20, 24, 28, 32, 36, 48] %}
+                            <option value="{{ size }}"
+                                    {% if camera.settings and camera.settings.overlay_font_size == size %}selected{% endif %}
+                                    {% if not camera.settings and size == 24 %}selected{% endif %}>
+                                {{ size }}px{% if size == 24 %} (default){% endif %}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Overlay Position -->
+                <div class="form-group">
+                    <label for="overlay_position">Overlay Position</label>
+                    <select id="overlay_position" name="overlay_position">
+                        {% set positions = [
+                            ('top_left', 'Top Left'),
+                            ('top_center', 'Top Center'),
+                            ('top_right', 'Top Right'),
+                            ('bottom_left', 'Bottom Left'),
+                            ('bottom_center', 'Bottom Center'),
+                            ('bottom_right', 'Bottom Right')
+                        ] %}
+                        {% for value, label in positions %}
+                            <option value="{{ value }}"
+                                    {% if camera.settings and camera.settings.overlay_position == value %}selected{% endif %}
+                                    {% if not camera.settings and value == 'bottom_center' %}selected{% endif %}>
+                                {{ label }}{% if value == 'bottom_center' %} (default){% endif %}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
+                <!-- Overlay Color -->
+                <div class="form-group">
+                    <label for="overlay_color">Overlay Color</label>
+                    <select id="overlay_color" name="overlay_color">
+                        {% set colors = [
+                            ('white', 'White'),
+                            ('yellow', 'Yellow'),
+                            ('cyan', 'Cyan'),
+                            ('green', 'Green'),
+                            ('red', 'Red'),
+                            ('orange', 'Orange')
+                        ] %}
+                        {% for value, label in colors %}
+                            <option value="{{ value }}"
+                                    {% if camera.settings and camera.settings.overlay_color == value %}selected{% endif %}
+                                    {% if not camera.settings and value == 'white' %}selected{% endif %}>
+                                {{ label }}{% if value == 'white' %} (default){% endif %}
+                            </option>
+                        {% endfor %}
+                    </select>
+                </div>
+
                 <!-- Printing Framerate -->
                 <div class="form-group">
                     <label for="printing_framerate">Printing Framerate</label>

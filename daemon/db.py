@@ -70,6 +70,9 @@ def init_db():
                 audio_enabled BOOLEAN DEFAULT FALSE,
                 audio_device TEXT,
                 overlay_enabled BOOLEAN DEFAULT FALSE,
+                overlay_font_size INTEGER DEFAULT 24,
+                overlay_position TEXT DEFAULT 'bottom_center',
+                overlay_color TEXT DEFAULT 'white',
                 printing_framerate INTEGER,
                 standby_framerate INTEGER
             )
@@ -129,6 +132,9 @@ def init_db():
 
         new_columns = [
             ("overlay_enabled", "BOOLEAN DEFAULT FALSE"),
+            ("overlay_font_size", "INTEGER DEFAULT 24"),
+            ("overlay_position", "TEXT DEFAULT 'bottom_center'"),
+            ("overlay_color", "TEXT DEFAULT 'white'"),
             ("printing_framerate", "INTEGER"),
             ("standby_framerate", "INTEGER"),
         ]
@@ -313,7 +319,8 @@ def save_camera_settings(camera_id: int, settings_dict: Dict) -> bool:
     allowed_fields = {
         'format', 'resolution', 'framerate', 'encoder', 'bitrate',
         'preset', 'rotation', 'v4l2_controls', 'audio_enabled', 'audio_device',
-        'overlay_enabled', 'printing_framerate', 'standby_framerate'
+        'overlay_enabled', 'overlay_font_size', 'overlay_position', 'overlay_color',
+        'printing_framerate', 'standby_framerate'
     }
     settings_dict = {k: v for k, v in settings_dict.items() if k in allowed_fields}
 

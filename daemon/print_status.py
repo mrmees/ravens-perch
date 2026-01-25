@@ -48,7 +48,7 @@ class PrintStatus:
         if not self.is_printing:
             if self.state == "complete":
                 return "Complete"
-            return "Ready"
+            return "On Standby"
 
         lines = []
 
