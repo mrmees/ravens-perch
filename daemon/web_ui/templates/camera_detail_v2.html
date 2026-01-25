@@ -3,23 +3,22 @@
 {% block title %}{{ camera.friendly_name }} - Ravens Perch{% endblock %}
 
 {% block content %}
-<div class="page-header">
-    <a href="{{ url_for('cameras.dashboard') }}" class="back-link">&larr; Back to Cameras</a>
-    <h1 id="camera-name">{{ camera.friendly_name }}</h1>
-    <div class="header-status">
-        {% if camera.connected %}
-            {% if camera.stream_active %}
-                <span class="status-badge status-active">Live</span>
-            {% else %}
-                <span class="status-badge status-starting">Starting</span>
-            {% endif %}
-        {% else %}
-            <span class="status-badge status-offline">Offline</span>
-        {% endif %}
-    </div>
-</div>
-
 <div class="camera-layout-v2">
+    <div class="page-header-v2">
+        <a href="{{ url_for('cameras.dashboard') }}" class="back-link">&larr; Back to Cameras</a>
+        <h1 id="camera-name">{{ camera.friendly_name }}</h1>
+        <div class="header-status">
+            {% if camera.connected %}
+                {% if camera.stream_active %}
+                    <span class="status-badge status-active">Live</span>
+                {% else %}
+                    <span class="status-badge status-starting">Starting</span>
+                {% endif %}
+            {% else %}
+                <span class="status-badge status-offline">Offline</span>
+            {% endif %}
+        </div>
+    </div>
     <!-- Action Buttons -->
     <div class="camera-actions-bar">
         {% if camera.connected %}
@@ -581,6 +580,32 @@
         max-width: 1000px;
         margin: 0 auto;
         padding-bottom: 80px; /* Space for sticky button */
+    }
+
+    /* Page header */
+    .page-header-v2 {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.5rem 1rem;
+        margin-bottom: 1rem;
+    }
+    .page-header-v2 .back-link {
+        font-size: 0.875rem;
+        color: var(--text-secondary);
+        text-decoration: none;
+    }
+    .page-header-v2 .back-link:hover {
+        color: var(--accent-primary);
+    }
+    .page-header-v2 h1 {
+        font-size: 1.5rem;
+        margin: 0;
+        flex: 1;
+    }
+    .page-header-v2 .header-status {
+        display: flex;
+        align-items: center;
     }
 
     /* Action buttons */
