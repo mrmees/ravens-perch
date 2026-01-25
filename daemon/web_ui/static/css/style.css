@@ -175,6 +175,34 @@ a:hover {
     border-left-color: var(--accent-primary);
 }
 
+/* Nav separator */
+.nav-separator {
+    display: none;
+}
+
+/* External nav links (Mainsail/Fluidd) */
+.nav-external {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    color: var(--text-muted) !important;
+    font-size: 0.85rem;
+}
+
+.nav-external:hover {
+    color: var(--text-secondary) !important;
+}
+
+.nav-external svg {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
+}
+
+.nav-external-label {
+    display: inline;
+}
+
 /* Theme Toggle Button */
 .theme-toggle-btn {
     background: none;
@@ -255,6 +283,29 @@ a:hover {
 
     .nav-actions {
         order: 2;
+    }
+
+    /* Show separator on desktop */
+    .nav-separator {
+        display: block;
+        width: 1px;
+        height: 20px;
+        background-color: var(--border-color);
+        margin: 0 0.25rem;
+    }
+
+    /* Hide external link labels on desktop to save space */
+    .nav-external-label {
+        display: none;
+    }
+
+    .nav-external {
+        padding: 0.25rem;
+        border-radius: var(--radius-sm);
+    }
+
+    .nav-external:hover {
+        background-color: var(--bg-hover);
     }
 }
 
