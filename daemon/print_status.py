@@ -63,12 +63,15 @@ class PrintStatus:
         if self.time_remaining > 0:
             lines.append(f"ETA {self.format_time(self.time_remaining)}")
 
-        result = " | ".join(lines)
+        result = "  ".join(lines)  # Use spaces instead of | which can cause FFmpeg issues
         # Ensure we never return empty string
         if not result:
             result = "Printing..."
-        # Escape % for FFmpeg drawtext filter (% is interpreted as strftime format)
-        return result.replace('%', '%%')
+        # Escape special characters for FFmpeg drawtext filter
+        # % is interpreted as strftime format, : can cause issues in some contexts
+        result = result.replace('%', '%%')
+        result = result.replace(':', '\\:')
+        return result
 
 
 class PrintStatusMonitor:
