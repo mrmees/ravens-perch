@@ -174,20 +174,18 @@ class PrintStatusMonitor:
         """Poll Moonraker for current print status."""
         try:
             # Query print stats and display status
+            # Use URL directly since params with None values don't work correctly
             response = requests.get(
-                f"{self.moonraker_url}/printer/objects/query",
-                params={
-                    "print_stats": None,
-                    "display_status": None,
-                    "virtual_sdcard": None,
-                },
+                f"{self.moonraker_url}/printer/objects/query?print_stats&display_status&virtual_sdcard",
                 timeout=5
             )
 
             if response.status_code != 200:
+                logger.debug(f"Moonraker returned status {response.status_code}")
                 return
 
             data = response.json().get("result", {}).get("status", {})
+            logger.debug(f"Moonraker print_stats: {data.get('print_stats', {})}")
 
             print_stats = data.get("print_stats", {})
             display_status = data.get("display_status", {})
@@ -196,6 +194,7 @@ class PrintStatusMonitor:
             with self._lock:
                 # State
                 state = print_stats.get("state", "standby")
+                old_state = self._status.state
                 if state == "printing":
                     self._status.state = "printing"
                 elif state == "paused":
@@ -206,6 +205,9 @@ class PrintStatusMonitor:
                     self._status.state = "error"
                 else:
                     self._status.state = "standby"
+
+                if old_state != self._status.state:
+                    logger.info(f"Print status changed: {old_state} -> {self._status.state}")
 
                 # Progress
                 progress = virtual_sdcard.get("progress", 0) * 100
@@ -290,6 +292,7 @@ class PrintStatusMonitor:
 
         try:
             overlay_path.write_text(text)
+            logger.debug(f"Overlay for camera {camera_id}: '{text}'")
         except Exception as e:
             logger.error(f"Failed to write overlay file for camera {camera_id}: {e}")
 
