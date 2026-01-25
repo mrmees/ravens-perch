@@ -792,11 +792,11 @@ setup_new_cameras() {
 
     # Scan for cameras using Ravens Perch code
     local cameras=$(python3 -c "
-from daemon.camera_manager import find_video_devices
+from daemon.camera_manager import find_video_devices, get_device_info
 devices = find_video_devices()
-for dev in devices:
-    path = dev.get('path', '')
-    name = dev.get('name', 'Unknown Camera')
+for path in devices:
+    info = get_device_info(path)
+    name = info.hardware_name if info else 'Unknown Camera'
     print(f'{path}|{name}')
 " 2>/dev/null)
 
