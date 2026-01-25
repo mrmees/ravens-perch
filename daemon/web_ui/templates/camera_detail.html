@@ -463,12 +463,6 @@
         </div>
     </div>
 
-    <!-- Mobile Sticky Save (submits the settings form) -->
-    <div class="mobile-sticky-actions" id="mobile-sticky">
-        <button type="button" class="btn btn-primary btn-full" onclick="submitSettingsForm()">
-            Save Settings
-        </button>
-    </div>
 </div>
 {% endblock %}
 
@@ -509,12 +503,8 @@
 
     // Show save buttons only for tabs that have settings
     function updateSaveButtons(tabId) {
-        var mobileSave = document.getElementById('mobile-sticky');
         var stickySave = document.getElementById('sticky-save-bar');
         var hasSettings = ['basic', 'encoding', 'overlay', 'controls'].includes(tabId);
-
-        // Mobile sticky button
-        mobileSave.classList.toggle('visible', hasSettings);
 
         // Sticky save bar
         if (stickySave) {
@@ -615,7 +605,6 @@
     .camera-layout-v2 {
         max-width: 1000px;
         margin: 0 auto;
-        padding-bottom: 80px; /* Space for sticky button */
     }
 
     /* Page header */
@@ -965,36 +954,10 @@
         min-height: 44px;
     }
 
-    /* Mobile sticky save button */
-    .mobile-sticky-actions {
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        right: 0;
-        padding: 1rem;
-        background: var(--bg-secondary);
-        border-top: 1px solid var(--border-color);
-        transform: translateY(100%);
-        transition: transform 0.2s ease;
-        z-index: 100;
-    }
-    .mobile-sticky-actions.visible {
-        transform: translateY(0);
-    }
-    .btn-full {
-        width: 100%;
-        padding: 1rem;
-        font-size: 1rem;
-    }
-
     /* ========================================
        TABLET BREAKPOINT (576px+)
        ======================================== */
     @media (min-width: 576px) {
-        .camera-layout-v2 {
-            padding-bottom: 0;
-        }
-
         /* 2 columns for form grids */
         .form-grid {
             grid-template-columns: repeat(2, 1fr);
@@ -1014,11 +977,6 @@
         /* 2 columns for info */
         .info-grid-v2 {
             grid-template-columns: repeat(2, 1fr);
-        }
-
-        /* Hide mobile sticky on tablet+ */
-        .mobile-sticky-actions {
-            display: none;
         }
 
         /* Save bar - right-aligned on tablet+ */

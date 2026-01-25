@@ -1011,20 +1011,12 @@ details.settings-card > *:not(summary) {
 
 .raven-quote {
     font-style: italic;
-    margin-bottom: 0.5rem;
     line-height: 1.5;
 }
 
 .raven-line {
     margin: 0;
     padding: 0;
-}
-
-.footer-brand {
-    display: block;
-    margin-top: 0.5rem;
-    font-style: normal;
-    color: var(--text-secondary);
 }
 
 /* Responsive adjustments */
