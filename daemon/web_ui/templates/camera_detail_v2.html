@@ -83,15 +83,16 @@
 
         <!-- Tab Content -->
         <div class="tabs-content-v2">
+            <!-- Single form for Basic, Encoding, and Overlay settings -->
+            <form method="POST"
+                  action="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
+                  hx-post="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
+                  hx-swap="innerHTML"
+                  hx-target="#settings-status"
+                  id="settings-form">
+
             <!-- Basic Settings Tab -->
             <div class="tab-panel active" id="tab-basic">
-                <form method="POST"
-                      action="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
-                      hx-post="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
-                      hx-swap="innerHTML"
-                      hx-target="#basic-status"
-                      class="settings-form">
-
                     <div class="form-grid">
                         <div class="form-group">
                             <label for="friendly_name">Name</label>
@@ -194,21 +195,10 @@
                         </div>
                     </div>
 
-                    <div id="basic-status" class="form-status"></div>
-                    <div class="form-actions">
-                        <button type="submit" class="btn btn-primary">Save Basic Settings</button>
-                    </div>
-                </form>
             </div>
 
             <!-- Encoding Tab -->
             <div class="tab-panel" id="tab-encoding">
-                <form method="POST"
-                      action="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
-                      hx-post="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
-                      hx-swap="innerHTML"
-                      hx-target="#encoding-status"
-                      class="settings-form">
 
                     <div class="form-grid">
                         <div class="form-group">
@@ -265,22 +255,10 @@
                         </div>
                     </div>
 
-                    <div id="encoding-status" class="form-status"></div>
-                    <div class="form-actions">
-                        <button type="submit" class="btn btn-primary">Save Encoding Settings</button>
-                    </div>
-                </form>
             </div>
 
             <!-- Overlay Tab -->
             <div class="tab-panel" id="tab-overlay">
-                <form method="POST"
-                      action="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
-                      hx-post="{{ url_for('cameras.update_settings', camera_id=camera.id) }}"
-                      hx-swap="innerHTML"
-                      hx-target="#overlay-status"
-                      class="settings-form">
-
                     <div class="form-group form-group-toggle">
                         <label class="toggle-label">
                             <span>Enable Overlay</span>
@@ -399,14 +377,16 @@
                         </div>
                     </div>
 
-                    <div id="overlay-status" class="form-status"></div>
-                    <div class="form-actions">
-                        <button type="submit" class="btn btn-primary">Save Overlay Settings</button>
-                    </div>
-                </form>
             </div>
 
-            <!-- Camera Controls Tab -->
+            <!-- Save Button for all settings -->
+            <div class="form-actions-global">
+                <div id="settings-status" class="form-status"></div>
+                <button type="submit" class="btn btn-primary btn-save-all">Save Settings</button>
+            </div>
+        </form>
+
+            <!-- Camera Controls Tab (outside form - auto-saves) -->
             {% if camera.connected %}
             <div class="tab-panel" id="tab-controls">
                 <p class="form-help" style="margin-bottom: 0.5rem;">
@@ -424,7 +404,7 @@
             </div>
             {% endif %}
 
-            <!-- Info Tab -->
+            <!-- Info Tab (outside form - read-only) -->
             <div class="tab-panel" id="tab-info">
                 <div class="info-grid-v2">
                     <div class="info-section">
@@ -471,10 +451,10 @@
         </div>
     </div>
 
-    <!-- Mobile Sticky Save (appears per active form) -->
+    <!-- Mobile Sticky Save (submits the settings form) -->
     <div class="mobile-sticky-actions" id="mobile-sticky">
-        <button type="button" class="btn btn-primary btn-full" onclick="submitActiveForm()">
-            Save Changes
+        <button type="button" class="btn btn-primary btn-full" onclick="submitSettingsForm()">
+            Save Settings
         </button>
     </div>
 </div>
@@ -508,30 +488,35 @@
         document.querySelectorAll('.tab-panel').forEach(function(p) { p.classList.remove('active'); });
         document.getElementById('tab-' + tabId).classList.add('active');
 
-        // Show/hide sticky save button based on whether tab has a form
-        updateStickyButton(tabId);
+        // Show/hide save buttons based on whether tab has settings
+        updateSaveButtons(tabId);
     }
 
-    // Show sticky button only for tabs with forms
-    function updateStickyButton(tabId) {
+    // Show save buttons only for tabs that use the settings form
+    function updateSaveButtons(tabId) {
         var sticky = document.getElementById('mobile-sticky');
-        var hasForm = ['basic', 'encoding', 'overlay'].includes(tabId);
-        sticky.classList.toggle('visible', hasForm);
-    }
+        var globalSave = document.querySelector('.form-actions-global');
+        var hasSettings = ['basic', 'encoding', 'overlay'].includes(tabId);
 
-    // Submit the active form from sticky button
-    function submitActiveForm() {
-        var activePanel = document.querySelector('.tab-panel.active');
-        if (activePanel) {
-            var form = activePanel.querySelector('form');
-            if (form) {
-                htmx.trigger(form, 'submit');
-            }
+        // Mobile sticky button
+        sticky.classList.toggle('visible', hasSettings);
+
+        // Desktop save button area
+        if (globalSave) {
+            globalSave.style.display = hasSettings ? '' : 'none';
         }
     }
 
-    // Initialize sticky button state
-    updateStickyButton('basic');
+    // Submit the unified settings form
+    function submitSettingsForm() {
+        var form = document.getElementById('settings-form');
+        if (form) {
+            htmx.trigger(form, 'submit');
+        }
+    }
+
+    // Initialize save button visibility
+    updateSaveButtons('basic');
 
     // Refresh snapshot preview
     var previewImage = document.getElementById('preview-image');
@@ -839,6 +824,22 @@
         min-height: 1.5rem;
     }
 
+    /* Global save button (single save for all tabs) */
+    .form-actions-global {
+        margin-top: 1.5rem;
+        padding-top: 1rem;
+        border-top: 1px solid var(--border-color);
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+    }
+    .btn-save-all {
+        width: 100%;
+        padding: 0.875rem 1.5rem;
+        font-size: 1rem;
+        font-weight: 500;
+    }
+
     /* Info section */
     .info-grid-v2 {
         display: grid;
@@ -963,6 +964,20 @@
         /* Hide mobile sticky on tablet+ */
         .mobile-sticky-actions {
             display: none;
+        }
+
+        /* Save button - right-aligned on tablet+ */
+        .form-actions-global {
+            flex-direction: row;
+            justify-content: flex-end;
+            align-items: center;
+        }
+        .form-actions-global .form-status {
+            flex: 1;
+        }
+        .btn-save-all {
+            width: auto;
+            padding: 0.625rem 1.5rem;
         }
     }
 
