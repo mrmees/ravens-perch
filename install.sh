@@ -684,12 +684,21 @@ EOF
             machine_hostname="${machine_hostname}.local"
         fi
 
-        # Build the full URL
+        # Get IP address as fallback
+        local machine_ip=$(hostname -I 2>/dev/null | awk '{print $1}')
+        if [ -z "$machine_ip" ]; then
+            machine_ip=$(ip route get 1 2>/dev/null | awk '{print $7; exit}')
+        fi
+
+        # Build the full URLs
         local ravens_url="http://${machine_hostname}"
+        local ravens_url_ip="http://${machine_ip}"
         if [ "$fluidd_port" != "80" ]; then
             ravens_url="${ravens_url}:${fluidd_port}"
+            ravens_url_ip="${ravens_url_ip}:${fluidd_port}"
         fi
         ravens_url="${ravens_url}/cameras/"
+        ravens_url_ip="${ravens_url_ip}/cameras/"
 
         # CSS to add a Ravens Perch link banner
         local ravens_css="/* Ravens Perch Integration */
@@ -697,7 +706,7 @@ EOF
 
 /* Banner at top of camera settings section */
 #camera::after {
-  content: \"Manage cameras with Ravens Perch → ${ravens_url}\";
+  content: \"Manage cameras with Ravens Perch → ${ravens_url} (or ${ravens_url_ip})\";
   display: block;
   margin: 8px 16px;
   padding: 12px 16px;
@@ -731,6 +740,7 @@ EOF
         fi
 
         log_info "Ravens Perch URL: ${ravens_url}"
+        log_info "Ravens Perch URL (IP): ${ravens_url_ip}"
     fi
 }
 
