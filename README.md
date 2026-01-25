@@ -45,6 +45,32 @@ Cameras are automatically detected, optimally configured, and registered with Mo
 
 ---
 
+## Before You Begin
+
+### Disabling Crowsnest
+
+If you're currently using Crowsnest for camera streaming, you'll need to disable it before running Ravens Perch. Both applications try to access the same camera devices, which will cause conflicts.
+
+**Temporarily disable Crowsnest (recommended for testing):**
+```bash
+sudo systemctl stop crowsnest
+sudo systemctl disable crowsnest
+```
+
+**To re-enable Crowsnest later:**
+```bash
+sudo systemctl enable crowsnest
+sudo systemctl start crowsnest
+```
+
+**Note:** You should also stop Ravens Perch before re-enabling Crowsnest:
+```bash
+sudo systemctl stop ravens-perch
+sudo systemctl disable ravens-perch
+```
+
+---
+
 ## Installation
 
 ### Quick Install
