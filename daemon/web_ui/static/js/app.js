@@ -2,6 +2,22 @@
  * Ravens Perch - Minimal JavaScript for HTMX enhancements
  */
 
+// Theme toggle functionality
+function toggleTheme() {
+    var currentTheme = document.documentElement.getAttribute('data-theme') || 'dark';
+    var newTheme = currentTheme === 'dark' ? 'light' : 'dark';
+    document.documentElement.setAttribute('data-theme', newTheme);
+    localStorage.setItem('ravens-perch-theme', newTheme);
+}
+
+// Initialize theme toggle button
+document.addEventListener('DOMContentLoaded', function() {
+    var themeToggle = document.getElementById('theme-toggle');
+    if (themeToggle) {
+        themeToggle.addEventListener('click', toggleTheme);
+    }
+});
+
 // Auto-dismiss flash messages after 5 seconds
 document.addEventListener('DOMContentLoaded', function() {
     const flashMessages = document.querySelectorAll('.flash');
