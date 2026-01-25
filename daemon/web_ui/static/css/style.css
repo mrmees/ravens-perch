@@ -68,6 +68,11 @@ a:hover {
 .navbar {
     background-color: var(--bg-secondary);
     border-bottom: 1px solid var(--border-color);
+}
+
+.navbar-inner {
+    max-width: 1400px;
+    margin: 0 auto;
     padding: 0 1.5rem;
     display: flex;
     flex-wrap: wrap;
@@ -75,8 +80,6 @@ a:hover {
     justify-content: space-between;
     min-height: 56px;
     position: relative;
-    max-width: 1400px;
-    margin: 0 auto;
 }
 
 .nav-brand a {
@@ -215,9 +218,8 @@ a:hover {
 
 /* Desktop: show inline nav, hide hamburger */
 @media (min-width: 768px) {
-    .navbar {
+    .navbar-inner {
         flex-wrap: nowrap;
-        padding: 0 1.5rem;
     }
 
     .nav-hamburger {
