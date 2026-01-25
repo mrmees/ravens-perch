@@ -375,16 +375,28 @@ def update_settings(camera_id: int):
             settings[stat] = request.form[stat] == '1'
 
     # V4L2 controls from form (prefixed with 'v4l2_')
+    # Only save values that differ from hardware defaults
     v4l2_controls = {}
+    hardware_defaults = {}
+    if camera['connected'] and camera['device_path']:
+        try:
+            hw_controls = get_v4l2_controls(camera['device_path'])
+            hardware_defaults = {name: info.get('default') for name, info in hw_controls.items()}
+        except Exception:
+            pass  # If we can't get defaults, save all values
+
     for key in request.form:
         if key.startswith('v4l2_'):
             control_name = key[5:]  # Remove 'v4l2_' prefix
             try:
-                v4l2_controls[control_name] = int(request.form[key])
+                value = int(request.form[key])
+                # Only save if different from hardware default
+                if control_name not in hardware_defaults or value != hardware_defaults[control_name]:
+                    v4l2_controls[control_name] = value
             except (ValueError, TypeError):
                 pass  # Skip invalid values
-    if v4l2_controls:
-        settings['v4l2_controls'] = v4l2_controls
+    # Always set v4l2_controls (even if empty) to clear out old defaults
+    settings['v4l2_controls'] = v4l2_controls
 
     if 'standby_enabled' in request.form:
         # Check if '1' is in the list of values (checkbox + hidden input)
@@ -1091,10 +1103,24 @@ def api_set_control(camera_id: int, control_name: str):
     if not success:
         return jsonify({'error': 'Failed to apply control'}), 500
 
-    # Save to database
+    # Save to database (only if different from hardware default)
     settings = get_camera_settings(camera_id) or {}
     v4l2_controls = settings.get('v4l2_controls', {}) or {}
-    v4l2_controls[control_name] = value
+
+    # Get hardware default for this control
+    try:
+        hw_controls = get_v4l2_controls(camera['device_path'])
+        default_value = hw_controls.get(control_name, {}).get('default')
+    except Exception:
+        default_value = None
+
+    if default_value is not None and value == default_value:
+        # Value matches default - remove from saved settings
+        v4l2_controls.pop(control_name, None)
+    else:
+        # Value differs from default - save it
+        v4l2_controls[control_name] = value
+
     save_camera_settings(camera_id, {'v4l2_controls': v4l2_controls})
 
     # Get the actual current value from camera to confirm
