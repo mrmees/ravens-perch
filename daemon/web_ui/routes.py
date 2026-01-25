@@ -19,7 +19,8 @@ from ..db import (
 from ..snapshot_server import grab_snapshot, get_placeholder_image
 from ..stream_manager import (
     build_ffmpeg_command, add_or_update_stream, get_stream_urls,
-    is_stream_active, restart_stream, remove_stream, remove_all_streams
+    is_stream_active, restart_stream, remove_stream, remove_all_streams,
+    start_camera_stream
 )
 from ..moonraker_client import (
     register_camera, update_camera as update_moonraker_camera,
@@ -218,9 +219,8 @@ def camera_detail(camera_id: int):
     if camera['connected'] and camera['device_path'] and camera['settings']:
         settings = camera['settings'].copy()  # Copy to avoid modifying original
         encoder = settings.get('encoder') or 'libx264'
-        v4l2_controls = settings.get('v4l2_controls', {})
 
-        # Get overlay path if enabled
+        # Get overlay path only if enabled
         overlay_path = None
         print_monitor = get_print_monitor()
         if settings.get('overlay_enabled') and print_monitor:
@@ -236,7 +236,6 @@ def camera_detail(camera_id: int):
             settings,
             str(camera_id),
             encoder,
-            v4l2_controls=v4l2_controls,
             overlay_path=overlay_path
         )
 
@@ -286,8 +285,8 @@ def camera_detail_v2(camera_id: int):
     if camera['connected'] and camera['device_path'] and camera['settings']:
         settings = camera['settings'].copy()
         encoder = settings.get('encoder') or 'libx264'
-        v4l2_controls = settings.get('v4l2_controls', {})
 
+        # Get overlay path only if enabled
         overlay_path = None
         print_monitor = get_print_monitor()
         if settings.get('overlay_enabled') and print_monitor:
@@ -302,7 +301,6 @@ def camera_detail_v2(camera_id: int):
             settings,
             str(camera_id),
             encoder,
-            v4l2_controls=v4l2_controls,
             overlay_path=overlay_path
         )
 
@@ -429,32 +427,22 @@ def update_settings(camera_id: int):
         elif 'overlay_enabled' in settings:
             print_monitor.set_camera_overlay(str(camera_id), False)
 
-    # Rebuild and update stream
+    # Rebuild and update stream using the helper function
     if camera['connected'] and camera['enabled']:
         current_settings = get_camera_settings(camera_id)
         if current_settings and camera['device_path']:
-            # Get V4L2 controls to apply at stream start
-            v4l2_controls = current_settings.get('v4l2_controls', {})
-
             # Apply standby framerate if enabled and printer is idle
             if current_settings.get('standby_enabled') and current_settings.get('standby_framerate') and print_monitor:
                 if print_monitor.effective_state == 'standby':
                     current_settings['framerate'] = current_settings['standby_framerate']
 
-            # Get overlay path if enabled
-            overlay_path = None
-            if current_settings.get('overlay_enabled') and print_monitor:
-                overlay_path = str(print_monitor.get_overlay_path(str(camera_id)))
-
-            ffmpeg_cmd = build_ffmpeg_command(
+            # Start stream (applies v4l2 controls, builds command, starts stream)
+            start_camera_stream(
                 camera['device_path'],
-                current_settings,
                 str(camera_id),
-                current_settings.get('encoder', 'libx264'),
-                v4l2_controls=v4l2_controls,
-                overlay_path=overlay_path
+                current_settings,
+                print_monitor
             )
-            add_or_update_stream(str(camera_id), ffmpeg_cmd)
 
     # HTMX response - include updated FFmpeg command for OOB swap
     if request.headers.get('HX-Request'):
@@ -462,7 +450,6 @@ def update_settings(camera_id: int):
         ffmpeg_cmd = None
         if camera['connected'] and camera['enabled'] and camera['device_path']:
             current_settings = get_camera_settings(camera_id) or {}
-            v4l2_controls = current_settings.get('v4l2_controls', {})
             overlay_path = None
             if current_settings.get('overlay_enabled') and print_monitor:
                 overlay_path = str(print_monitor.get_overlay_path(str(camera_id)))
@@ -471,7 +458,6 @@ def update_settings(camera_id: int):
                 current_settings,
                 str(camera_id),
                 current_settings.get('encoder', 'libx264'),
-                v4l2_controls=v4l2_controls,
                 overlay_path=overlay_path
             )
         return render_template('partials/settings_success.html', ffmpeg_cmd=ffmpeg_cmd)
@@ -561,13 +547,18 @@ def restart_camera_stream(camera_id: int):
         flash(message, "error")
         return redirect(url_for('cameras.camera_detail', camera_id=camera_id))
 
-    # Rebuild FFmpeg command with current settings including v4l2_controls
+    # Rebuild FFmpeg command with current settings
     settings = camera['settings'] or {}
     v4l2_controls = settings.get('v4l2_controls') or {}
-
-    # Get overlay path if enabled
-    overlay_path = None
     print_monitor = get_print_monitor()
+
+    # Apply V4L2 controls first (these are already filtered to non-defaults)
+    if v4l2_controls:
+        from ..camera_manager import apply_v4l2_controls
+        apply_v4l2_controls(camera['device_path'], v4l2_controls)
+
+    # Get overlay path only if enabled
+    overlay_path = None
     if settings.get('overlay_enabled') and print_monitor:
         overlay_path = str(print_monitor.get_overlay_path(str(camera_id)))
 
@@ -581,7 +572,6 @@ def restart_camera_stream(camera_id: int):
         settings,
         str(camera_id),
         settings.get('encoder', 'libx264'),
-        v4l2_controls=v4l2_controls,
         overlay_path=overlay_path
     )
 

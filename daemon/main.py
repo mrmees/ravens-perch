@@ -33,7 +33,7 @@ from .camera_manager import (
 from .stream_manager import (
     wait_for_available as wait_for_mediamtx,
     build_ffmpeg_command, add_or_update_stream, remove_stream,
-    remove_all_streams
+    remove_all_streams, start_camera_stream
 )
 from .moonraker_client import (
     detect_moonraker_url, register_camera, unregister_camera,
@@ -375,32 +375,23 @@ class RavensPerchDaemon:
 
             # Build FFmpeg command and start stream
             settings = camera['settings'] or {}
-            encoder = settings.get('encoder', 'libx264')
-            v4l2_controls = settings.get('v4l2_controls') or {}
 
-            # Handle print status overlay
-            overlay_path = None
+            # Set up print status overlay if enabled
             if settings.get('overlay_enabled') and self.print_monitor:
                 self.print_monitor.set_camera_overlay(str(camera_id), True, settings)
-                overlay_path = str(self.print_monitor.get_overlay_path(str(camera_id)))
 
             # Apply standby framerate if enabled and printer is idle
-            stream_settings = settings.copy()
             if self.print_monitor and settings.get('standby_enabled') and settings.get('standby_framerate'):
                 if not self.print_monitor.status.is_printing:
-                    stream_settings['framerate'] = settings['standby_framerate']
+                    settings['framerate'] = settings['standby_framerate']
 
-            ffmpeg_cmd = build_ffmpeg_command(
+            # Start stream (applies v4l2 controls, builds command, starts stream)
+            success, error = start_camera_stream(
                 device_info.path,
-                stream_settings,
                 str(camera_id),
-                encoder,
-                v4l2_controls=v4l2_controls,
-                overlay_path=overlay_path
+                settings,
+                self.print_monitor
             )
-
-            # Register stream with MediaMTX
-            success, error = add_or_update_stream(str(camera_id), ffmpeg_cmd)
             if success:
                 logger.info(f"Stream started for camera {camera_id}")
             else:
@@ -503,28 +494,17 @@ class RavensPerchDaemon:
 
                 logger.info(f"Switching camera {camera['id']} from {current_fps}fps to {target_fps}fps")
 
-                # Build new FFmpeg command with updated framerate
+                # Build new settings with updated framerate
                 new_settings = settings.copy()
                 new_settings['framerate'] = target_fps
 
-                # Get overlay path if enabled
-                overlay_path = None
-                if settings.get('overlay_enabled') and self.print_monitor:
-                    overlay_path = str(self.print_monitor.get_overlay_path(str(camera['id'])))
-
-                v4l2_controls = settings.get('v4l2_controls') or {}
-
-                ffmpeg_cmd = build_ffmpeg_command(
+                # Restart stream with new framerate
+                success, error = start_camera_stream(
                     camera['device_path'],
-                    new_settings,
                     str(camera['id']),
-                    settings.get('encoder', 'libx264'),
-                    v4l2_controls=v4l2_controls,
-                    overlay_path=overlay_path
+                    new_settings,
+                    self.print_monitor
                 )
-
-                # Restart stream with new command
-                success, error = add_or_update_stream(str(camera['id']), ffmpeg_cmd)
                 if success:
                     # Track what framerate we set
                     if not hasattr(self, '_camera_framerates'):

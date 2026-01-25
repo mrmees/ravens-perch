@@ -297,7 +297,6 @@ def build_ffmpeg_command(
     settings: Dict,
     stream_name: str,
     encoder_type: str = 'libx264',
-    v4l2_controls: Optional[Dict[str, int]] = None,
     overlay_path: Optional[str] = None
 ) -> str:
     """
@@ -308,10 +307,13 @@ def build_ffmpeg_command(
         settings: Camera settings dict
         stream_name: Name for the RTSP stream
         encoder_type: Encoder to use (libx264, h264_vaapi, h264_v4l2m2m)
-        v4l2_controls: Optional dict of V4L2 controls to apply before streaming
         overlay_path: Optional path to text file for print status overlay
+            (only pass if overlay is enabled in settings)
 
-    Returns: Complete FFmpeg command string (may be wrapped in shell for V4L2 controls)
+    Returns: Complete FFmpeg command string
+
+    Note: V4L2 controls should be applied separately using apply_v4l2_controls()
+          before starting the stream.
     """
     cmd_parts = ["ffmpeg", "-hide_banner", "-loglevel", "warning"]
 
@@ -473,19 +475,6 @@ def build_ffmpeg_command(
         logger.info(f"Built FFmpeg command with overlay: {overlay_path}")
         logger.debug(f"Full FFmpeg command: {ffmpeg_cmd}")
 
-    # If V4L2 controls are provided, wrap command to apply them first
-    if v4l2_controls:
-        ctrl_parts = []
-        for name, value in v4l2_controls.items():
-            if value is not None:
-                ctrl_parts.append(f"{name}={value}")
-
-        if ctrl_parts:
-            ctrl_str = ",".join(ctrl_parts)
-            v4l2_cmd = f"v4l2-ctl -d {device_path} --set-ctrl={ctrl_str}"
-            # Wrap in shell to run v4l2-ctl before ffmpeg
-            ffmpeg_cmd = f"sh -c '{v4l2_cmd}; {ffmpeg_cmd}'"
-
     return ffmpeg_cmd
 
 
@@ -568,3 +557,53 @@ def restart_stream(camera_id: str) -> Tuple[bool, Optional[str]]:
             return add_stream(camera_id, ffmpeg_command)
 
     return False, "No FFmpeg command found in stream config"
+
+
+def start_camera_stream(
+    device_path: str,
+    camera_id: str,
+    settings: Dict,
+    print_monitor=None
+) -> Tuple[bool, Optional[str]]:
+    """
+    Start a camera stream with proper configuration.
+
+    This is the recommended way to start a stream as it:
+    1. Applies V4L2 controls (only non-default values from settings)
+    2. Determines overlay path (only if overlay is enabled)
+    3. Builds the FFmpeg command
+    4. Starts the stream
+
+    Args:
+        device_path: V4L2 device path (e.g., /dev/video0)
+        camera_id: Camera ID for the stream name
+        settings: Camera settings dict from database
+        print_monitor: Optional print monitor for overlay support
+
+    Returns:
+        Tuple of (success: bool, error_message: Optional[str])
+    """
+    # Apply V4L2 controls if any are saved (these are already filtered to non-defaults)
+    v4l2_controls = settings.get('v4l2_controls') or {}
+    if v4l2_controls:
+        logger.debug(f"Applying V4L2 controls for camera {camera_id}: {v4l2_controls}")
+        apply_v4l2_controls(device_path, v4l2_controls)
+
+    # Only include overlay path if overlay is enabled
+    overlay_path = None
+    if settings.get('overlay_enabled') and print_monitor:
+        overlay_path = str(print_monitor.get_overlay_path(str(camera_id)))
+        logger.debug(f"Overlay enabled for camera {camera_id}: {overlay_path}")
+
+    # Build the FFmpeg command
+    encoder = settings.get('encoder', 'libx264')
+    ffmpeg_cmd = build_ffmpeg_command(
+        device_path,
+        settings,
+        str(camera_id),
+        encoder,
+        overlay_path=overlay_path
+    )
+
+    # Start the stream
+    return add_or_update_stream(str(camera_id), ffmpeg_cmd)
