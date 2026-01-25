@@ -748,8 +748,8 @@ except:
     echo ""
     log_warn "Existing cameras found in Moonraker"
     echo ""
-    echo "Ravens Perch needs to manage camera registrations."
-    echo "Cameras with streams NOT hosted by Ravens Perch can remain."
+    echo "Ravens Perch will manage camera registrations."
+    echo "You may delete existing cameras or keep them."
     echo ""
 
     # Process each camera (use fd 3 for camera list so stdin stays available for read -p)
@@ -763,25 +763,12 @@ except:
         echo "  UID: ${uid}"
         echo "  Stream: ${stream_url}"
 
-        # Check if this is a Ravens Perch stream (contains /cameras/ or port 8585)
-        if [[ "$stream_url" == *"/cameras/"* ]] || [[ "$stream_url" == *":8585"* ]]; then
-            echo -e "  ${BLUE}This appears to be a Ravens Perch stream${NC}"
-            read -p "  Delete this camera so Ravens Perch can manage it? (Y/n): " delete_choice </dev/tty
-            if [[ "$delete_choice" != "n" && "$delete_choice" != "N" ]]; then
-                curl -s -X DELETE "${MOONRAKER_URL}/server/webcams/delete?uid=${uid}" >/dev/null 2>&1
-                log_success "  Deleted: ${name}"
-            else
-                log_info "  Keeping: ${name}"
-            fi
+        read -p "  Delete this camera? (y/N): " delete_choice </dev/tty
+        if [[ "$delete_choice" == "y" || "$delete_choice" == "Y" ]]; then
+            curl -s -X DELETE "${MOONRAKER_URL}/server/webcams/delete?uid=${uid}" >/dev/null 2>&1
+            log_success "  Deleted: ${name}"
         else
-            echo -e "  ${GREEN}This is an external stream (not Ravens Perch)${NC}"
-            read -p "  Delete this camera? (y/N): " delete_choice </dev/tty
-            if [[ "$delete_choice" == "y" || "$delete_choice" == "Y" ]]; then
-                curl -s -X DELETE "${MOONRAKER_URL}/server/webcams/delete?uid=${uid}" >/dev/null 2>&1
-                log_success "  Deleted: ${name}"
-            else
-                log_info "  Keeping: ${name}"
-            fi
+            log_info "  Keeping: ${name}"
         fi
     done 3<<< "$cameras"
 
