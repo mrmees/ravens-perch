@@ -424,12 +424,15 @@
                     </div>
                 </div>
 
-                {% if ffmpeg_cmd %}
-                <div class="info-section" style="margin-top: 1rem;">
+                <div class="info-section" style="margin-top: 1rem;" id="ffmpeg-command-section">
+                    {% if ffmpeg_cmd %}
                     <h4>FFmpeg Command</h4>
                     <div class="ffmpeg-command"><code>{{ ffmpeg_cmd }}</code></div>
+                    {% else %}
+                    <h4>FFmpeg Command</h4>
+                    <div class="ffmpeg-command"><code class="text-muted">Stream not active</code></div>
+                    {% endif %}
                 </div>
-                {% endif %}
 
                 <div class="danger-section">
                     <h4>Danger Zone</h4>

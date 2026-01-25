@@ -456,9 +456,25 @@ def update_settings(camera_id: int):
             )
             add_or_update_stream(str(camera_id), ffmpeg_cmd)
 
-    # HTMX response
+    # HTMX response - include updated FFmpeg command for OOB swap
     if request.headers.get('HX-Request'):
-        return render_template('partials/settings_success.html')
+        # Get the current ffmpeg command to update the Info tab
+        ffmpeg_cmd = None
+        if camera['connected'] and camera['enabled'] and camera['device_path']:
+            current_settings = get_camera_settings(camera_id) or {}
+            v4l2_controls = current_settings.get('v4l2_controls', {})
+            overlay_path = None
+            if current_settings.get('overlay_enabled') and print_monitor:
+                overlay_path = str(print_monitor.get_overlay_path(str(camera_id)))
+            ffmpeg_cmd = build_ffmpeg_command(
+                camera['device_path'],
+                current_settings,
+                str(camera_id),
+                current_settings.get('encoder', 'libx264'),
+                v4l2_controls=v4l2_controls,
+                overlay_path=overlay_path
+            )
+        return render_template('partials/settings_success.html', ffmpeg_cmd=ffmpeg_cmd)
 
     flash("Settings updated successfully", "success")
     return redirect(url_for('cameras.camera_detail', camera_id=camera_id))

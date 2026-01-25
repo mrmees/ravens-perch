@@ -1,13 +1,13 @@
 <div class="v4l2-controls-grid">
     {% for name, info in controls.items() %}
-    <div class="control-item-compact" data-control="{{ name }}">
+    <div class="control-item-compact{% if info.value != info.default %} control-modified{% endif %}" data-control="{{ name }}">
         <div class="control-header-compact">
             <label for="ctrl-{{ name }}">{{ name.replace('_', ' ').title() }}</label>
             {% if info.type == 'menu' and info.options %}
             <button type="button" class="btn-reset-ctrl"
                     hx-post="{{ url_for('cameras.api_reset_control', camera_id=camera_id, control_name=name) }}"
                     hx-swap="none"
-                    onclick="document.getElementById('ctrl-{{ name }}').value = '{{ info.default }}'; document.getElementById('v4l2-{{ name }}').value = '{{ info.default }}';"
+                    onclick="document.getElementById('ctrl-{{ name }}').value = '{{ info.default }}'; document.getElementById('v4l2-{{ name }}').value = '{{ info.default }}'; this.closest('.control-item-compact').classList.remove('control-modified');"
                     title="Reset to default ({{ info.options.get(info.default, info.default) }})">
                 Reset
             </button>
@@ -15,7 +15,7 @@
             <button type="button" class="btn-reset-ctrl"
                     hx-post="{{ url_for('cameras.api_reset_control', camera_id=camera_id, control_name=name) }}"
                     hx-swap="none"
-                    onclick="var cb = document.getElementById('ctrl-{{ name }}'); cb.checked = {{ 'true' if info.default == 1 else 'false' }}; document.getElementById('v4l2-{{ name }}').value = cb.checked ? '1' : '0';"
+                    onclick="var cb = document.getElementById('ctrl-{{ name }}'); cb.checked = {{ 'true' if info.default == 1 else 'false' }}; document.getElementById('v4l2-{{ name }}').value = cb.checked ? '1' : '0'; this.closest('.control-item-compact').classList.remove('control-modified');"
                     title="Reset to default ({{ 'On' if info.default == 1 else 'Off' }})">
                 Reset
             </button>
@@ -23,7 +23,7 @@
             <button type="button" class="btn-reset-ctrl"
                     hx-post="{{ url_for('cameras.api_reset_control', camera_id=camera_id, control_name=name) }}"
                     hx-swap="none"
-                    onclick="document.getElementById('ctrl-{{ name }}').value = {{ info.default }}; document.getElementById('val-{{ name }}').textContent = {{ info.default }}; document.getElementById('v4l2-{{ name }}').value = {{ info.default }};"
+                    onclick="document.getElementById('ctrl-{{ name }}').value = {{ info.default }}; document.getElementById('val-{{ name }}').textContent = {{ info.default }}; document.getElementById('v4l2-{{ name }}').value = {{ info.default }}; this.closest('.control-item-compact').classList.remove('control-modified');"
                     title="Reset to default ({{ info.default }})">
                 Reset
             </button>
@@ -35,11 +35,12 @@
         <input type="hidden" name="v4l2_{{ name }}" id="v4l2-{{ name }}" value="{{ info.value }}">
         <select id="ctrl-{{ name }}"
                 class="control-select-compact"
+                data-default="{{ info.default }}"
                 hx-post="{{ url_for('cameras.api_preview_control', camera_id=camera_id, control_name=name) }}"
                 hx-trigger="change"
                 hx-swap="none"
                 hx-vals='js:{value: event.target.value}'
-                onchange="document.getElementById('v4l2-{{ name }}').value = this.value;">
+                onchange="document.getElementById('v4l2-{{ name }}').value = this.value; this.closest('.control-item-compact').classList.toggle('control-modified', this.value != this.dataset.default);">
             {% for opt_value, opt_label in info.options.items()|sort %}
             <option value="{{ opt_value }}" {% if info.value == opt_value %}selected{% endif %}>
                 {{ opt_label }}
@@ -54,12 +55,13 @@
             <label class="toggle-switch-sm">
                 <input type="checkbox"
                        id="ctrl-{{ name }}"
+                       data-default="{{ info.default }}"
                        {% if info.value == 1 %}checked{% endif %}
                        hx-post="{{ url_for('cameras.api_preview_control', camera_id=camera_id, control_name=name) }}"
                        hx-trigger="change"
                        hx-swap="none"
                        hx-vals='js:{value: event.target.checked ? "1" : "0"}'
-                       onchange="document.getElementById('v4l2-{{ name }}').value = this.checked ? '1' : '0';">
+                       onchange="document.getElementById('v4l2-{{ name }}').value = this.checked ? '1' : '0'; this.closest('.control-item-compact').classList.toggle('control-modified', (this.checked ? 1 : 0) != this.dataset.default);">
                 <span class="toggle-slider-sm"></span>
             </label>
         </div>
@@ -74,8 +76,9 @@
                    max="{{ info.max }}"
                    step="{{ info.step|default(1) }}"
                    value="{{ info.value }}"
+                   data-default="{{ info.default }}"
                    class="control-range-compact"
-                   oninput="document.getElementById('val-{{ name }}').textContent = this.value; document.getElementById('v4l2-{{ name }}').value = this.value;"
+                   oninput="document.getElementById('val-{{ name }}').textContent = this.value; document.getElementById('v4l2-{{ name }}').value = this.value; this.closest('.control-item-compact').classList.toggle('control-modified', this.value != this.dataset.default);"
                    hx-post="{{ url_for('cameras.api_preview_control', camera_id=camera_id, control_name=name) }}"
                    hx-trigger="change"
                    hx-swap="none"
@@ -95,6 +98,12 @@
     }
     .control-item-compact {
         min-width: 0;
+        padding-left: 0.5rem;
+        border-left: 3px solid transparent;
+        transition: border-color 0.2s;
+    }
+    .control-item-compact.control-modified {
+        border-left-color: var(--accent-primary);
     }
     .control-header-compact {
         display: flex;

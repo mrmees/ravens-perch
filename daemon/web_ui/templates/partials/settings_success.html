@@ -1,3 +1,10 @@
 <div class="alert alert-success">
     Settings saved successfully.
 </div>
+
+{% if ffmpeg_cmd is defined %}
+<div id="ffmpeg-command-section" hx-swap-oob="true" class="info-section" style="margin-top: 1rem;">
+    <h4>FFmpeg Command</h4>
+    <div class="ffmpeg-command"><code>{{ ffmpeg_cmd }}</code></div>
+</div>
+{% endif %}
