@@ -763,10 +763,17 @@ except:
         echo "  UID: ${uid}"
         echo "  Stream: ${stream_url}"
 
-        read -p "  Delete this camera? (y/N): " delete_choice </dev/tty
-        if [[ "$delete_choice" == "y" || "$delete_choice" == "Y" ]]; then
-            curl -s -X DELETE "${MOONRAKER_URL}/server/webcams/delete?uid=${uid}" >/dev/null 2>&1
-            log_success "  Deleted: ${name}"
+        read -p "  Delete this camera? (Y/n): " delete_choice </dev/tty
+        if [[ "$delete_choice" != "n" && "$delete_choice" != "N" ]]; then
+            local delete_result=$(curl -s -X POST "${MOONRAKER_URL}/server/webcams/delete" \
+                -H "Content-Type: application/json" \
+                -d "{\"uid\": \"${uid}\"}" 2>&1)
+            if echo "$delete_result" | grep -q "error"; then
+                log_warn "  Failed to delete: ${name}"
+                echo "  Response: ${delete_result}"
+            else
+                log_success "  Deleted: ${name}"
+            fi
         else
             log_info "  Keeping: ${name}"
         fi
