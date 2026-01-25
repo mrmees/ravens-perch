@@ -338,7 +338,7 @@ class RavensPerchDaemon:
             # Handle print status overlay
             overlay_path = None
             if settings.get('overlay_enabled') and self.print_monitor:
-                self.print_monitor.set_camera_overlay(str(camera_id), True)
+                self.print_monitor.set_camera_overlay(str(camera_id), True, settings)
                 overlay_path = str(self.print_monitor.get_overlay_path(str(camera_id)))
 
             # Determine framerate based on current print state

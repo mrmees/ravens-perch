@@ -279,6 +279,24 @@ def update_settings(camera_id: int):
         settings['overlay_position'] = request.form['overlay_position']
     if 'overlay_color' in request.form:
         settings['overlay_color'] = request.form['overlay_color']
+    if 'overlay_font' in request.form:
+        settings['overlay_font'] = request.form['overlay_font'] or None
+    if 'overlay_multiline' in request.form:
+        settings['overlay_multiline'] = request.form['overlay_multiline'] == '1'
+    if 'overlay_show_labels' in request.form:
+        settings['overlay_show_labels'] = request.form['overlay_show_labels'] == '1'
+
+    # Overlay stat toggles
+    overlay_stats = [
+        'overlay_show_progress', 'overlay_show_layer', 'overlay_show_eta',
+        'overlay_show_elapsed', 'overlay_show_filename', 'overlay_show_hotend_temp',
+        'overlay_show_bed_temp', 'overlay_show_fan_speed', 'overlay_show_print_state',
+        'overlay_show_filament_used', 'overlay_show_current_time',
+        'overlay_show_print_speed', 'overlay_show_z_height'
+    ]
+    for stat in overlay_stats:
+        if stat in request.form:
+            settings[stat] = request.form[stat] == '1'
 
     if 'printing_framerate' in request.form:
         val = request.form['printing_framerate']
@@ -293,8 +311,12 @@ def update_settings(camera_id: int):
 
     # Update print monitor overlay setting if changed
     print_monitor = get_print_monitor()
-    if print_monitor and 'overlay_enabled' in settings:
-        print_monitor.set_camera_overlay(str(camera_id), settings.get('overlay_enabled', False))
+    if print_monitor:
+        current_settings = get_camera_settings(camera_id)
+        if current_settings and current_settings.get('overlay_enabled'):
+            print_monitor.set_camera_overlay(str(camera_id), True, current_settings)
+        elif 'overlay_enabled' in settings:
+            print_monitor.set_camera_overlay(str(camera_id), False)
 
     # Rebuild and update stream
     if camera['connected'] and camera['enabled']:
@@ -1011,7 +1033,57 @@ def api_print_status():
         'total_layers': status.total_layers,
         'time_elapsed': status.time_elapsed,
         'time_remaining': status.time_remaining,
-        'overlay_text': status.format_overlay_text(),
+        'hotend_temp': status.hotend_temp,
+        'hotend_target': status.hotend_target,
+        'bed_temp': status.bed_temp,
+        'bed_target': status.bed_target,
+        'fan_speed': status.fan_speed,
+        'print_speed': status.print_speed,
+        'z_height': status.z_height,
+        'filament_used': status.filament_used,
         'cameras_with_overlay': list(monitor._camera_overlays.keys()),
         'overlay_dir': str(monitor.overlay_dir),
     })
+
+
+# ============ System Fonts ============
+
+@bp.route('/api/fonts')
+def api_fonts():
+    """Get list of available system fonts."""
+    import subprocess
+    fonts = []
+
+    try:
+        # Use fc-list to get system fonts
+        result = subprocess.run(
+            ['fc-list', '-f', '%{family}\n'],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+        if result.returncode == 0:
+            # Parse and deduplicate font families
+            font_set = set()
+            for line in result.stdout.strip().split('\n'):
+                if line:
+                    # Take first family name if comma-separated
+                    family = line.split(',')[0].strip()
+                    if family:
+                        font_set.add(family)
+            fonts = sorted(font_set)
+    except FileNotFoundError:
+        logger.warning("fc-list not found - font selection unavailable")
+    except subprocess.TimeoutExpired:
+        logger.warning("fc-list timed out")
+    except Exception as e:
+        logger.error(f"Error listing fonts: {e}")
+
+    # Return HTML options for HTMX requests
+    if request.headers.get('HX-Request'):
+        options = ['<option value="">System Default</option>']
+        for font in fonts:
+            options.append(f'<option value="{font}">{font}</option>')
+        return ''.join(options)
+
+    return jsonify(fonts)

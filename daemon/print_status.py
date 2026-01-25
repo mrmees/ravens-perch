@@ -8,6 +8,7 @@ import logging
 import os
 import threading
 import time
+from datetime import datetime
 from typing import Dict, Optional, Callable
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -27,6 +28,14 @@ class PrintStatus:
     total_layers: int = 0
     time_remaining: int = 0  # seconds
     time_elapsed: int = 0    # seconds
+    hotend_temp: float = 0.0
+    hotend_target: float = 0.0
+    bed_temp: float = 0.0
+    bed_target: float = 0.0
+    fan_speed: float = 0.0   # 0-100 percent
+    filament_used: float = 0.0  # mm
+    print_speed: float = 100.0  # percent (speed factor * 100)
+    z_height: float = 0.0  # mm
 
     @property
     def is_printing(self) -> bool:
@@ -42,30 +51,6 @@ class PrintStatus:
         if hours > 0:
             return f"{hours}:{minutes:02d}:{secs:02d}"
         return f"{minutes}:{secs:02d}"
-
-    def format_overlay_text(self) -> str:
-        """Format status for FFmpeg overlay."""
-        if not self.is_printing:
-            if self.state == "complete":
-                return "Complete"
-            return "On Standby"
-
-        lines = []
-
-        # Progress - always show
-        lines.append(f"{self.progress:.1f}%")
-
-        # Layer info
-        if self.total_layers > 0:
-            lines.append(f"Layer {self.current_layer}/{self.total_layers}")
-
-        # Time remaining
-        if self.time_remaining > 0:
-            lines.append(f"ETA {self.format_time(self.time_remaining)}")
-
-        result = "  ".join(lines)  # Use spaces instead of | which can cause FFmpeg issues
-        # Ensure we never return empty string
-        return result if result else "Printing..."
 
 
 class PrintStatusMonitor:
@@ -100,8 +85,8 @@ class PrintStatusMonitor:
         # Callbacks for state changes
         self._on_state_change: Optional[Callable[[str, str], None]] = None
 
-        # Per-camera overlay enabled tracking
-        self._camera_overlays: Dict[str, bool] = {}
+        # Per-camera overlay settings {camera_id: settings_dict}
+        self._camera_overlays: Dict[str, Dict] = {}
 
         # Ensure overlay directory exists
         self.overlay_dir.mkdir(parents=True, exist_ok=True)
@@ -121,17 +106,24 @@ class PrintStatusMonitor:
         """
         self._on_state_change = callback
 
-    def set_camera_overlay(self, camera_id: str, enabled: bool):
+    def set_camera_overlay(self, camera_id: str, enabled: bool, settings: Dict = None):
         """Enable/disable overlay for a specific camera."""
-        self._camera_overlays[camera_id] = enabled
         overlay_path = self.get_overlay_path(camera_id)
-        logger.info(f"Camera {camera_id} overlay {'enabled' if enabled else 'disabled'}, path: {overlay_path}")
         if enabled:
+            self._camera_overlays[camera_id] = settings or {}
+            logger.info(f"Camera {camera_id} overlay enabled, path: {overlay_path}")
             # Create initial overlay file
             self._update_overlay_file(camera_id)
         else:
+            self._camera_overlays.pop(camera_id, None)
+            logger.info(f"Camera {camera_id} overlay disabled")
             # Clear overlay file
             self._clear_overlay_file(camera_id)
+
+    def update_camera_overlay_settings(self, camera_id: str, settings: Dict):
+        """Update overlay settings for a camera."""
+        if camera_id in self._camera_overlays:
+            self._camera_overlays[camera_id] = settings
 
     def get_overlay_path(self, camera_id: str) -> Path:
         """Get the overlay text file path for a camera."""
@@ -177,10 +169,15 @@ class PrintStatusMonitor:
     def _poll_status(self):
         """Poll Moonraker for current print status."""
         try:
-            # Query print stats and display status
-            # Use URL directly since params with None values don't work correctly
+            # Query all needed objects
+            # print_stats, display_status, virtual_sdcard for basic info
+            # extruder, heater_bed for temps
+            # fan for fan speed
+            # gcode_move for speed and z position
             response = requests.get(
-                f"{self.moonraker_url}/printer/objects/query?print_stats&display_status&virtual_sdcard",
+                f"{self.moonraker_url}/printer/objects/query"
+                "?print_stats&display_status&virtual_sdcard"
+                "&extruder&heater_bed&fan&gcode_move",
                 timeout=5
             )
 
@@ -194,6 +191,10 @@ class PrintStatusMonitor:
             print_stats = data.get("print_stats", {})
             display_status = data.get("display_status", {})
             virtual_sdcard = data.get("virtual_sdcard", {})
+            extruder = data.get("extruder", {})
+            heater_bed = data.get("heater_bed", {})
+            fan = data.get("fan", {})
+            gcode_move = data.get("gcode_move", {})
 
             with self._lock:
                 # State
@@ -223,15 +224,33 @@ class PrintStatusMonitor:
                 # Time
                 self._status.time_elapsed = int(print_stats.get("print_duration", 0))
 
+                # Filament used (in mm)
+                self._status.filament_used = print_stats.get("filament_used", 0)
+
+                # Temperatures
+                self._status.hotend_temp = extruder.get("temperature", 0)
+                self._status.hotend_target = extruder.get("target", 0)
+                self._status.bed_temp = heater_bed.get("temperature", 0)
+                self._status.bed_target = heater_bed.get("target", 0)
+
+                # Fan speed (0-1 to 0-100%)
+                self._status.fan_speed = fan.get("speed", 0) * 100
+
+                # Print speed (speed_factor is a multiplier, e.g., 1.0 = 100%)
+                self._status.print_speed = gcode_move.get("speed_factor", 1.0) * 100
+
+                # Z height from gcode position
+                gcode_position = gcode_move.get("gcode_position", [0, 0, 0, 0])
+                if len(gcode_position) >= 3:
+                    self._status.z_height = gcode_position[2]
+
                 # Try to get layer info from display_status (set by SET_DISPLAY_TEXT macro)
-                # or from file metadata
                 self._status.current_layer = 0
                 self._status.total_layers = 0
 
                 # Check for layer info in display message
                 message = display_status.get("message", "")
                 if "Layer" in message:
-                    # Try to parse "Layer X/Y" format
                     try:
                         import re
                         match = re.search(r"Layer\s+(\d+)\s*/\s*(\d+)", message, re.IGNORECASE)
@@ -283,20 +302,142 @@ class PrintStatusMonitor:
 
     def _update_all_overlays(self):
         """Update overlay files for all cameras with overlay enabled."""
-        for camera_id, enabled in self._camera_overlays.items():
-            if enabled:
-                self._update_overlay_file(camera_id)
+        for camera_id, settings in self._camera_overlays.items():
+            self._update_overlay_file(camera_id)
+
+    def _format_overlay_text(self, settings: Dict) -> str:
+        """Format overlay text based on camera settings."""
+        status = self._status
+        show_labels = settings.get('overlay_show_labels', True)
+        multiline = settings.get('overlay_multiline', False)
+
+        if not status.is_printing:
+            if status.state == "complete":
+                return "Complete"
+            return "On Standby"
+
+        parts = []
+
+        # Progress
+        if settings.get('overlay_show_progress', True):
+            if show_labels:
+                parts.append(f"Progress: {status.progress:.1f}%")
+            else:
+                parts.append(f"{status.progress:.1f}%")
+
+        # Layer
+        if settings.get('overlay_show_layer', True) and status.total_layers > 0:
+            if show_labels:
+                parts.append(f"Layer: {status.current_layer}/{status.total_layers}")
+            else:
+                parts.append(f"{status.current_layer}/{status.total_layers}")
+
+        # ETA (time remaining)
+        if settings.get('overlay_show_eta', True) and status.time_remaining > 0:
+            if show_labels:
+                parts.append(f"ETA: {status.format_time(status.time_remaining)}")
+            else:
+                parts.append(status.format_time(status.time_remaining))
+
+        # Elapsed time
+        if settings.get('overlay_show_elapsed', False) and status.time_elapsed > 0:
+            if show_labels:
+                parts.append(f"Elapsed: {status.format_time(status.time_elapsed)}")
+            else:
+                parts.append(status.format_time(status.time_elapsed))
+
+        # Filename
+        if settings.get('overlay_show_filename', False) and status.filename:
+            # Truncate long filenames
+            fname = status.filename
+            if len(fname) > 20:
+                fname = fname[:17] + "..."
+            if show_labels:
+                parts.append(f"File: {fname}")
+            else:
+                parts.append(fname)
+
+        # Hotend temp
+        if settings.get('overlay_show_hotend_temp', False):
+            if show_labels:
+                parts.append(f"Hotend: {status.hotend_temp:.0f}/{status.hotend_target:.0f}C")
+            else:
+                parts.append(f"{status.hotend_temp:.0f}/{status.hotend_target:.0f}C")
+
+        # Bed temp
+        if settings.get('overlay_show_bed_temp', False):
+            if show_labels:
+                parts.append(f"Bed: {status.bed_temp:.0f}/{status.bed_target:.0f}C")
+            else:
+                parts.append(f"{status.bed_temp:.0f}/{status.bed_target:.0f}C")
+
+        # Fan speed
+        if settings.get('overlay_show_fan_speed', False):
+            if show_labels:
+                parts.append(f"Fan: {status.fan_speed:.0f}%")
+            else:
+                parts.append(f"{status.fan_speed:.0f}%")
+
+        # Print state
+        if settings.get('overlay_show_print_state', False):
+            state_display = status.state.capitalize()
+            if show_labels:
+                parts.append(f"State: {state_display}")
+            else:
+                parts.append(state_display)
+
+        # Filament used
+        if settings.get('overlay_show_filament_used', False) and status.filament_used > 0:
+            # Convert mm to meters if large
+            if status.filament_used >= 1000:
+                filament_str = f"{status.filament_used/1000:.2f}m"
+            else:
+                filament_str = f"{status.filament_used:.0f}mm"
+            if show_labels:
+                parts.append(f"Filament: {filament_str}")
+            else:
+                parts.append(filament_str)
+
+        # Current time
+        if settings.get('overlay_show_current_time', False):
+            current_time = datetime.now().strftime("%H:%M:%S")
+            if show_labels:
+                parts.append(f"Time: {current_time}")
+            else:
+                parts.append(current_time)
+
+        # Print speed
+        if settings.get('overlay_show_print_speed', False):
+            if show_labels:
+                parts.append(f"Speed: {status.print_speed:.0f}%")
+            else:
+                parts.append(f"{status.print_speed:.0f}%")
+
+        # Z height
+        if settings.get('overlay_show_z_height', False):
+            if show_labels:
+                parts.append(f"Z: {status.z_height:.2f}mm")
+            else:
+                parts.append(f"{status.z_height:.2f}mm")
+
+        if not parts:
+            return "Printing..."
+
+        # Join with newline for multiline, spaces for single line
+        separator = "\n" if multiline else "  "
+        return separator.join(parts)
 
     def _update_overlay_file(self, camera_id: str):
         """Update the overlay text file for a camera."""
         overlay_path = self.get_overlay_path(camera_id)
+        settings = self._camera_overlays.get(camera_id, {})
 
         with self._lock:
-            text = self._status.format_overlay_text()
+            text = self._format_overlay_text(settings)
 
         try:
             overlay_path.write_text(text, encoding='utf-8')
-            logger.info(f"Wrote overlay for camera {camera_id}: '{text}' to {overlay_path}")
+            logger.debug(f"Wrote overlay for camera {camera_id}: '{text}' to {overlay_path}")
         except Exception as e:
             logger.error(f"Failed to write overlay file for camera {camera_id}: {e}")
 

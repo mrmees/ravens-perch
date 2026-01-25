@@ -361,6 +361,7 @@ def build_ffmpeg_command(
         font_size = settings.get('overlay_font_size') or 24
         position = settings.get('overlay_position') or 'bottom_center'
         color = settings.get('overlay_color') or 'white'
+        font = settings.get('overlay_font')  # None means system default
 
         # Map position to x/y coordinates
         position_map = {
@@ -379,19 +380,27 @@ def build_ffmpeg_command(
         # Escape path for FFmpeg filter (colons and backslashes need escaping)
         escaped_path = overlay_path.replace('\\', '/').replace(':', '\\:')
 
-        # drawtext filter with text file that reloads every second
+        # Build drawtext filter with text file that reloads every second
         # expansion=none disables strftime % sequences so we can use literal %
-        drawtext = (
-            f"drawtext=textfile='{escaped_path}'"
-            f":reload=1"
-            f":expansion=none"
-            f":fontcolor={color}"
-            f":fontsize={font_size}"
-            f":borderw=2"
-            f":bordercolor={border_color}"
-            f":x={x_pos}"
-            f":y={y_pos}"
-        )
+        drawtext_parts = [
+            f"drawtext=textfile='{escaped_path}'",
+            "reload=1",
+            "expansion=none",
+            f"fontcolor={color}",
+            f"fontsize={font_size}",
+            "borderw=2",
+            f"bordercolor={border_color}",
+            f"x={x_pos}",
+            f"y={y_pos}",
+        ]
+
+        # Add font if specified
+        if font:
+            # Escape font name for FFmpeg (colons need escaping)
+            escaped_font = font.replace(':', '\\:')
+            drawtext_parts.insert(2, f"font='{escaped_font}'")
+
+        drawtext = ":".join(drawtext_parts)
         filters.append(drawtext)
 
     # Hardware upload last (for VAAPI)
