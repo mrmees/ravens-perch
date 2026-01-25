@@ -587,16 +587,21 @@
         if (encoderSelect) updateEncoderWarning(encoderSelect);
     });
 
-    // Sync v4l2 hidden inputs from controls partial to form container on submit
-    document.getElementById('settings-form').addEventListener('submit', function() {
-        // Copy v4l2 hidden inputs from controls partial to form container
-        var source = document.querySelectorAll('#v4l2-controls input[type="hidden"]');
-        var target = document.getElementById('v4l2-hidden-inputs');
-        target.innerHTML = '';
-        source.forEach(function(input) {
-            var clone = input.cloneNode();
-            target.appendChild(clone);
-        });
+    // Sync v4l2 hidden inputs from controls partial to form container before HTMX request
+    document.body.addEventListener('htmx:configRequest', function(event) {
+        // Only intercept requests from the settings form
+        if (event.detail.elt.id === 'settings-form' || event.detail.elt.closest('#settings-form')) {
+            // Copy v4l2 hidden inputs from controls partial to form container
+            var source = document.querySelectorAll('#v4l2-controls input[type="hidden"]');
+            source.forEach(function(input) {
+                // Add to the request parameters
+                var name = input.getAttribute('name');
+                var value = input.value;
+                if (name && name.startsWith('v4l2_')) {
+                    event.detail.parameters[name] = value;
+                }
+            });
+        }
     });
 </script>
 
