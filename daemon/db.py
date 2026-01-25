@@ -89,6 +89,9 @@ def init_db():
                 overlay_show_current_time BOOLEAN DEFAULT FALSE,
                 overlay_show_print_speed BOOLEAN DEFAULT FALSE,
                 overlay_show_z_height BOOLEAN DEFAULT FALSE,
+                overlay_show_live_velocity BOOLEAN DEFAULT FALSE,
+                overlay_show_flow_rate BOOLEAN DEFAULT FALSE,
+                overlay_show_filament_type BOOLEAN DEFAULT FALSE,
                 printing_framerate INTEGER,
                 standby_framerate INTEGER
             )
@@ -167,6 +170,9 @@ def init_db():
             ("overlay_show_current_time", "BOOLEAN DEFAULT FALSE"),
             ("overlay_show_print_speed", "BOOLEAN DEFAULT FALSE"),
             ("overlay_show_z_height", "BOOLEAN DEFAULT FALSE"),
+            ("overlay_show_live_velocity", "BOOLEAN DEFAULT FALSE"),
+            ("overlay_show_flow_rate", "BOOLEAN DEFAULT FALSE"),
+            ("overlay_show_filament_type", "BOOLEAN DEFAULT FALSE"),
             ("printing_framerate", "INTEGER"),
             ("standby_framerate", "INTEGER"),
         ]
@@ -358,6 +364,8 @@ def save_camera_settings(camera_id: int, settings_dict: Dict) -> bool:
         'overlay_show_bed_temp', 'overlay_show_fan_speed', 'overlay_show_print_state',
         'overlay_show_filament_used', 'overlay_show_current_time',
         'overlay_show_print_speed', 'overlay_show_z_height',
+        'overlay_show_live_velocity', 'overlay_show_flow_rate',
+        'overlay_show_filament_type',
         'printing_framerate', 'standby_framerate'
     }
     settings_dict = {k: v for k, v in settings_dict.items() if k in allowed_fields}

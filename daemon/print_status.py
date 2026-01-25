@@ -36,6 +36,9 @@ class PrintStatus:
     filament_used: float = 0.0  # mm
     print_speed: float = 100.0  # percent (speed factor * 100)
     z_height: float = 0.0  # mm
+    live_velocity: float = 0.0  # mm/s - current print head speed
+    flow_rate: float = 0.0  # mm/s - current extruder velocity
+    filament_type: str = ""  # filament type from print file metadata
 
     @property
     def is_printing(self) -> bool:
@@ -105,6 +108,12 @@ class PrintStatusMonitor:
         'printing' or 'standby'.
         """
         self._on_state_change = callback
+
+    def set_poll_interval(self, interval: float):
+        """Set the polling interval for when printing (1-10 seconds)."""
+        interval = max(1.0, min(10.0, interval))
+        self.printing_poll_interval = interval
+        logger.info(f"Overlay update interval set to {interval} seconds")
 
     def set_camera_overlay(self, camera_id: str, enabled: bool, settings: Dict = None):
         """Enable/disable overlay for a specific camera."""
@@ -177,7 +186,7 @@ class PrintStatusMonitor:
             response = requests.get(
                 f"{self.moonraker_url}/printer/objects/query"
                 "?print_stats&display_status&virtual_sdcard"
-                "&extruder&heater_bed&fan&gcode_move",
+                "&extruder&heater_bed&fan&gcode_move&motion_report",
                 timeout=5
             )
 
@@ -195,6 +204,7 @@ class PrintStatusMonitor:
             heater_bed = data.get("heater_bed", {})
             fan = data.get("fan", {})
             gcode_move = data.get("gcode_move", {})
+            motion_report = data.get("motion_report", {})
 
             with self._lock:
                 # State
@@ -219,7 +229,13 @@ class PrintStatusMonitor:
                 self._status.progress = min(100.0, max(0.0, progress))
 
                 # Filename
-                self._status.filename = print_stats.get("filename", "")
+                new_filename = print_stats.get("filename", "")
+                old_filename = self._status.filename
+                self._status.filename = new_filename
+
+                # Fetch filament type from file metadata when filename changes
+                if new_filename and new_filename != old_filename:
+                    self._fetch_filament_type(new_filename)
 
                 # Time
                 self._status.time_elapsed = int(print_stats.get("print_duration", 0))
@@ -243,6 +259,10 @@ class PrintStatusMonitor:
                 gcode_position = gcode_move.get("gcode_position", [0, 0, 0, 0])
                 if len(gcode_position) >= 3:
                     self._status.z_height = gcode_position[2]
+
+                # Live velocity from motion_report (mm/s)
+                self._status.live_velocity = motion_report.get("live_velocity", 0.0)
+                self._status.flow_rate = motion_report.get("live_extruder_velocity", 0.0)
 
                 # Try to get layer info from display_status (set by SET_DISPLAY_TEXT macro)
                 self._status.current_layer = 0
@@ -271,6 +291,26 @@ class PrintStatusMonitor:
             logger.debug(f"Failed to poll Moonraker: {e}")
         except Exception as e:
             logger.error(f"Error parsing Moonraker response: {e}")
+
+    def _fetch_filament_type(self, filename: str):
+        """Fetch filament type from print file metadata."""
+        try:
+            response = requests.get(
+                f"{self.moonraker_url}/server/files/metadata",
+                params={"filename": filename},
+                timeout=5
+            )
+            if response.status_code == 200:
+                data = response.json().get("result", {})
+                # Filament type is often in filament_type or slicer metadata
+                filament_type = data.get("filament_type", "")
+                if isinstance(filament_type, list) and filament_type:
+                    filament_type = filament_type[0]  # Take first if list
+                with self._lock:
+                    self._status.filament_type = filament_type or ""
+                logger.debug(f"Fetched filament type: {filament_type}")
+        except Exception as e:
+            logger.debug(f"Failed to fetch filament type: {e}")
 
     def _check_state_change(self):
         """Check for printing/standby state changes and trigger callbacks."""
@@ -419,6 +459,27 @@ class PrintStatusMonitor:
                 parts.append(f"Z: {status.z_height:.2f}mm")
             else:
                 parts.append(f"{status.z_height:.2f}mm")
+
+        # Live velocity (print head speed)
+        if settings.get('overlay_show_live_velocity', False):
+            if show_labels:
+                parts.append(f"Velocity: {status.live_velocity:.1f}mm/s")
+            else:
+                parts.append(f"{status.live_velocity:.1f}mm/s")
+
+        # Flow rate (extruder velocity)
+        if settings.get('overlay_show_flow_rate', False):
+            if show_labels:
+                parts.append(f"Flow: {status.flow_rate:.2f}mm/s")
+            else:
+                parts.append(f"{status.flow_rate:.2f}mm/s")
+
+        # Filament type
+        if settings.get('overlay_show_filament_type', False) and status.filament_type:
+            if show_labels:
+                parts.append(f"Filament: {status.filament_type}")
+            else:
+                parts.append(status.filament_type)
 
         if not parts:
             return "Printing..."

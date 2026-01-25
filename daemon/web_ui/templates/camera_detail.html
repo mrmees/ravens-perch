@@ -455,6 +455,27 @@
                                {% if camera.settings and camera.settings.overlay_show_current_time %}checked{% endif %}>
                         <span>Current Time</span>
                     </label>
+
+                    <!-- Live Velocity -->
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="overlay_show_live_velocity" value="1"
+                               {% if camera.settings and camera.settings.overlay_show_live_velocity %}checked{% endif %}>
+                        <span>Head Speed</span>
+                    </label>
+
+                    <!-- Flow Rate -->
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="overlay_show_flow_rate" value="1"
+                               {% if camera.settings and camera.settings.overlay_show_flow_rate %}checked{% endif %}>
+                        <span>Flow Rate</span>
+                    </label>
+
+                    <!-- Filament Type -->
+                    <label class="checkbox-label">
+                        <input type="checkbox" name="overlay_show_filament_type" value="1"
+                               {% if camera.settings and camera.settings.overlay_show_filament_type %}checked{% endif %}>
+                        <span>Filament Type</span>
+                    </label>
                 </div>
 
                 <h4 style="margin: 1.5rem 0 0.75rem; border-bottom: 1px solid var(--border); padding-bottom: 0.5rem;">Dynamic Framerate</h4>

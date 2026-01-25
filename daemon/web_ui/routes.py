@@ -292,7 +292,9 @@ def update_settings(camera_id: int):
         'overlay_show_elapsed', 'overlay_show_filename', 'overlay_show_hotend_temp',
         'overlay_show_bed_temp', 'overlay_show_fan_speed', 'overlay_show_print_state',
         'overlay_show_filament_used', 'overlay_show_current_time',
-        'overlay_show_print_speed', 'overlay_show_z_height'
+        'overlay_show_print_speed', 'overlay_show_z_height',
+        'overlay_show_live_velocity', 'overlay_show_flow_rate',
+        'overlay_show_filament_type'
     ]
     for stat in overlay_stats:
         if stat in request.form:
@@ -592,6 +594,15 @@ def update_global_settings():
 
     if 'log_level' in request.form:
         set_setting('log_level', request.form['log_level'])
+
+    if 'overlay_update_interval' in request.form:
+        interval = int(request.form['overlay_update_interval'])
+        interval = max(1, min(10, interval))  # Clamp to 1-10
+        set_setting('overlay_update_interval', interval)
+        # Update the print monitor's poll interval at runtime
+        print_monitor = get_print_monitor()
+        if print_monitor:
+            print_monitor.set_poll_interval(float(interval))
 
     add_log("INFO", "Global settings updated")
 
@@ -1041,6 +1052,9 @@ def api_print_status():
         'print_speed': status.print_speed,
         'z_height': status.z_height,
         'filament_used': status.filament_used,
+        'live_velocity': status.live_velocity,
+        'flow_rate': status.flow_rate,
+        'filament_type': status.filament_type,
         'cameras_with_overlay': list(monitor._camera_overlays.keys()),
         'overlay_dir': str(monitor.overlay_dir),
     })

@@ -163,16 +163,18 @@ class RavensPerchDaemon:
             # Step 5c: Initialize print status monitor (if Moonraker available)
             if self.moonraker_url:
                 logger.info("Initializing print status monitor...")
+                # Get overlay update interval from settings (default 5 seconds)
+                overlay_interval = db.get_setting('overlay_update_interval', 5)
                 self.print_monitor = init_monitor(
                     moonraker_url=self.moonraker_url,
                     data_dir=str(BASE_DIR),
-                    printing_poll_interval=10.0,
+                    printing_poll_interval=float(overlay_interval),
                     standby_poll_interval=30.0,
                     standby_delay=30.0
                 )
                 self.print_monitor.set_state_change_callback(self._on_print_state_change)
                 self.print_monitor.start()
-                logger.info("Print status monitor started")
+                logger.info(f"Print status monitor started (update interval: {overlay_interval}s)")
 
             # Step 6: Mark all cameras as disconnected initially
             self._reset_camera_states()
