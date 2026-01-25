@@ -381,12 +381,6 @@
 
             <!-- Hidden container for v4l2 control values (populated by JS on submit) -->
             <div id="v4l2-hidden-inputs" style="display: none;"></div>
-
-            <!-- Save Button for all settings -->
-            <div class="form-actions-global">
-                <div id="settings-status" class="form-status"></div>
-                <button type="submit" class="btn btn-primary btn-save-all">Save Settings</button>
-            </div>
         </form>
 
             <!-- Camera Controls Tab (outside form - preview only) -->
@@ -451,6 +445,12 @@
                     </div>
                 </div>
             </div>
+
+            <!-- Sticky Save Bar (outside form, inside tabs-content) -->
+            <div class="sticky-save-bar" id="sticky-save-bar">
+                <div id="settings-status" class="form-status"></div>
+                <button type="button" class="btn btn-primary btn-save-all" onclick="submitSettingsForm()">Save Settings</button>
+            </div>
         </div>
     </div>
 
@@ -495,18 +495,18 @@
         updateSaveButtons(tabId);
     }
 
-    // Show save buttons only for tabs that use the settings form
+    // Show save buttons only for tabs that have settings
     function updateSaveButtons(tabId) {
-        var sticky = document.getElementById('mobile-sticky');
-        var globalSave = document.querySelector('.form-actions-global');
+        var mobileSave = document.getElementById('mobile-sticky');
+        var stickySave = document.getElementById('sticky-save-bar');
         var hasSettings = ['basic', 'encoding', 'overlay', 'controls'].includes(tabId);
 
         // Mobile sticky button
-        sticky.classList.toggle('visible', hasSettings);
+        mobileSave.classList.toggle('visible', hasSettings);
 
-        // Desktop save button area
-        if (globalSave) {
-            globalSave.style.display = hasSettings ? '' : 'none';
+        // Sticky save bar
+        if (stickySave) {
+            stickySave.style.display = hasSettings ? '' : 'none';
         }
     }
 
@@ -839,14 +839,18 @@
         min-height: 1.5rem;
     }
 
-    /* Global save button (single save for all tabs) */
-    .form-actions-global {
-        margin-top: 1.5rem;
-        padding-top: 1rem;
+    /* Sticky save bar (outside form, sticks to bottom of tabs container) */
+    .sticky-save-bar {
+        position: sticky;
+        bottom: 0;
+        background: var(--bg-secondary);
+        padding: 1rem;
         border-top: 1px solid var(--border-color);
         display: flex;
         flex-direction: column;
         gap: 0.5rem;
+        margin: 0 -1rem -1rem -1rem; /* Extend to edges of tabs-content-v2 padding */
+        z-index: 5;
     }
     .btn-save-all {
         width: 100%;
@@ -981,13 +985,13 @@
             display: none;
         }
 
-        /* Save button - right-aligned on tablet+ */
-        .form-actions-global {
+        /* Save bar - right-aligned on tablet+ */
+        .sticky-save-bar {
             flex-direction: row;
             justify-content: flex-end;
             align-items: center;
         }
-        .form-actions-global .form-status {
+        .sticky-save-bar .form-status {
             flex: 1;
         }
         .btn-save-all {
