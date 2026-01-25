@@ -298,17 +298,14 @@ def get_camera_by_ravens_id(camera_id: str) -> Optional[Dict]:
 def print_to_console(message: str) -> bool:
     """
     Print a message to the Klipper console via Moonraker.
-    Uses the RESPOND command which appears in Fluidd/Mainsail console.
+    Uses M118 command which appears cleanly in Fluidd/Mainsail console.
     """
     client = get_client()
-
-    # Escape quotes in message
-    escaped_message = message.replace('"', '\\"')
 
     success, _, error = client._request(
         "/printer/gcode/script",
         method="POST",
-        data={"script": f'RESPOND MSG="{escaped_message}"'}
+        data={"script": f"M118 {message}"}
     )
 
     if not success:
@@ -359,12 +356,10 @@ def announce_management_url() -> None:
         url_hostname = f"http://{hostname}:{port}/cameras/"
         url_ip = f"http://{ip}:{port}/cameras/"
 
-    # Send as notification
-    send_notification(
-        "Ravens Perch",
-        f"Camera manager available at:\n{url_hostname}\n{url_ip}",
-        "info"
-    )
+    # Print to console using M118
+    print_to_console("Ravens Perch camera manager available at:")
+    print_to_console(f"  {url_hostname}")
+    print_to_console(f"  {url_ip}")
 
 
 def send_notification(title: str, message: str, level: str = "info") -> bool:
