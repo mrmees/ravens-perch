@@ -292,36 +292,20 @@ def inject_printer_uis():
 def fluidd_theme_css():
     """
     Serve dynamic CSS for Fluidd integration.
-    This allows the CSS to always have current hostname/IP.
+    Uses the browser's Host header to show the exact URL the user can copy.
     """
-    import socket
+    # Get the host from the request - this is exactly what the user typed in their browser
+    host = request.host  # e.g., "ender3.local:81" or "192.168.1.100"
 
-    # Get current hostname
-    hostname = socket.getfqdn()
-    if '.' not in hostname:
-        hostname = f"{hostname}.local"
-
-    # Get current IP
-    ip = get_system_ip()
-
-    # Detect Fluidd port from nginx
-    printer_uis = detect_printer_uis()
-    port = printer_uis.get('fluidd') or '80'
-
-    # Build URLs
-    if port == '80':
-        url_hostname = f"http://{hostname}/cameras/"
-        url_ip = f"http://{ip}/cameras/"
-    else:
-        url_hostname = f"http://{hostname}:{port}/cameras/"
-        url_ip = f"http://{ip}:{port}/cameras/"
+    # Build the URL using the same host the user is currently using
+    ravens_url = f"http://{host}/cameras/"
 
     css = f"""/* Ravens Perch Integration - Dynamic CSS */
-/* This file is served dynamically to always show current network info */
+/* URL is based on your current browser address */
 
 /* Banner at top of camera settings section */
 #camera::after {{
-  content: "Manage cameras with Ravens Perch → {url_hostname} (or {url_ip})";
+  content: "Manage cameras with Ravens Perch → {ravens_url}";
   display: block;
   margin: 8px 16px;
   padding: 12px 16px;
