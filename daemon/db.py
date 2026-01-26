@@ -4,6 +4,7 @@ Ravens Perch - SQLite Database Layer
 import sqlite3
 import json
 import logging
+import threading
 from datetime import datetime
 from pathlib import Path
 from typing import Optional, Dict, List, Any, Tuple
@@ -13,17 +14,23 @@ from .config import DATABASE_PATH, DATA_DIR
 
 logger = logging.getLogger(__name__)
 
+# Thread-local storage for persistent database connections
+_thread_local = threading.local()
+
 
 def ensure_data_dir():
     """Ensure the data directory exists."""
     DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
-@contextmanager
-def get_connection():
-    """Get a database connection with context management."""
+def _create_connection() -> sqlite3.Connection:
+    """Create and configure a new database connection."""
     ensure_data_dir()
-    conn = sqlite3.connect(str(DATABASE_PATH), timeout=30.0)
+    conn = sqlite3.connect(
+        str(DATABASE_PATH),
+        timeout=30.0,
+        check_same_thread=False  # Safe because we use thread-local storage
+    )
     conn.row_factory = sqlite3.Row
     # WAL mode allows concurrent readers with one writer - much better for
     # web UI reads happening while main thread writes
@@ -31,10 +38,50 @@ def get_connection():
     conn.execute("PRAGMA synchronous=NORMAL")  # Faster writes, safe with WAL
     conn.execute("PRAGMA busy_timeout=5000")  # Wait up to 5s for locks
     conn.execute("PRAGMA foreign_keys = ON")
+    logger.debug(f"Created new DB connection for thread {threading.current_thread().name}")
+    return conn
+
+
+def _get_thread_connection() -> sqlite3.Connection:
+    """Get or create a persistent connection for the current thread."""
+    conn = getattr(_thread_local, 'connection', None)
+    if conn is None:
+        conn = _create_connection()
+        _thread_local.connection = conn
+    return conn
+
+
+@contextmanager
+def get_connection():
+    """Get a database connection with context management.
+
+    Uses thread-local persistent connections to avoid the overhead of
+    opening/closing connections and re-running PRAGMAs for each operation.
+    """
+    conn = _get_thread_connection()
     try:
         yield conn
-    finally:
-        conn.close()
+    except sqlite3.Error as e:
+        # If connection is broken, clear it so next call creates a fresh one
+        logger.warning(f"Database error, will reconnect: {e}")
+        _thread_local.connection = None
+        raise
+
+
+def close_thread_connection():
+    """Close the database connection for the current thread.
+
+    Call this during graceful shutdown to properly close connections.
+    """
+    conn = getattr(_thread_local, 'connection', None)
+    if conn is not None:
+        try:
+            conn.close()
+            logger.debug(f"Closed DB connection for thread {threading.current_thread().name}")
+        except Exception as e:
+            logger.warning(f"Error closing DB connection: {e}")
+        finally:
+            _thread_local.connection = None
 
 
 def init_db():
