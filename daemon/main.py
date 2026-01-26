@@ -15,6 +15,7 @@ import signal
 import logging
 import threading
 import time
+import queue
 from pathlib import Path
 
 from .config import (
@@ -98,6 +99,8 @@ class RavensPerchDaemon:
         self.encoders = {}
         self.moonraker_url = None
         self.print_monitor = None
+        self._moonraker_queue = queue.Queue()
+        self._moonraker_worker = None
 
     def start(self):
         """Start the daemon and all components."""
@@ -197,6 +200,15 @@ class RavensPerchDaemon:
                 self.print_monitor.set_state_change_callback(self._on_print_state_change)
                 self.print_monitor.start()
                 logger.info(f"Print status monitor started (update interval: {overlay_interval}s)")
+
+            # Step 6d: Start Moonraker registration worker (if available)
+            if self.moonraker_url:
+                self._moonraker_worker = threading.Thread(
+                    target=self._moonraker_registration_worker,
+                    daemon=True
+                )
+                self._moonraker_worker.start()
+                logger.info("Moonraker registration worker started")
 
             # Step 7: Mark all cameras as disconnected initially
             self._reset_camera_states()
@@ -409,38 +421,10 @@ class RavensPerchDaemon:
                 add_log("ERROR", f"Failed to start stream: {error}", camera_id)
                 return
 
-            # Register with Moonraker in background thread to avoid blocking
-            # camera processing (Moonraker HTTP calls can take several seconds)
+            # Queue Moonraker registration (processed sequentially in background)
             if self.moonraker_url:
-                def register_in_background(cam_id, friendly_name, rot):
-                    try:
-                        host = get_system_ip()
-                        stream_url = build_stream_url(str(cam_id), host)
-                        snapshot_url = build_snapshot_url(str(cam_id), host)
-
-                        success, moonraker_uid, error = register_camera(
-                            str(cam_id),
-                            friendly_name,
-                            stream_url,
-                            snapshot_url,
-                            rotation=rot
-                        )
-
-                        if success and moonraker_uid:
-                            db.update_camera(cam_id, moonraker_uid=moonraker_uid)
-                            logger.info(f"Registered camera with Moonraker: {moonraker_uid}")
-                        else:
-                            logger.warning(f"Failed to register with Moonraker: {error}")
-                    except Exception as e:
-                        logger.error(f"Moonraker registration error for camera {cam_id}: {e}")
-
                 rotation = settings.get('rotation', 0)
-                t = threading.Thread(
-                    target=register_in_background,
-                    args=(camera_id, camera['friendly_name'], rotation),
-                    daemon=True
-                )
-                t.start()
+                self._moonraker_queue.put((camera_id, camera['friendly_name'], rotation))
 
         except Exception as e:
             logger.error(f"Error handling camera connection: {e}", exc_info=True)
@@ -478,6 +462,40 @@ class RavensPerchDaemon:
 
         except Exception as e:
             logger.error(f"Error handling camera disconnection: {e}", exc_info=True)
+
+    def _moonraker_registration_worker(self):
+        """Process Moonraker registrations sequentially from the queue."""
+        while self.running:
+            try:
+                cam_id, friendly_name, rotation = self._moonraker_queue.get(timeout=2)
+            except queue.Empty:
+                continue
+
+            try:
+                host = get_system_ip()
+                stream_url = build_stream_url(str(cam_id), host)
+                snapshot_url = build_snapshot_url(str(cam_id), host)
+
+                success, moonraker_uid, error = register_camera(
+                    str(cam_id),
+                    friendly_name,
+                    stream_url,
+                    snapshot_url,
+                    rotation=rotation
+                )
+
+                if success and moonraker_uid:
+                    db.update_camera(cam_id, moonraker_uid=moonraker_uid)
+                    logger.info(f"Registered camera with Moonraker: {moonraker_uid}")
+                else:
+                    logger.warning(f"Failed to register with Moonraker: {error}")
+            except Exception as e:
+                logger.error(f"Moonraker registration error for camera {cam_id}: {e}")
+            finally:
+                self._moonraker_queue.task_done()
+
+            # Small delay between registrations to avoid overwhelming Moonraker
+            time.sleep(1)
 
     def _on_print_state_change(self, old_state: str, new_state: str):
         """Handle print state changes (printing <-> standby) for framerate switching."""
