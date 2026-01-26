@@ -786,9 +786,9 @@ verify_installation() {
     echo ""
     log_info "Verifying installation..."
 
-    # Wait for Ravens Perch service to be ready
+    # Wait for Ravens Perch service to be ready (web UI takes ~12s to start)
     log_info "Waiting for Ravens Perch service..."
-    local retries=15
+    local retries=30
     while [ $retries -gt 0 ]; do
         if curl -s "http://127.0.0.1:8585/cameras/api/health" >/dev/null 2>&1; then
             log_success "Ravens Perch service is running"

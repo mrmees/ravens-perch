@@ -435,6 +435,12 @@ def scan_cameras():
     return redirect(url_for('cameras.dashboard'))
 
 
+@bp.route('/api/health')
+def api_health():
+    """Simple health check endpoint for install verification."""
+    return jsonify({'status': 'ok'})
+
+
 @bp.route('/api/status')
 def api_status():
     """Get all cameras status as JSON (for HTMX polling)."""
