@@ -106,6 +106,12 @@ sudo systemctl start crowsnest
 
 ### Quick Install
 
+**Single command:**
+```bash
+git clone https://github.com/mrmees/ravens-perch.git ~/ravens-perch && bash ~/ravens-perch/install.sh
+```
+
+**Or step by step:**
 ```bash
 cd ~
 git clone https://github.com/mrmees/ravens-perch.git ravens-perch
@@ -152,11 +158,13 @@ Ravens Perch automatically selects quality based on your system:
 
 | CPU Rating | Resolution | Framerate | Bitrate |
 |------------|------------|-----------|---------|
-| Low (1-3)  | 640x480    | 15 fps    | 1 Mbps  |
-| Medium (4-5) | 1280x720 | 15 fps    | 2 Mbps  |
-| Good (6-7) | 1280x720   | 30 fps    | 4 Mbps  |
-| High (8-9) | 1920x1080  | 30 fps    | 6 Mbps  |
-| Excellent (10) | 1920x1080 | 60 fps | 8 Mbps  |
+| Low (1-3)  | 640x480    | 10 fps    | 500 Kbps |
+| Medium (4-5) | 640x480  | 15 fps    | 1 Mbps  |
+| Good (6-7) | 1280x720   | 15 fps    | 2 Mbps  |
+| High (8-9) | 1280x720   | 15 fps    | 2 Mbps  |
+| Excellent (10) | 1280x720 | 30 fps  | 4 Mbps  |
+
+These are conservative defaults for reliable initial setup. You can increase resolution, framerate, and bitrate via the web UI once your camera is running.
 
 Hardware encoders (VAAPI, V4L2M2M, RKMPP) boost your effective CPU rating.
 
@@ -198,6 +206,7 @@ Hardware encoders (VAAPI, V4L2M2M, RKMPP) boost your effective CPU rating.
   - Filament Used, Filament Type, Current Time
 - Multi-line or single-line layout
 - Show/hide labels
+- Custom standby text
 - Overlay update interval (1-10 seconds)
 - Dynamic framerate (printing vs standby)
 
@@ -260,6 +269,7 @@ The print status overlay displays real-time information from Moonraker directly 
 - **Position**: Top/Bottom + Left/Center/Right
 - **Layout**: Single line or multi-line
 - **Labels**: Show or hide stat labels
+- **Standby Text**: Custom text displayed when printer is idle (default: "On Standby")
 
 ---
 
@@ -353,6 +363,12 @@ bash uninstall.sh
 Options:
 - Keep database and logs for reinstall
 - Remove everything completely
+
+**Developer mode** — for faster reinstallation during development, use:
+```bash
+bash uninstall.sh --dev
+```
+This preserves the Python virtual environment and MediaMTX installation while clearing the database, saving time on reinstall.
 
 ---
 
