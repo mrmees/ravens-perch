@@ -69,7 +69,7 @@ MOONRAKER_URL="http://127.0.0.1:7125"
 # Get list of webcams and remove any registered by Ravens Perch
 webcams=$(curl -s "${MOONRAKER_URL}/server/webcams/list" 2>/dev/null)
 if [ -n "$webcams" ]; then
-    # Extract UIDs of Ravens Perch cameras (those with /cameras/ in stream URL or ravens in name)
+    # Extract UIDs of Ravens Perch cameras (those with /cameras/ in snapshot URL or port 8889 in stream URL)
     echo "$webcams" | python3 -c "
 import sys, json
 try:
@@ -77,10 +77,10 @@ try:
     webcams = data.get('result', {}).get('webcams', [])
     for cam in webcams:
         stream_url = cam.get('stream_url', '')
-        name = cam.get('name', '').lower()
+        snapshot_url = cam.get('snapshot_url', '')
         uid = cam.get('uid', '')
-        # Identify Ravens Perch cameras by stream URL pattern or name
-        if '/cameras/' in stream_url or 'ravens' in name or uid.startswith('ravens-'):
+        # Identify Ravens Perch cameras by snapshot URL pattern or WebRTC port in stream URL
+        if '/cameras/snapshot/' in snapshot_url or ':8889/' in stream_url or ':8585/' in snapshot_url:
             print(uid)
 except:
     pass
