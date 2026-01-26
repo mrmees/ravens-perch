@@ -146,7 +146,8 @@ def init_db():
                 overlay_show_filament_type BOOLEAN DEFAULT FALSE,
                 printing_framerate INTEGER,
                 standby_framerate INTEGER,
-                standby_enabled BOOLEAN DEFAULT FALSE
+                standby_enabled BOOLEAN DEFAULT FALSE,
+                overlay_standby_text TEXT
             )
         """)
 
@@ -229,6 +230,7 @@ def init_db():
             ("printing_framerate", "INTEGER"),
             ("standby_framerate", "INTEGER"),
             ("standby_enabled", "BOOLEAN DEFAULT FALSE"),
+            ("overlay_standby_text", "TEXT"),
         ]
 
         for col_name, col_def in new_columns:
@@ -420,6 +422,7 @@ def save_camera_settings(camera_id: int, settings_dict: Dict) -> bool:
         'overlay_show_print_speed', 'overlay_show_z_height',
         'overlay_show_live_velocity', 'overlay_show_flow_rate',
         'overlay_show_filament_type',
+        'overlay_standby_text',
         'printing_framerate', 'standby_framerate', 'standby_enabled'
     }
     settings_dict = {k: v for k, v in settings_dict.items() if k in allowed_fields}
