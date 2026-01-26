@@ -34,13 +34,14 @@ MOONRAKER_FALLBACK_URLS = [
 DEBOUNCE_DELAY = 2.0  # Seconds after device events
 
 # Quality tiers (based on CPU capability rating 1-10)
+# Conservative defaults for reliable initial setup - users can increase later
 QUALITY_TIERS = {
     # (min_rating, max_rating): (resolution, framerate, bitrate)
-    (1, 3): ("640x480", 15, "1M"),
-    (4, 5): ("1280x720", 15, "2M"),
-    (6, 7): ("1280x720", 30, "4M"),
-    (8, 9): ("1920x1080", 30, "6M"),
-    (10, 10): ("1920x1080", 60, "8M"),
+    (1, 3): ("640x480", 10, "500K"),
+    (4, 5): ("640x480", 15, "1M"),
+    (6, 7): ("1280x720", 15, "2M"),
+    (8, 9): ("1280x720", 15, "2M"),
+    (10, 10): ("1280x720", 30, "4M"),
 }
 
 # Format priorities (higher = preferred)
