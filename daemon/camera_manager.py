@@ -161,6 +161,27 @@ def get_device_info(device_path: str) -> Optional[DeviceInfo]:
         return None
 
 
+def is_usb_device(device_path: str) -> bool:
+    """
+    Fast check if a V4L2 device is a USB device (not platform/codec).
+
+    Checks sysfs directly - no subprocess calls.
+    """
+    try:
+        device_name = Path(device_path).name  # e.g., "video0"
+        sysfs_device = Path(f"/sys/class/video4linux/{device_name}/device")
+
+        if not sysfs_device.exists():
+            return False
+
+        # Resolve symlink and check if 'usb' appears in the path
+        real_path = str(sysfs_device.resolve())
+        return '/usb' in real_path
+
+    except Exception:
+        return False
+
+
 def is_capture_device(device_path: str) -> bool:
     """Check if a V4L2 device is a video capture device (not metadata/codec)."""
     try:
@@ -404,19 +425,82 @@ def find_closest_resolution(target: str, available: List[str]) -> str:
 
 
 def find_video_devices() -> List[str]:
-    """Find all V4L2 video capture devices."""
+    """
+    Find all USB video capture devices.
+
+    Uses v4l2-ctl --list-devices to efficiently identify USB cameras
+    in a single subprocess call, avoiding slow per-device checks.
+    """
     devices = []
 
+    try:
+        result = subprocess.run(
+            ["v4l2-ctl", "--list-devices"],
+            capture_output=True,
+            text=True,
+            timeout=10
+        )
+
+        if result.returncode != 0:
+            logger.warning("v4l2-ctl --list-devices failed, falling back to scan")
+            return _find_video_devices_fallback()
+
+        # Parse output - USB cameras have "(usb-" in the header line
+        # Format:
+        #   Camera Name (usb-xxxx):
+        #       /dev/video0
+        #       /dev/video1
+        current_is_usb = False
+        first_device_in_group = None
+
+        for line in result.stdout.split('\n'):
+            line_stripped = line.strip()
+
+            if not line_stripped:
+                # Empty line - end of group
+                if current_is_usb and first_device_in_group:
+                    devices.append(first_device_in_group)
+                current_is_usb = False
+                first_device_in_group = None
+                continue
+
+            if line_stripped.startswith('/dev/'):
+                # Device path line (indented)
+                if current_is_usb and first_device_in_group is None:
+                    # First device in a USB group is the capture device
+                    first_device_in_group = line_stripped
+            elif '(usb-' in line.lower():
+                # Header line for a USB device
+                current_is_usb = True
+                first_device_in_group = None
+
+        # Handle last group if no trailing newline
+        if current_is_usb and first_device_in_group:
+            devices.append(first_device_in_group)
+
+        logger.debug(f"Found USB video devices: {devices}")
+
+    except subprocess.TimeoutExpired:
+        logger.warning("v4l2-ctl --list-devices timed out")
+        return _find_video_devices_fallback()
+    except Exception as e:
+        logger.error(f"Error finding video devices: {e}")
+        return _find_video_devices_fallback()
+
+    return devices
+
+
+def _find_video_devices_fallback() -> List[str]:
+    """Fallback device discovery - scan /dev/video* individually."""
+    devices = []
     try:
         video_path = Path("/dev")
         for dev in sorted(video_path.glob("video*")):
             device_path = str(dev)
             if is_capture_device(device_path):
                 devices.append(device_path)
-
     except Exception as e:
-        logger.error(f"Error finding video devices: {e}")
-
+        logger.error(f"Error in fallback device scan: {e}")
     return devices
 
 
@@ -515,7 +599,9 @@ class CameraMonitor:
             if not Path(device_path).exists():
                 return
 
-            if not is_capture_device(device_path):
+            # Fast check: skip non-USB devices (platform codecs, etc.)
+            if not is_usb_device(device_path):
+                logger.debug(f"Skipping non-USB device: {device_path}")
                 return
 
             device_info = get_device_info(device_path)
