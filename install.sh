@@ -810,8 +810,8 @@ verify_installation() {
     local rp_count=0
 
     while [ $camera_retries -gt 0 ]; do
-        rp_cameras=$(curl -s "http://127.0.0.1:8585/cameras/api/cameras" 2>/dev/null)
-        rp_count=$(echo "$rp_cameras" | python3 -c "import sys,json; data=json.load(sys.stdin); print(len(data.get('cameras', [])))" 2>/dev/null || echo "0")
+        rp_cameras=$(curl -s "http://127.0.0.1:8585/cameras/api/status" 2>/dev/null)
+        rp_count=$(echo "$rp_cameras" | python3 -c "import sys,json; data=json.load(sys.stdin); print(len(data) if isinstance(data, list) else 0)" 2>/dev/null || echo "0")
 
         if [ "$rp_count" -gt 0 ]; then
             break
@@ -834,10 +834,10 @@ verify_installation() {
         echo "$rp_cameras" | python3 -c "
 import sys, json
 data = json.load(sys.stdin)
-for cam in data.get('cameras', []):
+for cam in data:
     name = cam.get('name', 'Unknown')
-    status = cam.get('status', 'unknown')
-    print(f'  - {name}: {status}')
+    connected = 'connected' if cam.get('connected') else 'disconnected'
+    print(f'  - {name}: {connected}')
 " 2>/dev/null
         echo ""
     else
