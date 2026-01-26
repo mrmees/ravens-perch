@@ -545,6 +545,8 @@ def update_settings(camera_id: int):
         settings['overlay_multiline'] = '1' in request.form.getlist('overlay_multiline')
     if 'overlay_show_labels' in request.form:
         settings['overlay_show_labels'] = '1' in request.form.getlist('overlay_show_labels')
+    if 'overlay_standby_text' in request.form:
+        settings['overlay_standby_text'] = request.form['overlay_standby_text'].strip() or None
 
     # Overlay stat toggles
     overlay_stats = [

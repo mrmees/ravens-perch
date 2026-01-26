@@ -365,7 +365,7 @@ class PrintStatusMonitor:
         if not status.is_printing:
             if status.state == "complete":
                 return "Complete"
-            return "On Standby"
+            return settings.get('overlay_standby_text') or "On Standby"
 
         parts = []
 

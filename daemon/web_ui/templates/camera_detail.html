@@ -362,6 +362,13 @@
                     </div>
 
                     <div class="form-group">
+                        <label for="overlay_standby_text">Standby Text</label>
+                        <input type="text" id="overlay_standby_text" name="overlay_standby_text"
+                               value="{{ settings.get('overlay_standby_text', '') }}"
+                               placeholder="On Standby">
+                    </div>
+
+                    <div class="form-group">
                         <label>Stats to Display</label>
                         <div class="checkbox-grid-v2">
                             <label class="checkbox-label"><input type="checkbox" name="overlay_show_progress" value="1" {% if camera.settings and camera.settings.overlay_show_progress != False %}checked{% endif %}><span>Progress %</span></label>
