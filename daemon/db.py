@@ -25,6 +25,11 @@ def get_connection():
     ensure_data_dir()
     conn = sqlite3.connect(str(DATABASE_PATH), timeout=30.0)
     conn.row_factory = sqlite3.Row
+    # WAL mode allows concurrent readers with one writer - much better for
+    # web UI reads happening while main thread writes
+    conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA synchronous=NORMAL")  # Faster writes, safe with WAL
+    conn.execute("PRAGMA busy_timeout=5000")  # Wait up to 5s for locks
     conn.execute("PRAGMA foreign_keys = ON")
     try:
         yield conn
