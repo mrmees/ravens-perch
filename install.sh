@@ -804,8 +804,25 @@ verify_installation() {
         return
     fi
 
-    # Wait for camera auto-configuration (poll until camera count stabilizes)
-    log_info "Waiting for camera auto-configuration..."
+    # Count expected USB cameras so we know when all are configured
+    local expected_cameras=0
+    expected_cameras=$(v4l2-ctl --list-devices 2>/dev/null | python3 -c "
+import sys
+lines = sys.stdin.read().strip().split('\n')
+count = 0
+is_usb = False
+for line in lines:
+    if line and not line.startswith('\t'):
+        is_usb = '(usb-' in line.lower()
+    elif is_usb and '/dev/video' in line:
+        # Only count the first /dev/video per USB device
+        count += 1
+        is_usb = False
+print(count)
+" 2>/dev/null || echo "0")
+    log_info "Detected ${expected_cameras} USB camera(s), waiting for auto-configuration..."
+
+    # Wait for camera auto-configuration
     local camera_retries=45
     local rp_cameras=""
     local rp_count=0
@@ -817,14 +834,17 @@ verify_installation() {
         rp_count=$(echo "$rp_cameras" | python3 -c "import sys,json; data=json.load(sys.stdin); print(len(data) if isinstance(data, list) else 0)" 2>/dev/null || echo "0")
 
         if [ "$rp_count" -gt 0 ]; then
+            # If we know expected count, wait for it
+            if [ "$expected_cameras" -gt 0 ] && [ "$rp_count" -ge "$expected_cameras" ]; then
+                break
+            fi
+            # Otherwise fall back to stability check
             if [ "$rp_count" -eq "$last_count" ]; then
                 ((stable_checks++)) || true
-                # Count stable for 3 consecutive checks - all cameras likely configured
-                if [ $stable_checks -ge 3 ]; then
+                if [ $stable_checks -ge 5 ]; then
                     break
                 fi
             else
-                # Count changed, reset stability counter
                 stable_checks=0
                 echo -n "."
             fi
