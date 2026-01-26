@@ -441,6 +441,7 @@ Wants=mediamtx.service
 Type=simple
 User=${RAVENS_USER}
 Environment="RAVENS_PERCH_DIR=${INSTALL_DIR}"
+Environment="PATH=/usr/local/bin:/usr/bin:/bin"
 WorkingDirectory=${INSTALL_DIR}
 ExecStart=${INSTALL_DIR}/venv/bin/python -m daemon.main
 Restart=on-failure
