@@ -822,8 +822,11 @@ print(count)
 " 2>/dev/null || echo "0")
     log_info "Detected ${expected_cameras} USB camera(s), waiting for auto-configuration..."
 
-    # Wait for camera auto-configuration
-    local camera_retries=45
+    # Give the daemon time to detect and configure cameras before polling
+    sleep 5
+
+    # Poll for camera auto-configuration (less frequently to reduce load)
+    local camera_retries=20
     local rp_cameras=""
     local rp_count=0
     local last_count=0
@@ -841,7 +844,7 @@ print(count)
             # Otherwise fall back to stability check
             if [ "$rp_count" -eq "$last_count" ]; then
                 ((stable_checks++)) || true
-                if [ $stable_checks -ge 5 ]; then
+                if [ $stable_checks -ge 3 ]; then
                     break
                 fi
             else
@@ -851,7 +854,7 @@ print(count)
             last_count=$rp_count
         fi
 
-        sleep 1
+        sleep 3
         ((camera_retries--)) || true
     done
     echo ""

@@ -404,26 +404,38 @@ class RavensPerchDaemon:
                 add_log("ERROR", f"Failed to start stream: {error}", camera_id)
                 return
 
-            # Register with Moonraker
+            # Register with Moonraker in background thread to avoid blocking
+            # camera processing (Moonraker HTTP calls can take several seconds)
             if self.moonraker_url:
-                host = get_system_ip()
-                stream_url = build_stream_url(str(camera_id), host)
-                snapshot_url = build_snapshot_url(str(camera_id), host)
+                def register_in_background(cam_id, friendly_name, rot):
+                    try:
+                        host = get_system_ip()
+                        stream_url = build_stream_url(str(cam_id), host)
+                        snapshot_url = build_snapshot_url(str(cam_id), host)
+
+                        success, moonraker_uid, error = register_camera(
+                            str(cam_id),
+                            friendly_name,
+                            stream_url,
+                            snapshot_url,
+                            rotation=rot
+                        )
+
+                        if success and moonraker_uid:
+                            db.update_camera(cam_id, moonraker_uid=moonraker_uid)
+                            logger.info(f"Registered camera with Moonraker: {moonraker_uid}")
+                        else:
+                            logger.warning(f"Failed to register with Moonraker: {error}")
+                    except Exception as e:
+                        logger.error(f"Moonraker registration error for camera {cam_id}: {e}")
 
                 rotation = settings.get('rotation', 0)
-                success, moonraker_uid, error = register_camera(
-                    str(camera_id),
-                    camera['friendly_name'],
-                    stream_url,
-                    snapshot_url,
-                    rotation=rotation
+                t = threading.Thread(
+                    target=register_in_background,
+                    args=(camera_id, camera['friendly_name'], rotation),
+                    daemon=True
                 )
-
-                if success and moonraker_uid:
-                    db.update_camera(camera_id, moonraker_uid=moonraker_uid)
-                    logger.info(f"Registered camera with Moonraker: {moonraker_uid}")
-                else:
-                    logger.warning(f"Failed to register with Moonraker: {error}")
+                t.start()
 
         except Exception as e:
             logger.error(f"Error handling camera connection: {e}", exc_info=True)
