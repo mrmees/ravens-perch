@@ -14,6 +14,7 @@ import sys
 import signal
 import logging
 import threading
+import time
 from pathlib import Path
 
 from .config import (
@@ -370,6 +371,10 @@ class RavensPerchDaemon:
 
                 logger.info(f"Created new camera record: ID {camera_id}")
                 add_log("INFO", f"New camera detected: {device_info.hardware_name}", camera_id)
+
+                # Brief delay after probing to ensure V4L2 device is fully released
+                # before FFmpeg tries to open it (prevents runOnInitRestart churn)
+                time.sleep(0.5)
 
             # Get current camera data
             camera = db.get_camera_with_settings(camera_id)
