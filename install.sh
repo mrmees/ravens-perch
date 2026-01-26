@@ -803,26 +803,35 @@ verify_installation() {
         return
     fi
 
-    # Wait for camera auto-configuration (poll until cameras detected or timeout)
+    # Wait for camera auto-configuration (poll until camera count stabilizes)
     log_info "Waiting for camera auto-configuration..."
-    local camera_retries=30
+    local camera_retries=45
     local rp_cameras=""
     local rp_count=0
+    local last_count=0
+    local stable_checks=0
 
     while [ $camera_retries -gt 0 ]; do
         rp_cameras=$(curl -s "http://127.0.0.1:8585/cameras/api/status" 2>/dev/null)
         rp_count=$(echo "$rp_cameras" | python3 -c "import sys,json; data=json.load(sys.stdin); print(len(data) if isinstance(data, list) else 0)" 2>/dev/null || echo "0")
 
         if [ "$rp_count" -gt 0 ]; then
-            break
+            if [ "$rp_count" -eq "$last_count" ]; then
+                ((stable_checks++))
+                # Count stable for 3 consecutive checks - all cameras likely configured
+                if [ $stable_checks -ge 3 ]; then
+                    break
+                fi
+            else
+                # Count changed, reset stability counter
+                stable_checks=0
+                echo -n "."
+            fi
+            last_count=$rp_count
         fi
 
         sleep 1
         ((camera_retries--))
-        # Show progress every 5 seconds
-        if [ $((camera_retries % 5)) -eq 0 ] && [ $camera_retries -gt 0 ]; then
-            echo -n "."
-        fi
     done
     echo ""
 
