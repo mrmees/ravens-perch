@@ -659,39 +659,6 @@ EOF
         fi
     fi
 
-    # Fluidd integration
-    read -p "Add Ravens Perch link to Fluidd? (y/N): " fluidd_choice
-    if [[ "$fluidd_choice" == "y" || "$fluidd_choice" == "Y" ]]; then
-        local fluidd_theme_dir="${config_dir}/.fluidd-theme"
-        local fluidd_css="${fluidd_theme_dir}/custom.css"
-
-        mkdir -p "$fluidd_theme_dir"
-
-        # CSS import that pulls dynamic CSS from Ravens Perch
-        # This ensures the URL always reflects current hostname/IP
-        local ravens_css='/* Ravens Perch Integration */
-/* Import dynamic CSS from Ravens Perch (updates with current IP/hostname) */
-@import url("/cameras/api/fluidd-theme.css");
-'
-
-        if [ -f "$fluidd_css" ]; then
-            # Check if already added
-            if grep -q "Ravens Perch Integration" "$fluidd_css" 2>/dev/null; then
-                log_info "Ravens Perch CSS already in Fluidd theme"
-            else
-                # Append to existing file
-                echo "" >> "$fluidd_css"
-                echo "$ravens_css" >> "$fluidd_css"
-                log_success "Added Ravens Perch CSS to Fluidd theme"
-            fi
-        else
-            # Create new custom.css
-            echo "$ravens_css" > "$fluidd_css"
-            log_success "Created Fluidd theme with Ravens Perch link"
-        fi
-
-        log_success "Fluidd will display Ravens Perch link with current IP/hostname"
-    fi
 }
 
 # Enable and start services

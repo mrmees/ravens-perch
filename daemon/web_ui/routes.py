@@ -288,42 +288,6 @@ def inject_printer_uis():
 
 # ============ Dynamic CSS for Fluidd ============
 
-@bp.route('/api/fluidd-theme.css')
-def fluidd_theme_css():
-    """
-    Serve dynamic CSS for Fluidd integration.
-    Uses the browser's Host header to show the exact URL the user can copy.
-    """
-    # Get the host from the request - this is exactly what the user typed in their browser
-    host = request.host  # e.g., "ender3.local:81" or "192.168.1.100"
-
-    # Build the URL using the same host the user is currently using
-    ravens_url = f"http://{host}/cameras/"
-
-    css = f"""/* Ravens Perch Integration - Dynamic CSS */
-/* URL is based on your current browser address */
-
-/* Banner at top of camera settings section */
-#camera::after {{
-  content: "Manage cameras with Ravens Perch → {ravens_url}";
-  display: block;
-  margin: 8px 16px;
-  padding: 12px 16px;
-  background: linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.15), rgba(var(--color-primary-rgb), 0.05));
-  border: 1px solid rgba(var(--color-primary-rgb), 0.3);
-  border-radius: 4px;
-  font-size: 14px;
-  color: var(--color-primary);
-  text-align: center;
-}}
-
-#camera::after:hover {{
-  background: linear-gradient(135deg, rgba(var(--color-primary-rgb), 0.25), rgba(var(--color-primary-rgb), 0.1));
-}}
-"""
-    return Response(css, mimetype='text/css')
-
-
 # ============ Dashboard ============
 
 @bp.route('/')
