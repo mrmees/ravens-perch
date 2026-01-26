@@ -817,7 +817,7 @@ verify_installation() {
 
         if [ "$rp_count" -gt 0 ]; then
             if [ "$rp_count" -eq "$last_count" ]; then
-                ((stable_checks++))
+                ((stable_checks++)) || true
                 # Count stable for 3 consecutive checks - all cameras likely configured
                 if [ $stable_checks -ge 3 ]; then
                     break
@@ -831,7 +831,7 @@ verify_installation() {
         fi
 
         sleep 1
-        ((camera_retries--))
+        ((camera_retries--)) || true
     done
     echo ""
 
