@@ -604,6 +604,11 @@ class CameraMonitor:
                 logger.debug(f"Skipping non-USB device: {device_path}")
                 return
 
+            # Skip non-capture devices (metadata nodes, etc.)
+            if not is_capture_device(device_path):
+                logger.debug(f"Skipping non-capture device: {device_path}")
+                return
+
             device_info = get_device_info(device_path)
             if device_info:
                 self._known_devices[device_path] = device_info.hardware_id
