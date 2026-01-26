@@ -87,7 +87,7 @@ except:
 " 2>/dev/null | while read uid; do
         if [ -n "$uid" ]; then
             log_info "Removing camera: $uid"
-            curl -s -X DELETE "${MOONRAKER_URL}/server/webcams/delete?uid=${uid}" >/dev/null 2>&1 || true
+            curl -s -X DELETE "${MOONRAKER_URL}/server/webcams/item?uid=${uid}" >/dev/null 2>&1 || true
         fi
     done
     log_success "Ravens Perch cameras removed from Moonraker"

@@ -765,9 +765,7 @@ except:
 
         read -p "  Delete this camera? (Y/n): " delete_choice </dev/tty
         if [[ "$delete_choice" != "n" && "$delete_choice" != "N" ]]; then
-            local delete_result=$(curl -s -X POST "${MOONRAKER_URL}/server/webcams/delete" \
-                -H "Content-Type: application/json" \
-                -d "{\"uid\": \"${uid}\"}" 2>&1)
+            local delete_result=$(curl -s -X DELETE "${MOONRAKER_URL}/server/webcams/item?uid=${uid}" 2>&1)
             if echo "$delete_result" | grep -q "error"; then
                 log_warn "  Failed to delete: ${name}"
                 echo "  Response: ${delete_result}"
@@ -783,62 +781,17 @@ except:
     log_success "Camera cleanup complete"
 }
 
-# Setup new cameras
-setup_new_cameras() {
-    log_info "Scanning for connected cameras..."
-
-    cd "${INSTALL_DIR}"
-    source venv/bin/activate
-
-    # Scan for cameras using Ravens Perch code
-    local cameras=$(python3 -c "
-from daemon.camera_manager import find_video_devices, get_device_info
-devices = find_video_devices()
-for path in devices:
-    info = get_device_info(path)
-    name = info.hardware_name if info else 'Unknown Camera'
-    print(f'{path}|{name}')
-" 2>/dev/null)
-
-    deactivate
-
-    if [ -z "$cameras" ]; then
-        log_info "No cameras detected"
-        return
-    fi
-
-    # Count cameras
-    local camera_count=$(echo "$cameras" | wc -l)
-
+# Verify installation - check service and cameras
+verify_installation() {
     echo ""
-    log_info "Found ${camera_count} camera(s):"
-    echo ""
-
-    # List cameras
-    local i=1
-    while IFS='|' read -r path name <&3; do
-        echo "  ${i}. ${name} (${path})"
-        ((i++))
-    done 3<<< "$cameras"
-    echo ""
-
-    # Determine add mode
-    local add_all="n"
-    if [ "$camera_count" -eq 1 ]; then
-        log_info "Single camera detected - adding automatically"
-        add_all="y"
-    else
-        read -p "Add all cameras automatically? (Y/n): " add_all_choice </dev/tty
-        if [[ "$add_all_choice" != "n" && "$add_all_choice" != "N" ]]; then
-            add_all="y"
-        fi
-    fi
+    log_info "Verifying installation..."
 
     # Wait for Ravens Perch service to be ready
     log_info "Waiting for Ravens Perch service..."
-    local retries=10
+    local retries=15
     while [ $retries -gt 0 ]; do
         if curl -s "http://127.0.0.1:8585/cameras/api/health" >/dev/null 2>&1; then
+            log_success "Ravens Perch service is running"
             break
         fi
         sleep 1
@@ -846,60 +799,59 @@ for path in devices:
     done
 
     if [ $retries -eq 0 ]; then
-        log_warn "Ravens Perch service not responding, cameras will be added on next restart"
+        log_warn "Ravens Perch service not responding - check logs with: sudo journalctl -u ravens-perch -f"
         return
     fi
 
-    # Add cameras
+    # Give daemon time to scan and configure cameras
+    log_info "Waiting for camera auto-configuration..."
+    sleep 5
+
+    # Check cameras in Ravens Perch
+    local rp_cameras=$(curl -s "http://127.0.0.1:8585/cameras/api/cameras" 2>/dev/null)
+    local rp_count=$(echo "$rp_cameras" | python3 -c "import sys,json; data=json.load(sys.stdin); print(len(data.get('cameras', [])))" 2>/dev/null || echo "0")
+
+    if [ "$rp_count" -gt 0 ]; then
+        log_success "Ravens Perch detected ${rp_count} camera(s)"
+
+        # List cameras with status
+        echo ""
+        echo "$rp_cameras" | python3 -c "
+import sys, json
+data = json.load(sys.stdin)
+for cam in data.get('cameras', []):
+    name = cam.get('name', 'Unknown')
+    status = cam.get('status', 'unknown')
+    print(f'  - {name}: {status}')
+" 2>/dev/null
+        echo ""
+    else
+        log_warn "No cameras detected by Ravens Perch"
+        log_info "Check if cameras are connected: ls /dev/video*"
+    fi
+
+    # Check Moonraker registrations
+    local mr_cameras=$(curl -s "http://127.0.0.1:7125/server/webcams/list" 2>/dev/null)
+    local mr_count=$(echo "$mr_cameras" | python3 -c "import sys,json; data=json.load(sys.stdin); print(len(data.get('result', {}).get('webcams', [])))" 2>/dev/null || echo "0")
+
+    if [ "$mr_count" -gt 0 ]; then
+        log_success "Moonraker has ${mr_count} camera(s) registered"
+    else
+        log_warn "No cameras registered with Moonraker yet"
+    fi
+
+    # Check MediaMTX streams
+    local mtx_paths=$(curl -s "http://127.0.0.1:8888/v3/paths/list" 2>/dev/null)
+    local mtx_count=$(echo "$mtx_paths" | python3 -c "import sys,json; data=json.load(sys.stdin); print(len(data.get('items', [])))" 2>/dev/null || echo "0")
+
+    if [ "$mtx_count" -gt 0 ]; then
+        log_success "MediaMTX has ${mtx_count} stream(s) active"
+    else
+        log_info "No MediaMTX streams active yet (will start when cameras are accessed)"
+    fi
+
     echo ""
-    while IFS='|' read -r path name <&3; do
-        if [ -z "$path" ]; then
-            continue
-        fi
-
-        local do_add="n"
-        if [ "$add_all" == "y" ]; then
-            do_add="y"
-        else
-            read -p "Add '${name}' (${path})? (Y/n): " add_choice </dev/tty
-            if [[ "$add_choice" != "n" && "$add_choice" != "N" ]]; then
-                do_add="y"
-            fi
-        fi
-
-        if [ "$do_add" == "y" ]; then
-            log_info "Adding ${name}..."
-
-            # Trigger scan via API (Ravens Perch will auto-detect and add)
-            local result=$(curl -s -X POST "http://127.0.0.1:8585/cameras/scan" 2>/dev/null)
-
-            # Give it a moment to register with Moonraker
-            sleep 2
-
-            # Check if camera was added to MediaMTX
-            local stream_check=$(curl -s "http://127.0.0.1:8888/v3/paths/list" 2>/dev/null)
-            if echo "$stream_check" | grep -qi "${path##*/}\|camera"; then
-                echo -e "  ${GREEN}✓${NC} MediaMTX stream created"
-            else
-                echo -e "  ${YELLOW}○${NC} MediaMTX stream pending"
-            fi
-
-            # Check Moonraker registration
-            local moonraker_check=$(curl -s "http://127.0.0.1:7125/server/webcams/list" 2>/dev/null)
-            if echo "$moonraker_check" | grep -qi "${name}\|camera"; then
-                echo -e "  ${GREEN}✓${NC} Registered with Moonraker"
-            else
-                echo -e "  ${YELLOW}○${NC} Moonraker registration pending"
-            fi
-
-            log_success "Added: ${name}"
-        else
-            log_info "Skipped: ${name}"
-        fi
-    done 3<<< "$cameras"
-
-    echo ""
-    log_success "Camera setup complete"
+    log_success "Verification complete"
 }
 
 # Print completion message
@@ -954,11 +906,15 @@ main() {
     create_ravens_service
     configure_nginx
     configure_printer_ui
+
+    # Clean existing Moonraker cameras before starting service
+    manage_existing_cameras
+
+    # Start services (ravens-perch will auto-configure cameras)
     start_services
 
-    # Camera management
-    manage_existing_cameras
-    setup_new_cameras
+    # Verify everything is working
+    verify_installation
 
     print_success
 }
