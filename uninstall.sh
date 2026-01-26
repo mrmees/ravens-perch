@@ -293,7 +293,7 @@ fi
 if [ "$DEV_MODE" = true ]; then
     # Dev mode: clear database but keep venv and mediamtx
     log_info "Clearing database (dev mode)..."
-    rm -f "${INSTALL_DIR}/data/ravens_perch.db" 2>/dev/null || true
+    rm -f "${INSTALL_DIR}/data/ravens-perch.db" 2>/dev/null || true
     rm -rf "${INSTALL_DIR}/logs"/* 2>/dev/null || true
     log_success "Database and logs cleared"
     log_info "Keeping venv and mediamtx for faster reinstall"
