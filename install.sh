@@ -803,13 +803,28 @@ verify_installation() {
         return
     fi
 
-    # Give daemon time to scan and configure cameras
+    # Wait for camera auto-configuration (poll until cameras detected or timeout)
     log_info "Waiting for camera auto-configuration..."
-    sleep 5
+    local camera_retries=30
+    local rp_cameras=""
+    local rp_count=0
 
-    # Check cameras in Ravens Perch
-    local rp_cameras=$(curl -s "http://127.0.0.1:8585/cameras/api/cameras" 2>/dev/null)
-    local rp_count=$(echo "$rp_cameras" | python3 -c "import sys,json; data=json.load(sys.stdin); print(len(data.get('cameras', [])))" 2>/dev/null || echo "0")
+    while [ $camera_retries -gt 0 ]; do
+        rp_cameras=$(curl -s "http://127.0.0.1:8585/cameras/api/cameras" 2>/dev/null)
+        rp_count=$(echo "$rp_cameras" | python3 -c "import sys,json; data=json.load(sys.stdin); print(len(data.get('cameras', [])))" 2>/dev/null || echo "0")
+
+        if [ "$rp_count" -gt 0 ]; then
+            break
+        fi
+
+        sleep 1
+        ((camera_retries--))
+        # Show progress every 5 seconds
+        if [ $((camera_retries % 5)) -eq 0 ] && [ $camera_retries -gt 0 ]; then
+            echo -n "."
+        fi
+    done
+    echo ""
 
     if [ "$rp_count" -gt 0 ]; then
         log_success "Ravens Perch detected ${rp_count} camera(s)"
