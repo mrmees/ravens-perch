@@ -137,8 +137,13 @@ http://<your-ip>/cameras/
 
 Or directly (bypassing nginx):
 ```
-http://<your-ip>:8585/
+http://127.0.0.1:8585/cameras/
 ```
+
+The direct Flask listener binds to localhost by default. The installer exposes
+the UI through nginx at `/cameras/` and can optionally enable Basic Auth. When
+enabled, the username is `ravens` and the generated password is stored at
+`~/ravens-perch/data/web-ui-password`.
 
 ---
 
@@ -310,6 +315,9 @@ sudo systemctl status mediamtx
 sudo systemctl restart ravens-perch
 ```
 
+MediaMTX is tied to `ravens-perch.service`, so restarting Ravens Perch also
+reconciles the MediaMTX stream paths managed by the daemon.
+
 ### View Logs
 ```bash
 # Ravens Perch logs
@@ -428,7 +436,7 @@ sudo systemctl status nginx
 
 **Direct access (bypass nginx):**
 ```
-http://<ip>:8585/
+http://127.0.0.1:8585/cameras/
 ```
 
 ### High CPU Usage

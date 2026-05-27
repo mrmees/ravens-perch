@@ -29,10 +29,10 @@ try:
     from turbojpeg import TurboJPEG, TJPF_RGB
     jpeg = TurboJPEG()
     TURBOJPEG_AVAILABLE = True
-except (ImportError, OSError):
+except Exception as e:
     TURBOJPEG_AVAILABLE = False
     TJPF_RGB = None
-    logger.warning("TurboJPEG not available - using PIL for JPEG encoding")
+    logger.warning(f"TurboJPEG not available - using PIL for JPEG encoding: {e}")
 
 # Try PIL as fallback for JPEG encoding
 PIL_AVAILABLE = False

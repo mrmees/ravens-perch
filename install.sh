@@ -218,15 +218,7 @@ except:
         log_info "No existing cameras to remove"
     fi
 
-    # Restart Moonraker to apply changes
-    log_info "Restarting Moonraker..."
-    if systemctl is-active --quiet moonraker.service 2>/dev/null; then
-        sudo systemctl restart moonraker.service || true
-        sleep 2
-        log_success "Moonraker restarted"
-    else
-        log_warn "Moonraker service not running"
-    fi
+    log_info "Moonraker was not restarted. Restart it manually if you want it to reload moonraker.conf now."
 
     log_success "Migration from crowsnest complete"
     echo ""
@@ -347,11 +339,63 @@ install_mediamtx() {
         # Set API address
         if grep -q "^apiAddress:" mediamtx.yml; then
             sed -i 's/^apiAddress:.*/apiAddress: 127.0.0.1:9997/' mediamtx.yml
+        else
+            echo "apiAddress: 127.0.0.1:9997" >> mediamtx.yml
         fi
     fi
 
     cd "${INSTALL_DIR}"
     log_success "MediaMTX installed"
+}
+
+# Configure optional web UI Basic Auth
+configure_web_auth() {
+    local auth_env_file="${INSTALL_DIR}/data/web-auth.env"
+    local password_file="${INSTALL_DIR}/data/web-ui-password"
+    local choice="${RAVENS_PERCH_ENABLE_WEB_AUTH:-}"
+
+    if [ -z "$choice" ]; then
+        read -p "Enable Basic Auth for the web UI? (Y/n): " choice
+    fi
+
+    case "${choice,,}" in
+        n|no|false|0)
+            cat > "$auth_env_file" << EOF
+RAVENS_PERCH_WEB_AUTH_DISABLED=1
+EOF
+            chmod 600 "$auth_env_file"
+            log_info "Web UI Basic Auth disabled"
+            return
+            ;;
+    esac
+
+    if [ -f "$password_file" ]; then
+        log_info "Web UI password already exists"
+    else
+        log_info "Creating Web UI password..."
+        python3 - "$password_file" << 'PYTHON_SCRIPT'
+import secrets
+import stat
+import sys
+from pathlib import Path
+
+password_file = Path(sys.argv[1])
+password_file.parent.mkdir(parents=True, exist_ok=True)
+password_file.write_text(secrets.token_urlsafe(18) + "\n", encoding="utf-8")
+password_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
+PYTHON_SCRIPT
+        log_success "Web UI password created at ${password_file}"
+    fi
+
+    cat > "$auth_env_file" << EOF
+RAVENS_PERCH_WEB_AUTH_USERNAME=ravens
+RAVENS_PERCH_WEB_AUTH_PASSWORD_FILE=${password_file}
+EOF
+    chmod 600 "$auth_env_file"
+
+    log_success "Web UI Basic Auth enabled"
+    log_info "Web UI username: ravens"
+    log_info "View password with: cat ${password_file}"
 }
 
 # Create Python virtual environment
@@ -373,8 +417,8 @@ create_venv() {
     pip install --upgrade pip wheel setuptools
 
     # Install core requirements
-    log_info "Installing core packages: flask, requests, psutil, ruamel.yaml..."
-    pip install flask requests psutil ruamel.yaml
+    log_info "Installing core packages: flask, requests, psutil, ruamel.yaml, pillow..."
+    pip install flask requests psutil ruamel.yaml pillow
 
     # Install optional packages (may fail on some platforms)
     log_info "Installing optional packages..."
@@ -411,14 +455,17 @@ create_mediamtx_service() {
 [Unit]
 Description=MediaMTX Streaming Server
 After=network.target
+PartOf=ravens-perch.service
 
 [Service]
 Type=simple
 User=${RAVENS_USER}
 WorkingDirectory=${INSTALL_DIR}/mediamtx
-ExecStart=${INSTALL_DIR}/mediamtx/mediamtx
+ExecStart=${INSTALL_DIR}/mediamtx/mediamtx ${INSTALL_DIR}/mediamtx/mediamtx.yml
 Restart=on-failure
 RestartSec=5
+TimeoutStopSec=10
+SyslogIdentifier=mediamtx
 
 [Install]
 WantedBy=multi-user.target
@@ -435,12 +482,13 @@ create_ravens_service() {
 [Unit]
 Description=Ravens Perch Camera Manager
 After=network.target mediamtx.service
-Wants=mediamtx.service
+Requires=mediamtx.service
 
 [Service]
 Type=simple
 User=${RAVENS_USER}
 Environment="RAVENS_PERCH_DIR=${INSTALL_DIR}"
+EnvironmentFile=-${INSTALL_DIR}/data/web-auth.env
 Environment="PATH=/usr/local/bin:/usr/bin:/bin"
 WorkingDirectory=${INSTALL_DIR}
 ExecStart=${INSTALL_DIR}/venv/bin/python -m daemon.main
@@ -478,6 +526,7 @@ location /cameras/ {
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Authorization $http_authorization;
 }
 EOF
     log_success "Created ${snippet_file}"
@@ -667,14 +716,12 @@ start_services() {
 
     sudo systemctl daemon-reload
 
-    # Enable services
-    sudo systemctl enable mediamtx ravens-perch
+    # Enable the app service. MediaMTX is required by ravens-perch and is kept
+    # in the same lifecycle via PartOf=ravens-perch.service.
+    sudo systemctl disable mediamtx 2>/dev/null || true
+    sudo systemctl enable ravens-perch
 
-    # Start MediaMTX first
-    sudo systemctl start mediamtx || log_warn "MediaMTX may already be running"
-    sleep 2
-
-    # Start Ravens Perch
+    # Start Ravens Perch; systemd will start MediaMTX first.
     sudo systemctl start ravens-perch || log_warn "Ravens Perch may already be running"
 
     log_success "Services started"
@@ -856,7 +903,7 @@ for cam in data:
     fi
 
     # Check MediaMTX streams
-    local mtx_paths=$(curl -s "http://127.0.0.1:8888/v3/paths/list" 2>/dev/null)
+    local mtx_paths=$(curl -s "http://127.0.0.1:9997/v3/paths/list" 2>/dev/null)
     local mtx_count=$(echo "$mtx_paths" | python3 -c "import sys,json; data=json.load(sys.stdin); print(len(data.get('items', [])))" 2>/dev/null || echo "0")
 
     if [ "$mtx_count" -gt 0 ]; then
@@ -917,6 +964,7 @@ main() {
     install_mediamtx
     create_venv
     init_database
+    configure_web_auth
     create_mediamtx_service
     create_ravens_service
     configure_nginx

@@ -451,32 +451,31 @@ def find_video_devices() -> List[str]:
         #       /dev/video0
         #       /dev/video1
         current_is_usb = False
-        first_device_in_group = None
+        group_devices = []
 
         for line in result.stdout.split('\n'):
             line_stripped = line.strip()
 
             if not line_stripped:
                 # Empty line - end of group
-                if current_is_usb and first_device_in_group:
-                    devices.append(first_device_in_group)
+                if current_is_usb:
+                    devices.extend([path for path in group_devices if is_capture_device(path)])
                 current_is_usb = False
-                first_device_in_group = None
+                group_devices = []
                 continue
 
             if line_stripped.startswith('/dev/'):
                 # Device path line (indented)
-                if current_is_usb and first_device_in_group is None:
-                    # First device in a USB group is the capture device
-                    first_device_in_group = line_stripped
+                if current_is_usb:
+                    group_devices.append(line_stripped)
             elif '(usb-' in line.lower():
                 # Header line for a USB device
                 current_is_usb = True
-                first_device_in_group = None
+                group_devices = []
 
         # Handle last group if no trailing newline
-        if current_is_usb and first_device_in_group:
-            devices.append(first_device_in_group)
+        if current_is_usb:
+            devices.extend([path for path in group_devices if is_capture_device(path)])
 
         logger.debug(f"Found USB video devices: {devices}")
 

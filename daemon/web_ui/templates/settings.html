@@ -16,6 +16,7 @@
               hx-post="{{ url_for('cameras.update_global_settings') }}"
               hx-swap="innerHTML"
               hx-target="#settings-status">
+            {{ csrf_field() }}
 
             <div class="form-group">
                 <label for="moonraker_url">Moonraker URL</label>
@@ -60,6 +61,7 @@
               hx-post="{{ url_for('cameras.update_global_settings') }}"
               hx-swap="innerHTML"
               hx-target="#appearance-status">
+            {{ csrf_field() }}
 
             <input type="hidden" id="accent_color" name="accent_color" value="{{ settings.get('accent_color', '#4A9EFF')|upper }}">
             <input type="hidden" id="custom_accent_color" name="custom_accent_color" value="{{ settings.get('custom_accent_color', '#4A9EFF')|upper }}">
@@ -167,6 +169,7 @@
               hx-target="#encoder-status"
               hx-swap="innerHTML"
               style="margin-top: 1rem;">
+            {{ csrf_field() }}
             <div id="encoder-status"></div>
             <button type="submit" class="btn btn-secondary btn-sm">Re-detect Encoders</button>
             <p class="form-help" style="margin-top: 0.5rem;">Use after installing GPU drivers or hardware changes.</p>
@@ -199,6 +202,7 @@
         </p>
         <form action="{{ url_for('cameras.start_fresh') }}" method="POST"
               onsubmit="return confirm('Are you sure? This will delete all camera settings and re-detect cameras.');">
+            {{ csrf_field() }}
             <button type="submit" class="btn btn-danger">Start Fresh</button>
         </form>
     </div>
@@ -338,7 +342,10 @@ document.addEventListener('DOMContentLoaded', detectThemeColors);
 
 // Reset poem to beginning
 function resetPoem() {
-    fetch('{{ url_for("cameras.api_reset_poem") }}', { method: 'POST' })
+    fetch('{{ url_for("cameras.api_reset_poem") }}', {
+        method: 'POST',
+        headers: {'X-CSRFToken': getCsrfToken()}
+    })
         .then(r => r.json())
         .then(data => {
             const status = document.getElementById('poem-reset-status');

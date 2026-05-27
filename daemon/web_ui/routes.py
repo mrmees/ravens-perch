@@ -37,6 +37,7 @@ from ..camera_manager import (
 from ..bandwidth import get_camera_bandwidth_stats
 from ..print_status import get_monitor as get_print_monitor
 from ..config import COMMON_RESOLUTIONS, COMMON_FRAMERATES
+from ..logging_utils import apply_log_level
 
 logger = logging.getLogger(__name__)
 
@@ -903,10 +904,13 @@ def settings_page():
 def update_global_settings():
     """Update global settings."""
     if 'moonraker_url' in request.form:
-        set_setting('moonraker_url', request.form['moonraker_url'])
+        moonraker_url = request.form['moonraker_url'].strip()
+        set_setting('moonraker_url', moonraker_url)
 
     if 'log_level' in request.form:
-        set_setting('log_level', request.form['log_level'])
+        log_level = apply_log_level(request.form['log_level'])
+        set_setting('log_level', log_level)
+        add_log("INFO", f"Log level set to {log_level}")
 
     # Appearance settings
     if 'accent_color' in request.form:

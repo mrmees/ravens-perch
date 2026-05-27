@@ -22,6 +22,7 @@ from .config import (
     BASE_DIR, LOG_DIR, LOG_LEVEL,
     WEB_UI_HOST, WEB_UI_PORT
 )
+from .logging_utils import apply_log_level, resolve_log_level
 from .db import init_db, add_log, get_all_cameras, update_camera
 from .hardware import (
     detect_encoders, check_ffmpeg_available,
@@ -39,7 +40,8 @@ from .stream_manager import (
 )
 from .moonraker_client import (
     detect_moonraker_url, register_camera, unregister_camera,
-    build_stream_url, build_snapshot_url, get_system_ip
+    build_stream_url, build_snapshot_url, get_system_ip,
+    set_url as set_moonraker_url, is_available as moonraker_is_available
 )
 from .print_status import init_monitor, get_monitor, stop_monitor
 from . import db
@@ -71,7 +73,7 @@ def setup_logging():
     # Console handler
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(console_formatter)
-    console_handler.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
+    console_handler.setLevel(getattr(logging, resolve_log_level(LOG_LEVEL), logging.INFO))
 
     # Root logger
     root_logger = logging.getLogger()
@@ -88,6 +90,8 @@ def setup_logging():
 
 logger = setup_logging()
 
+MEDIAMTX_RECONCILE_INTERVAL = 15.0
+
 
 class RavensPerchDaemon:
     """Main daemon class that orchestrates all components."""
@@ -101,6 +105,7 @@ class RavensPerchDaemon:
         self.print_monitor = None
         self._moonraker_queue = queue.Queue()
         self._moonraker_worker = None
+        self._mediamtx_reconciler = None
 
     def start(self):
         """Start the daemon and all components."""
@@ -118,6 +123,7 @@ class RavensPerchDaemon:
             # Step 1: Initialize database
             logger.info("Initializing database...")
             init_db()
+            self._apply_saved_log_level()
             add_log("INFO", "Ravens Perch starting")
 
             # Initialize encoder cache path
@@ -166,7 +172,7 @@ class RavensPerchDaemon:
 
             # Step 6: Detect Moonraker
             logger.info("Detecting Moonraker...")
-            self.moonraker_url = detect_moonraker_url()
+            self.moonraker_url = self._resolve_moonraker_url()
             if self.moonraker_url:
                 logger.info(f"Moonraker found at: {self.moonraker_url}")
                 add_log("INFO", f"Moonraker found at: {self.moonraker_url}")
@@ -225,6 +231,9 @@ class RavensPerchDaemon:
             logger.info("Scanning for existing cameras...")
             self.camera_monitor.scan_existing()
 
+            # Step 10: Keep runtime MediaMTX paths reconciled after restarts
+            self._start_mediamtx_reconciler()
+
             logger.info("Ravens Perch is running")
             add_log("INFO", "Ravens Perch started successfully")
 
@@ -256,6 +265,14 @@ class RavensPerchDaemon:
         if self.camera_monitor:
             self.camera_monitor.stop()
 
+        # Stop daemon-owned FFmpeg publishers and remove dynamic MediaMTX paths
+        try:
+            removed = remove_all_streams()
+            if removed:
+                logger.info(f"Removed {removed} MediaMTX stream path(s)")
+        except Exception as e:
+            logger.warning(f"Error stopping streams: {e}")
+
         add_log("INFO", "Ravens Perch stopped")
         logger.info("Ravens Perch stopped")
 
@@ -278,6 +295,109 @@ class RavensPerchDaemon:
         if not check_v4l2_utils_available():
             logger.warning("v4l2-utils not available - some features may not work")
             add_log("WARNING", "v4l2-utils not found")
+
+    def _apply_saved_log_level(self):
+        """Apply the log level stored by the web UI."""
+        configured = db.get_setting('log_level', LOG_LEVEL)
+        applied = apply_log_level(configured, LOG_LEVEL)
+        logger.info(f"Log level set to {applied}")
+
+    def _resolve_moonraker_url(self):
+        """Use configured Moonraker URL when set; otherwise fall back to auto-detection."""
+        configured = db.get_setting('moonraker_url')
+        configured = str(configured).strip() if configured else ""
+
+        if configured:
+            set_moonraker_url(configured)
+            if moonraker_is_available():
+                logger.info(f"Using configured Moonraker URL: {configured}")
+                return configured
+
+            logger.warning(f"Configured Moonraker URL is not available: {configured}")
+            add_log("WARNING", f"Configured Moonraker URL is not available: {configured}")
+            return None
+
+        return detect_moonraker_url()
+
+    def _start_mediamtx_reconciler(self):
+        """Start a background worker that restores MediaMTX paths after restarts."""
+        if self._mediamtx_reconciler and self._mediamtx_reconciler.is_alive():
+            return
+
+        self._mediamtx_reconciler = threading.Thread(
+            target=self._mediamtx_reconciler_loop,
+            daemon=True,
+            name="mediamtx-reconciler",
+        )
+        self._mediamtx_reconciler.start()
+        logger.info("MediaMTX reconciler started")
+
+    def _mediamtx_reconciler_loop(self):
+        """Periodically ensure connected enabled cameras have MediaMTX paths."""
+        last_available = None
+
+        while self.running:
+            try:
+                available = wait_for_mediamtx(timeout=2)
+                if available:
+                    if last_available is not True:
+                        logger.info("MediaMTX available; reconciling streams")
+                    self._reconcile_mediamtx_streams()
+                    last_available = True
+                else:
+                    if last_available is not False:
+                        logger.warning("MediaMTX unavailable; streams will reconcile when it returns")
+                    last_available = False
+            except Exception as e:
+                logger.warning(f"MediaMTX reconciliation failed: {e}", exc_info=True)
+
+            self._sleep_while_running(MEDIAMTX_RECONCILE_INTERVAL)
+
+    def _sleep_while_running(self, seconds: float):
+        """Sleep in short increments so shutdown is responsive."""
+        deadline = time.time() + seconds
+        while self.running and time.time() < deadline:
+            time.sleep(min(1.0, max(0.0, deadline - time.time())))
+
+    def _reconcile_mediamtx_streams(self):
+        """Recreate MediaMTX paths and daemon-owned publishers for connected cameras."""
+        reconciled = 0
+        failed = 0
+
+        for camera in db.get_all_cameras_with_settings():
+            if not camera['connected'] or not camera['enabled'] or not camera['device_path']:
+                continue
+
+            settings = (camera['settings'] or {}).copy()
+            camera_id = str(camera['id'])
+
+            overlay_path = None
+            if settings.get('overlay_enabled') and self.print_monitor:
+                self.print_monitor.set_camera_overlay(camera_id, True, settings)
+                overlay_path = str(self.print_monitor.get_overlay_path(camera_id))
+
+            if self.print_monitor and settings.get('standby_enabled') and settings.get('standby_framerate'):
+                if not self.print_monitor.status.is_printing:
+                    settings['framerate'] = settings['standby_framerate']
+
+            ffmpeg_cmd = build_ffmpeg_command(
+                camera['device_path'],
+                settings,
+                camera_id,
+                settings.get('encoder', 'libx264'),
+                overlay_path=overlay_path,
+            )
+            success, error = add_or_update_stream(camera_id, ffmpeg_cmd)
+            if success:
+                reconciled += 1
+            else:
+                failed += 1
+                logger.warning(f"Failed to reconcile stream for camera {camera_id}: {error}")
+
+        if reconciled:
+            logger.debug(f"Reconciled {reconciled} MediaMTX stream(s)")
+        if failed:
+            add_log("WARNING", f"Failed to reconcile {failed} MediaMTX stream(s)")
 
     def _reset_camera_states(self):
         """Mark all cameras as disconnected on startup."""
@@ -385,7 +505,7 @@ class RavensPerchDaemon:
                 add_log("INFO", f"New camera detected: {device_info.hardware_name}", camera_id)
 
                 # Brief delay after probing to ensure V4L2 device is fully released
-                # before FFmpeg tries to open it (prevents runOnInitRestart churn)
+                # before daemon-owned FFmpeg tries to open it.
                 time.sleep(0.5)
 
             # Get current camera data

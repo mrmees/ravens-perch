@@ -276,12 +276,7 @@ PYTHON_SCRIPT
             log_warn "Crowsnest service not found - may need manual reinstall"
         fi
 
-        # Restart Moonraker
-        if systemctl is-active --quiet moonraker.service 2>/dev/null; then
-            log_info "Restarting Moonraker..."
-            sudo systemctl restart moonraker.service || true
-            log_success "Moonraker restarted"
-        fi
+        log_info "Moonraker was not restarted. Restart it manually if you want it to reload moonraker.conf now."
 
         log_success "Crowsnest restored"
     else
