@@ -371,13 +371,21 @@ install_mediamtx() {
 }
 
 # Configure optional web UI Basic Auth
+valid_web_auth_username() {
+    [[ "$1" =~ ^[A-Za-z0-9._-]+$ ]]
+}
+
 configure_web_auth() {
     local auth_env_file="${INSTALL_DIR}/data/web-auth.env"
     local password_file="${INSTALL_DIR}/data/web-ui-password"
     local choice="${RAVENS_PERCH_ENABLE_WEB_AUTH:-}"
+    local username="${RAVENS_PERCH_WEB_AUTH_USERNAME:-}"
+    local username_default="${username:-ravens}"
+    local password="${RAVENS_PERCH_WEB_AUTH_PASSWORD:-}"
+    local password_confirm=""
 
     if [ -z "$choice" ]; then
-        read -p "Enable Basic Auth for the web UI? (Y/n): " choice
+        read -r -p "Enable Basic Auth for the web UI? (Y/n): " choice
     fi
 
     case "${choice,,}" in
@@ -391,33 +399,62 @@ EOF
             ;;
     esac
 
-    if [ -f "$password_file" ]; then
-        log_info "Web UI password already exists"
-    else
-        log_info "Creating Web UI password..."
-        python3 - "$password_file" << 'PYTHON_SCRIPT'
-import secrets
-import stat
-import sys
-from pathlib import Path
+    while true; do
+        if [ -z "${RAVENS_PERCH_WEB_AUTH_USERNAME:-}" ]; then
+            read -r -p "Web UI username [${username_default}]: " username
+            username="${username:-$username_default}"
+        fi
 
-password_file = Path(sys.argv[1])
-password_file.parent.mkdir(parents=True, exist_ok=True)
-password_file.write_text(secrets.token_urlsafe(18) + "\n", encoding="utf-8")
-password_file.chmod(stat.S_IRUSR | stat.S_IWUSR)
-PYTHON_SCRIPT
-        log_success "Web UI password created at ${password_file}"
+        if valid_web_auth_username "$username"; then
+            break
+        fi
+
+        if [ -n "${RAVENS_PERCH_WEB_AUTH_USERNAME:-}" ]; then
+            log_error "Invalid RAVENS_PERCH_WEB_AUTH_USERNAME. Use letters, numbers, dots, underscores, or dashes."
+            exit 1
+        fi
+
+        log_warn "Username may only contain letters, numbers, dots, underscores, or dashes."
+        username=""
+    done
+
+    if [ -n "$password" ]; then
+        log_info "Using Web UI password from RAVENS_PERCH_WEB_AUTH_PASSWORD"
+    else
+        while true; do
+            read -r -s -p "Web UI password: " password
+            echo ""
+
+            if [ -z "$password" ]; then
+                log_warn "Password cannot be empty."
+                continue
+            fi
+
+            read -r -s -p "Confirm Web UI password: " password_confirm
+            echo ""
+
+            if [ "$password" = "$password_confirm" ]; then
+                break
+            fi
+
+            log_warn "Passwords did not match. Try again."
+            password=""
+        done
     fi
 
+    mkdir -p "$(dirname "$password_file")"
+    printf '%s\n' "$password" > "$password_file"
+    chmod 600 "$password_file"
+
     cat > "$auth_env_file" << EOF
-RAVENS_PERCH_WEB_AUTH_USERNAME=ravens
+RAVENS_PERCH_WEB_AUTH_USERNAME=${username}
 RAVENS_PERCH_WEB_AUTH_PASSWORD_FILE=${password_file}
 EOF
     chmod 600 "$auth_env_file"
 
     log_success "Web UI Basic Auth enabled"
-    log_info "Web UI username: ravens"
-    log_info "View password with: cat ${password_file}"
+    log_info "Web UI username: ${username}"
+    log_info "Web UI password saved at: ${password_file}"
 }
 
 # Create Python virtual environment
