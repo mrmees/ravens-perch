@@ -19,6 +19,8 @@ INSTALL_DIR="${HOME}/ravens-perch"
 MEDIAMTX_VERSION="v1.5.1"
 KLIPPER_CONFIG_DIR="${HOME}/printer_data/config"
 MOONRAKER_URL="http://127.0.0.1:7125"
+CURRENT_RAVENS_SERVICES=(ravens-perch mediamtx)
+LEGACY_RAVENS_SERVICES=(web-ui camera-hotplug snapfeeder raven-watchdog)
 
 # Logging functions
 log_info() {
@@ -89,6 +91,26 @@ check_user() {
         log_error "Do not run this script as root. Run as your normal user."
         exit 1
     fi
+}
+
+# Stop old services before replacing files, and remove units from the retired
+# split-service stack so they cannot keep running after a reinstall.
+cleanup_existing_services() {
+    log_info "Stopping existing Ravens Perch services..."
+    local service
+
+    for service in "${CURRENT_RAVENS_SERVICES[@]}" "${LEGACY_RAVENS_SERVICES[@]}"; do
+        sudo systemctl stop "${service}.service" 2>/dev/null || true
+    done
+
+    log_info "Removing legacy Ravens Perch service units..."
+    for service in "${LEGACY_RAVENS_SERVICES[@]}"; do
+        sudo systemctl disable "${service}.service" 2>/dev/null || true
+        sudo rm -f "/etc/systemd/system/${service}.service"
+    done
+
+    sudo systemctl daemon-reload
+    log_success "Existing service cleanup complete"
 }
 
 # Migrate from crowsnest
@@ -959,6 +981,7 @@ main() {
 
     install_system_packages
     create_directories
+    cleanup_existing_services
     migrate_from_crowsnest
     copy_source_files
     install_mediamtx
