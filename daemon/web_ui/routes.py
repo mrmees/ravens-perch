@@ -38,6 +38,12 @@ from ..bandwidth import get_camera_bandwidth_stats
 from ..print_status import get_monitor as get_print_monitor
 from ..config import COMMON_RESOLUTIONS, COMMON_FRAMERATES
 from ..logging_utils import apply_log_level
+from .auth_config import (
+    WebAuthConfigError,
+    load_web_auth_config,
+    save_web_auth_credentials,
+    web_auth_status,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -896,8 +902,17 @@ def settings_page():
         platform_info=platform_info,
         encoders=encoders,
         cpu_rating=cpu_rating,
-        moonraker_available=moonraker_available()
+        moonraker_available=moonraker_available(),
+        web_auth=web_auth_status()
     )
+
+
+def _settings_message(message: str, category: str = "success"):
+    if request.headers.get('HX-Request'):
+        return render_template('partials/settings_message.html', message=message, category=category)
+
+    flash(message, category)
+    return redirect(url_for('cameras.settings_page'))
 
 
 @bp.route('/settings', methods=['POST'])
@@ -934,6 +949,34 @@ def update_global_settings():
 
     flash("Settings saved", "success")
     return redirect(url_for('cameras.settings_page'))
+
+
+@bp.route('/settings/auth', methods=['POST'])
+def update_auth_settings():
+    """Update web UI Basic Auth credentials."""
+    username = request.form.get('auth_username', '').strip()
+    password = request.form.get('auth_password', '')
+    password_confirm = request.form.get('auth_password_confirm', '')
+
+    if not username:
+        return _settings_message("Username cannot be empty.", "error")
+
+    if password or password_confirm:
+        if password != password_confirm:
+            return _settings_message("Passwords did not match.", "error")
+    else:
+        current_config = load_web_auth_config()
+        if not current_config.password:
+            return _settings_message("Enter a password to enable Basic Auth.", "error")
+        password = current_config.password
+
+    try:
+        save_web_auth_credentials(username, password)
+    except WebAuthConfigError as e:
+        return _settings_message(str(e), "error")
+
+    add_log("INFO", f"Web UI authentication credentials updated for user {username}")
+    return _settings_message("Authentication settings saved.")
 
 
 @bp.route('/redetect-encoders', methods=['POST'])

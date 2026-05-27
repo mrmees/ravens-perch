@@ -109,6 +109,62 @@
     </div>
 
     <div class="settings-card">
+        <h3>Authentication</h3>
+
+        <form method="POST"
+              action="{{ url_for('cameras.update_auth_settings') }}"
+              hx-post="{{ url_for('cameras.update_auth_settings') }}"
+              hx-swap="innerHTML"
+              hx-target="#auth-status">
+            {{ csrf_field() }}
+
+            <div class="form-group">
+                <label>Status</label>
+                <p class="form-help">
+                    {% if web_auth.enabled %}
+                        <span class="status-text status-ok">Enabled</span>
+                    {% else %}
+                        <span class="status-text status-error">Disabled</span>
+                    {% endif %}
+                </p>
+            </div>
+
+            <div class="form-group">
+                <label for="auth_username">Username</label>
+                <input type="text"
+                       id="auth_username"
+                       name="auth_username"
+                       value="{{ web_auth.username }}"
+                       autocomplete="username"
+                       pattern="[A-Za-z0-9._-]+"
+                       required>
+                <p class="form-help">Use letters, numbers, dots, underscores, or dashes.</p>
+            </div>
+
+            <div class="form-group">
+                <label for="auth_password">New Password</label>
+                <input type="password"
+                       id="auth_password"
+                       name="auth_password"
+                       autocomplete="new-password">
+                <p class="form-help">Leave blank to keep the current password.</p>
+            </div>
+
+            <div class="form-group">
+                <label for="auth_password_confirm">Confirm New Password</label>
+                <input type="password"
+                       id="auth_password_confirm"
+                       name="auth_password_confirm"
+                       autocomplete="new-password">
+            </div>
+
+            <div id="auth-status"></div>
+
+            <button type="submit" class="btn btn-primary">Save Authentication</button>
+        </form>
+    </div>
+
+    <div class="settings-card">
         <h3>System Information</h3>
 
         <dl class="info-list">

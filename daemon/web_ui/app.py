@@ -13,6 +13,7 @@ from flask import Flask, Response, abort, request, session
 from markupsafe import Markup, escape
 
 from ..config import DATA_DIR, WEB_UI_HOST, WEB_UI_PORT
+from .auth_config import load_web_auth_config
 
 logger = logging.getLogger(__name__)
 
@@ -56,35 +57,18 @@ def _get_secret_key() -> str:
     return generated
 
 
-def _configured_password() -> Optional[str]:
-    """Return configured Basic auth password, if web auth is enabled."""
-    if os.environ.get("RAVENS_PERCH_WEB_AUTH_DISABLED", "").lower() in {"1", "true", "yes"}:
-        return None
-
-    password = os.environ.get("RAVENS_PERCH_WEB_AUTH_PASSWORD")
-    if password:
-        return password
-
-    password_file = os.environ.get("RAVENS_PERCH_WEB_AUTH_PASSWORD_FILE")
-    if password_file:
-        return _read_secret_file(Path(password_file))
-
-    return None
-
-
 def _is_authenticated() -> bool:
-    password = _configured_password()
-    if not password:
+    auth_config = load_web_auth_config()
+    if not auth_config.enabled or not auth_config.password:
         return True
 
-    username = os.environ.get("RAVENS_PERCH_WEB_AUTH_USERNAME", "ravens")
     auth = request.authorization
     if not auth:
         return False
 
     return (
-        hmac.compare_digest(auth.username or "", username)
-        and hmac.compare_digest(auth.password or "", password)
+        hmac.compare_digest(auth.username or "", auth_config.username)
+        and hmac.compare_digest(auth.password or "", auth_config.password)
     )
 
 
