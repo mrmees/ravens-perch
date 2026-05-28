@@ -11,6 +11,7 @@ import logging
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Optional, Dict, List, Tuple, Any
+from urllib.parse import urlencode
 
 import requests
 
@@ -19,6 +20,7 @@ from .config import (
     ENCODER_DEFAULTS, FFMPEG_INPUT_FORMATS
 )
 from .camera_manager import apply_v4l2_controls, is_capture_device
+from .snapshot_access import get_snapshot_token
 
 logger = logging.getLogger(__name__)
 
@@ -721,7 +723,7 @@ def build_ffmpeg_command(
 
     # Common output settings
     cmd_parts.extend([
-        "-g", str(framerate * 2),  # Keyframe interval (2 seconds)
+        "-g", str(framerate),  # Keyframe interval (1 second)
         "-f", "rtsp",
         "-rtsp_transport", "tcp",
         f"rtsp://127.0.0.1:{MEDIAMTX_RTSP_PORT}/{stream_name}"
@@ -748,12 +750,13 @@ def get_stream_urls(camera_id: str, host: str = "127.0.0.1") -> Dict[str, str]:
     }
     """
     path_name = _path_name(camera_id)
+    snapshot_query = urlencode({"token": get_snapshot_token()})
 
     return {
         'rtsp': f"rtsp://{host}:{MEDIAMTX_RTSP_PORT}/{path_name}",
         'webrtc': f"http://{host}:{MEDIAMTX_WEBRTC_PORT}/{path_name}/",
         'hls': f"http://{host}:8888/{path_name}/",
-        'snapshot': f"http://{host}/cameras/snapshot/{camera_id}.jpg",
+        'snapshot': f"http://{host}/cameras/snapshot/{camera_id}.jpg?{snapshot_query}",
     }
 
 

@@ -7,6 +7,7 @@ from unittest.mock import patch
 from daemon.web_ui.app import create_app
 from daemon.web_ui.auth_config import save_web_auth_credentials
 from daemon.moonraker_client import build_snapshot_url
+from daemon.stream_manager import get_stream_urls
 
 
 def _auth_header(username: str, password: str):
@@ -24,6 +25,18 @@ class SnapshotAccessTests(unittest.TestCase):
             with patch.dict("os.environ", env, clear=False):
                 self.assertEqual(
                     build_snapshot_url("12", "printer.local"),
+                    "http://printer.local/cameras/snapshot/12.jpg?token=snapshot-secret",
+                )
+
+    def test_displayed_snapshot_url_includes_public_snapshot_token(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            token_file = Path(tmp) / "snapshot-token"
+            token_file.write_text("snapshot-secret\n", encoding="utf-8")
+
+            env = {"RAVENS_PERCH_SNAPSHOT_TOKEN_FILE": str(token_file)}
+            with patch.dict("os.environ", env, clear=False):
+                self.assertEqual(
+                    get_stream_urls("12", "printer.local")["snapshot"],
                     "http://printer.local/cameras/snapshot/12.jpg?token=snapshot-secret",
                 )
 
