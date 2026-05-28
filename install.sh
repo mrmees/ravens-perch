@@ -21,6 +21,7 @@ KLIPPER_CONFIG_DIR="${HOME}/printer_data/config"
 MOONRAKER_URL="http://127.0.0.1:7125"
 CURRENT_RAVENS_SERVICES=(ravens-perch mediamtx)
 LEGACY_RAVENS_SERVICES=(web-ui camera-hotplug snapfeeder raven-watchdog)
+NGINX_CONFIGURED=false
 
 # Logging functions
 log_info() {
@@ -541,7 +542,7 @@ create_ravens_service() {
 [Unit]
 Description=Ravens Perch Camera Manager
 After=network.target mediamtx.service
-Requires=mediamtx.service
+Wants=mediamtx.service
 
 [Service]
 Type=simple
@@ -594,7 +595,7 @@ EOF
     local target_conf=""
 
     for conf in /etc/nginx/sites-enabled/*; do
-        if [ -f "$conf" ] && grep -q "listen 80" "$conf" 2>/dev/null; then
+        if [ -f "$conf" ] && grep -Eq "listen[[:space:]]+80([[:space:];]|$)" "$conf" 2>/dev/null; then
             # Resolve symlink to get the actual file
             target_conf=$(readlink -f "$conf")
             log_info "Found active site on port 80: ${target_conf}"
@@ -604,20 +605,23 @@ EOF
 
     if [ -z "$target_conf" ]; then
         log_warn "Could not find nginx site configuration serving port 80."
+        log_warn "Ravens Perch will still run locally, but the printer UI and Moonraker snapshots need the nginx /cameras/ proxy."
         log_info "Please manually add to your nginx server block:"
         echo ""
         echo "    include /etc/nginx/snippets/ravens-perch.conf;"
         echo ""
-        return
+        return 1
     fi
 
     # Check if already configured (either include or direct location)
     if grep -q "ravens-perch.conf" "$target_conf" 2>/dev/null; then
         log_info "Ravens Perch already configured in ${target_conf}"
+        NGINX_CONFIGURED=true
         return
     fi
     if grep -q "location /cameras/" "$target_conf" 2>/dev/null; then
         log_info "/cameras/ location already exists in ${target_conf}"
+        NGINX_CONFIGURED=true
         return
     fi
 
@@ -673,19 +677,23 @@ PYTHON_SCRIPT
         sudo cp "${target_conf}.ravens-perch.bak" "$target_conf"
         log_info "Please manually add to ${target_conf}:"
         echo "    include /etc/nginx/snippets/ravens-perch.conf;"
-        return
+        return 1
     fi
 
     # Test and reload nginx
     if sudo nginx -t 2>/dev/null; then
         sudo systemctl reload nginx || true
+        NGINX_CONFIGURED=true
         log_success "Nginx configured and reloaded"
     else
         log_warn "Nginx config test failed - restoring backup..."
         sudo cp "${target_conf}.ravens-perch.bak" "$target_conf"
-        sudo nginx -t && sudo systemctl reload nginx
+        if sudo nginx -t >/dev/null 2>&1; then
+            sudo systemctl reload nginx || true
+        fi
         log_info "Please manually add to your nginx config:"
         echo "    include /etc/nginx/snippets/ravens-perch.conf;"
+        return 1
     fi
 }
 
@@ -775,7 +783,7 @@ start_services() {
 
     sudo systemctl daemon-reload
 
-    # Enable the app service. MediaMTX is required by ravens-perch and is kept
+    # Enable the app service. MediaMTX is wanted by ravens-perch and is kept
     # in the same lifecycle via PartOf=ravens-perch.service.
     sudo systemctl disable mediamtx 2>/dev/null || true
     sudo systemctl enable ravens-perch
@@ -984,8 +992,14 @@ print_success() {
     echo -e "${GREEN}║         Ravens Perch Installed Successfully!               ║${NC}"
     echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    echo -e "Web UI:        ${BLUE}http://${ip}/cameras/${NC}"
-    echo -e "Direct access: ${BLUE}http://${ip}:8585/cameras/${NC}"
+    if [ "$NGINX_CONFIGURED" = true ]; then
+        echo -e "Web UI:        ${BLUE}http://${ip}/cameras/${NC}"
+    else
+        echo -e "${YELLOW}Web UI proxy was not configured automatically.${NC}"
+        echo "Add this line to your nginx server block, then reload nginx:"
+        echo "  include /etc/nginx/snippets/ravens-perch.conf;"
+    fi
+    echo -e "Local service: ${BLUE}http://127.0.0.1:8585/cameras/${NC} (on this host only)"
     echo ""
     echo "Commands:"
     echo "  sudo systemctl status ravens-perch   - Check status"
@@ -1027,7 +1041,7 @@ main() {
     configure_web_auth
     create_mediamtx_service
     create_ravens_service
-    configure_nginx
+    configure_nginx || true
     configure_printer_ui
 
     # Clean existing Moonraker cameras before starting service

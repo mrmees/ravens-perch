@@ -435,7 +435,7 @@ sudo nginx -t
 sudo systemctl status nginx
 ```
 
-**Direct access (bypass nginx):**
+**Local-only service check (run on the printer host):**
 ```
 http://127.0.0.1:8585/cameras/
 ```

@@ -32,7 +32,7 @@ from ..hardware import estimate_cpu_capability, detect_encoders, get_platform_in
 from ..camera_manager import (
     find_video_devices, get_device_info, probe_capabilities, auto_configure,
     get_v4l2_controls, set_v4l2_control, get_v4l2_control_value,
-    get_rejected_cameras
+    add_rejected_camera, get_rejected_cameras
 )
 from ..bandwidth import get_camera_bandwidth_stats
 from ..print_status import get_monitor as get_print_monitor
@@ -48,6 +48,18 @@ from .auth_config import (
 logger = logging.getLogger(__name__)
 
 bp = Blueprint('cameras', __name__)
+_effective_framerate_callback = None
+
+
+def set_effective_framerate_callback(callback):
+    """Register daemon callback for web-triggered stream starts."""
+    global _effective_framerate_callback
+    _effective_framerate_callback = callback
+
+
+def _record_effective_framerate(camera_id: int, settings: dict):
+    if _effective_framerate_callback:
+        _effective_framerate_callback(camera_id, settings)
 
 
 # ============ The Raven (Edgar Allan Poe, 1845) ============
@@ -297,6 +309,53 @@ def inject_printer_uis():
 
 # ============ Dashboard ============
 
+def _settings_for_current_print_state(camera_id: int, settings: dict):
+    """Return stream settings adjusted for overlay and standby state."""
+    stream_settings = (settings or {}).copy()
+    print_monitor = get_print_monitor()
+
+    if stream_settings.get('overlay_enabled') and print_monitor:
+        print_monitor.set_camera_overlay(str(camera_id), True, stream_settings)
+
+    if stream_settings.get('standby_enabled') and stream_settings.get('standby_framerate') and print_monitor:
+        effective_state = getattr(print_monitor, 'effective_state', None)
+        use_standby = effective_state == 'standby' if effective_state else not print_monitor.status.is_printing
+        if use_standby:
+            stream_settings['framerate'] = stream_settings['standby_framerate']
+
+    return stream_settings, print_monitor
+
+
+def _start_camera_from_route(camera_id: int, device_path: str, settings: dict):
+    """Start a camera stream from a web-triggered scan using daemon-equivalent setup."""
+    stream_settings, print_monitor = _settings_for_current_print_state(camera_id, settings)
+    success, error = start_camera_stream(device_path, str(camera_id), stream_settings, print_monitor)
+    if success:
+        _record_effective_framerate(camera_id, stream_settings)
+    return success, error
+
+
+def _register_camera_with_moonraker(camera_id: int, friendly_name: str, settings: dict):
+    """Register a camera with Moonraker when it is currently reachable."""
+    if not moonraker_available():
+        return
+
+    host = get_system_ip()
+    stream_url = build_stream_url(str(camera_id), host)
+    snapshot_url = build_snapshot_url(str(camera_id), host)
+    rotation = settings.get('rotation', 0)
+
+    success, uid, _ = register_camera(
+        str(camera_id),
+        friendly_name,
+        stream_url,
+        snapshot_url,
+        rotation=rotation
+    )
+    if success and uid:
+        update_camera(camera_id, moonraker_uid=uid)
+
+
 @bp.route('/')
 def dashboard():
     """Camera dashboard - main page."""
@@ -338,9 +397,32 @@ def scan_cameras():
             # Check if camera already exists
             existing = get_camera_by_hardware_id(device_info.hardware_id)
             if existing:
+                if existing['connected'] and existing['device_path'] != device_path:
+                    add_rejected_camera(
+                        device_path=device_path,
+                        hardware_name=device_info.hardware_name,
+                        hardware_id=device_info.hardware_id,
+                        reason="Duplicate camera - no unique serial number",
+                        existing_camera_id=existing['id']
+                    )
+                    continue
+
                 # Update connection status
                 mark_camera_connected(existing['id'], device_path)
                 updated += 1
+                camera = get_camera_with_settings(existing['id'])
+                if camera and camera['enabled']:
+                    settings = camera['settings'] or {}
+                    success, error = _start_camera_from_route(existing['id'], device_path, settings)
+                    if success:
+                        _register_camera_with_moonraker(
+                            existing['id'],
+                            camera['friendly_name'],
+                            settings
+                        )
+                    else:
+                        logger.error(f"Failed to start stream during scan: {error}")
+                        add_log("ERROR", f"Failed to start stream during scan: {error}", existing['id'])
                 continue
 
             # Probe capabilities
@@ -363,33 +445,16 @@ def scan_cameras():
             save_camera_settings(camera_id, settings)
             save_camera_capabilities(camera_id, capabilities)
 
-            # Start the stream
-            ffmpeg_cmd = build_ffmpeg_command(
-                device_path,
-                settings,
-                str(camera_id),
-                settings.get('encoder', 'libx264')
-            )
-            add_or_update_stream(str(camera_id), ffmpeg_cmd)
+            # Start the stream using the same setup path as hotplug detection.
+            success, error = _start_camera_from_route(camera_id, device_path, settings)
+            if not success:
+                logger.error(f"Failed to start stream during scan: {error}")
+                add_log("ERROR", f"Failed to start stream during scan: {error}", camera_id)
 
             # Register with Moonraker
-            if moonraker_available():
-                camera = get_camera_by_id(camera_id)
-                if camera:
-                    host = get_system_ip()
-                    stream_url = build_stream_url(str(camera_id), host)
-                    snapshot_url = build_snapshot_url(str(camera_id), host)
-                    rotation = settings.get('rotation', 0)
-
-                    success, uid, _ = register_camera(
-                        str(camera_id),
-                        camera['friendly_name'],
-                        stream_url,
-                        snapshot_url,
-                        rotation=rotation
-                    )
-                    if success and uid:
-                        update_camera(camera_id, moonraker_uid=uid)
+            camera = get_camera_by_id(camera_id)
+            if camera:
+                _register_camera_with_moonraker(camera_id, camera['friendly_name'], settings)
 
             added += 1
             add_log("INFO", f"Added camera: {device_info.hardware_name}", camera_id)

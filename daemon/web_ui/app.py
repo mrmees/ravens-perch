@@ -13,6 +13,7 @@ from flask import Flask, Response, abort, request, session
 from markupsafe import Markup, escape
 
 from ..config import DATA_DIR, WEB_UI_HOST, WEB_UI_PORT
+from ..snapshot_access import valid_snapshot_token
 from .auth_config import load_web_auth_config
 
 logger = logging.getLogger(__name__)
@@ -117,6 +118,8 @@ def create_app():
 
     @app.before_request
     def require_authentication():
+        if request.endpoint == "cameras.snapshot" and valid_snapshot_token(request.args.get("token")):
+            return None
         if request.endpoint in {"static", "cameras.api_health"}:
             return None
         if not _is_authenticated():

@@ -3,6 +3,7 @@ Ravens Perch - Moonraker API Client
 """
 import socket
 import logging
+from urllib.parse import urlencode
 from typing import Optional, Dict, List, Tuple, Any
 
 import requests
@@ -11,6 +12,7 @@ from .config import (
     MOONRAKER_DEFAULT_URL, MOONRAKER_FALLBACK_URLS,
     MEDIAMTX_WEBRTC_PORT
 )
+from .snapshot_access import get_snapshot_token
 
 logger = logging.getLogger(__name__)
 
@@ -432,7 +434,8 @@ def build_snapshot_url(camera_id: str, host: Optional[str] = None) -> str:
     if host is None:
         host = get_system_ip()
 
-    return f"http://{host}/cameras/snapshot/{camera_id}.jpg"
+    query = urlencode({"token": get_snapshot_token()})
+    return f"http://{host}/cameras/snapshot/{camera_id}.jpg?{query}"
 
 
 # ============ Server Info ============
