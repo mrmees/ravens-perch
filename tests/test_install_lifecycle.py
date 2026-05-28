@@ -25,6 +25,16 @@ class InstallLifecycleTests(unittest.TestCase):
         self.assertNotIn('grep -q "listen 80"', text)
         self.assertIn("listen[[:space:]]+80", text)
 
+    def test_install_verification_uses_web_auth_credentials_for_local_api(self):
+        text = INSTALL_SH.read_text(encoding="utf-8")
+
+        self.assertIn("ravens_perch_api_curl", text)
+        self.assertIn("RAVENS_PERCH_WEB_AUTH_USERNAME", text)
+        self.assertIn("RAVENS_PERCH_WEB_AUTH_PASSWORD_FILE", text)
+        self.assertIn('ravens_perch_api_curl "/cameras/api/health"', text)
+        self.assertIn('rp_cameras=$(ravens_perch_api_curl "/cameras/api/status"', text)
+        self.assertNotIn('curl -s "http://127.0.0.1:8585/cameras/api/status"', text)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -863,6 +863,39 @@ except:
     log_success "Camera cleanup complete"
 }
 
+ravens_perch_auth_env_value() {
+    local key="$1"
+    local auth_env_file="${INSTALL_DIR}/data/web-auth.env"
+
+    if [ ! -f "$auth_env_file" ]; then
+        return 0
+    fi
+
+    grep -E "^${key}=" "$auth_env_file" 2>/dev/null | head -n 1 | cut -d= -f2-
+}
+
+ravens_perch_api_curl() {
+    local path="$1"
+    local auth_env_file="${INSTALL_DIR}/data/web-auth.env"
+    local url="http://127.0.0.1:8585${path}"
+    local username=""
+    local password_file=""
+    local password=""
+
+    if [ -f "$auth_env_file" ] && ! grep -q "^RAVENS_PERCH_WEB_AUTH_DISABLED=1$" "$auth_env_file" 2>/dev/null; then
+        username="$(ravens_perch_auth_env_value "RAVENS_PERCH_WEB_AUTH_USERNAME")"
+        password_file="$(ravens_perch_auth_env_value "RAVENS_PERCH_WEB_AUTH_PASSWORD_FILE")"
+
+        if [ -n "$username" ] && [ -n "$password_file" ] && [ -r "$password_file" ]; then
+            password="$(tr -d '\r\n' < "$password_file")"
+            curl -s --user "${username}:${password}" "$url"
+            return
+        fi
+    fi
+
+    curl -s "$url"
+}
+
 # Verify installation - check service and cameras
 verify_installation() {
     echo ""
@@ -872,7 +905,7 @@ verify_installation() {
     log_info "Waiting for Ravens Perch service..."
     local retries=30
     while [ $retries -gt 0 ]; do
-        if curl -s "http://127.0.0.1:8585/cameras/api/health" >/dev/null 2>&1; then
+        if ravens_perch_api_curl "/cameras/api/health" >/dev/null 2>&1; then
             log_success "Ravens Perch service is running"
             break
         fi
@@ -914,7 +947,7 @@ print(count)
     local stable_checks=0
 
     while [ $camera_retries -gt 0 ]; do
-        rp_cameras=$(curl -s "http://127.0.0.1:8585/cameras/api/status" 2>/dev/null)
+        rp_cameras=$(ravens_perch_api_curl "/cameras/api/status" 2>/dev/null || true)
         rp_count=$(echo "$rp_cameras" | python3 -c "import sys,json; data=json.load(sys.stdin); print(len(data) if isinstance(data, list) else 0)" 2>/dev/null || echo "0")
 
         if [ "$rp_count" -gt 0 ]; then
