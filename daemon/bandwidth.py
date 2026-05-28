@@ -3,13 +3,13 @@ Ravens Perch - Bandwidth Estimation Utilities
 """
 import logging
 import requests
+import threading
+import time
 from typing import Dict, Optional, Tuple
 
 logger = logging.getLogger(__name__)
 
-# MJPEG compression ratios (approximate, varies by scene complexity)
-# These are typical compression ratios compared to raw YUV
-MJPEG_COMPRESSION_RATIO = 10  # MJPEG is typically 1/10th to 1/20th of raw
+INPUT_SAMPLE_WARMUP_SECONDS = 5.0
 
 # Bytes per pixel for different formats
 FORMAT_BPP = {
@@ -27,6 +27,14 @@ FORMAT_BPP = {
     'h264': None,     # Compressed
     'hevc': None,     # Compressed
 }
+
+COMPRESSED_FORMATS = {'mjpeg', 'mjpg', 'h264', 'hevc', 'h265'}
+SNAPSHOT_SAMPLE_FORMATS = {'mjpeg', 'mjpg'}
+
+_input_bandwidth_samples: Dict[str, Dict] = {}
+_pending_input_bandwidth_samples = set()
+_input_sample_tokens: Dict[str, int] = {}
+_input_sample_lock = threading.Lock()
 
 
 def parse_resolution(resolution: str) -> Tuple[int, int]:
@@ -63,7 +71,55 @@ def parse_bitrate(bitrate: str) -> int:
         return 4_000_000
 
 
-def estimate_usb_bandwidth(format_name: str, resolution: str, framerate: int) -> Dict:
+def _empty_usb_bandwidth(format_name: str, resolution: str, framerate: int, reason: str) -> Dict:
+    """Return an unavailable USB bandwidth value without inventing a compressed bitrate."""
+    return {
+        'bytes_per_second': None,
+        'mbps': None,
+        'mb_per_second': None,
+        'is_estimate': True,
+        'available': False,
+        'sampled': False,
+        'sample_source': None,
+        'reason': reason,
+        'format': format_name,
+        'resolution': resolution,
+        'framerate': framerate,
+    }
+
+
+def _format_usb_bandwidth(
+    bytes_per_second: float,
+    format_name: str,
+    resolution: str,
+    framerate: int,
+    is_estimate: bool,
+    sampled: bool = False,
+    sample_source: Optional[str] = None,
+) -> Dict:
+    mbps = (bytes_per_second * 8) / 1_000_000
+    mb_per_second = bytes_per_second / 1_000_000
+
+    return {
+        'bytes_per_second': int(bytes_per_second),
+        'mbps': round(mbps, 1),
+        'mb_per_second': round(mb_per_second, 1),
+        'is_estimate': is_estimate,
+        'available': True,
+        'sampled': sampled,
+        'sample_source': sample_source,
+        'format': format_name,
+        'resolution': resolution,
+        'framerate': framerate,
+    }
+
+
+def estimate_usb_bandwidth(
+    format_name: str,
+    resolution: str,
+    framerate: int,
+    camera_id: Optional[str] = None
+) -> Dict:
     """
     Estimate USB bandwidth usage for a camera stream.
 
@@ -79,40 +135,113 @@ def estimate_usb_bandwidth(format_name: str, resolution: str, framerate: int) ->
 
     format_lower = format_name.lower()
 
-    # Check if it's a compressed format
-    if format_lower in ('mjpeg', 'mjpg'):
-        # MJPEG bandwidth varies greatly by scene complexity
-        # Typical range: 1-10 MB/s for 1080p30
-        # We'll estimate based on resolution and framerate
-        # Average MJPEG frame size is roughly 50-200KB for 1080p
-        avg_frame_size = (pixels * 3) / MJPEG_COMPRESSION_RATIO  # Compressed from RGB
-        bytes_per_second = avg_frame_size * framerate
-        is_estimate = True
+    if format_lower in COMPRESSED_FORMATS:
+        with _input_sample_lock:
+            sample = dict(_input_bandwidth_samples.get(str(camera_id)) or {}) if camera_id is not None else None
+        if sample:
+            return _format_usb_bandwidth(
+                sample['bytes_per_second'],
+                format_name,
+                resolution,
+                framerate,
+                is_estimate=True,
+                sampled=True,
+                sample_source=sample.get('source'),
+            )
 
-    elif format_lower in ('h264', 'hevc', 'h265'):
-        # Hardware-compressed formats - very low bandwidth
-        # Typically 1-8 Mbps depending on quality
-        bytes_per_second = 4_000_000 / 8  # Assume 4 Mbps
-        is_estimate = True
+        reason = 'sample_pending' if camera_id is not None else 'sample_unavailable'
+        return _empty_usb_bandwidth(format_name, resolution, framerate, reason)
 
-    else:
-        # Raw/uncompressed formats
-        bpp = FORMAT_BPP.get(format_lower, 2.0)  # Default to YUYV
-        bytes_per_second = pixels * bpp * framerate
-        is_estimate = False
+    # Raw/uncompressed formats can be calculated from dimensions and pixel format.
+    bpp = FORMAT_BPP.get(format_lower, 2.0)  # Default to YUYV
+    bytes_per_second = pixels * bpp * framerate
+    return _format_usb_bandwidth(
+        bytes_per_second,
+        format_name,
+        resolution,
+        framerate,
+        is_estimate=False,
+    )
 
-    mbps = (bytes_per_second * 8) / 1_000_000
-    mb_per_second = bytes_per_second / 1_000_000
 
-    return {
-        'bytes_per_second': int(bytes_per_second),
-        'mbps': round(mbps, 1),
-        'mb_per_second': round(mb_per_second, 1),
-        'is_estimate': is_estimate,
-        'format': format_name,
-        'resolution': resolution,
-        'framerate': framerate,
-    }
+def reset_input_bandwidth_sample(camera_id: str):
+    """Clear any one-shot compressed input bandwidth sample for a camera."""
+    camera_id = str(camera_id)
+    with _input_sample_lock:
+        _input_bandwidth_samples.pop(camera_id, None)
+        _pending_input_bandwidth_samples.discard(camera_id)
+        _input_sample_tokens[camera_id] = _input_sample_tokens.get(camera_id, 0) + 1
+
+
+def sample_input_bandwidth_once(camera_id: str, settings: Dict) -> bool:
+    """Capture one compressed input bandwidth estimate from the warmed snapshot cache."""
+    camera_id = str(camera_id)
+    format_name = (settings.get('format') or 'mjpeg').lower()
+
+    if format_name not in SNAPSHOT_SAMPLE_FORMATS:
+        return False
+
+    framerate = int(settings.get('framerate') or 30)
+
+    try:
+        from .snapshot_server import get_cached_snapshot_info
+        snapshot = get_cached_snapshot_info(camera_id)
+    except Exception as e:
+        logger.debug(f"Unable to sample snapshot size for camera {camera_id}: {e}")
+        return False
+
+    if not snapshot or not snapshot.get('bytes'):
+        return False
+
+    bytes_per_second = snapshot['bytes'] * framerate
+    with _input_sample_lock:
+        _input_bandwidth_samples[camera_id] = {
+            'bytes_per_second': bytes_per_second,
+            'source': 'snapshot_sample',
+            'sampled_at': time.time(),
+        }
+        _pending_input_bandwidth_samples.discard(camera_id)
+
+    return True
+
+
+def schedule_input_bandwidth_sample(
+    camera_id: str,
+    settings: Dict,
+    warmup_seconds: float = INPUT_SAMPLE_WARMUP_SECONDS
+):
+    """Schedule one compressed input bandwidth sample after the stream warms up."""
+    camera_id = str(camera_id)
+    format_name = (settings.get('format') or 'mjpeg').lower()
+
+    if format_name not in SNAPSHOT_SAMPLE_FORMATS:
+        return
+
+    with _input_sample_lock:
+        if camera_id in _input_bandwidth_samples or camera_id in _pending_input_bandwidth_samples:
+            return
+        token = _input_sample_tokens.get(camera_id, 0) + 1
+        _input_sample_tokens[camera_id] = token
+        _pending_input_bandwidth_samples.add(camera_id)
+
+    settings_snapshot = dict(settings)
+
+    def worker():
+        try:
+            time.sleep(max(0.0, warmup_seconds))
+            with _input_sample_lock:
+                if _input_sample_tokens.get(camera_id) != token:
+                    return
+            sample_input_bandwidth_once(camera_id, settings_snapshot)
+        finally:
+            with _input_sample_lock:
+                _pending_input_bandwidth_samples.discard(camera_id)
+
+    threading.Thread(
+        target=worker,
+        daemon=True,
+        name=f"input-bandwidth-sample-{camera_id}",
+    ).start()
 
 
 def get_network_bandwidth(bitrate: str) -> Dict:
@@ -184,17 +313,31 @@ def get_camera_bandwidth_stats(camera: Dict) -> Dict:
     resolution = settings.get('resolution', '1280x720')
     framerate = settings.get('framerate', 30)
 
-    usb = estimate_usb_bandwidth(format_name, resolution, framerate)
+    camera_id = str(camera.get('id', ''))
+    usb = estimate_usb_bandwidth(format_name, resolution, framerate, camera_id=camera_id)
 
     # Get network bandwidth from bitrate setting
     bitrate = settings.get('bitrate', '4M')
     network = get_network_bandwidth(bitrate)
 
     # Get MediaMTX stats
-    mediamtx = get_mediamtx_stream_stats(str(camera.get('id', '')))
+    mediamtx = get_mediamtx_stream_stats(camera_id)
+    readers = mediamtx.get('readers', 0) if mediamtx else 0
+    source_ready = bool(mediamtx and (mediamtx.get('ready') or mediamtx.get('source_ready')))
+    source = {
+        'state': 'ok' if source_ready else 'waiting',
+        'label': 'OK' if source_ready else 'Waiting',
+    }
+    output = {
+        'bits_per_second': network['bits_per_second'] * readers,
+        'mbps': round(network['mbps'] * readers, 1),
+        'readers': readers,
+    }
 
     return {
         'usb': usb,
         'network': network,
+        'source': source,
+        'output': output,
         'mediamtx': mediamtx,
     }

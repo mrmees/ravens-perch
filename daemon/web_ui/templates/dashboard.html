@@ -54,17 +54,25 @@
                     {% endif %}
                     {% if camera.connected %}
                     <div class="camera-bandwidth" id="bandwidth-{{ camera.id }}">
-                        <span class="bandwidth-item" title="Estimated USB input bandwidth">
-                            <span class="bandwidth-label">USB:</span>
+                        <span class="bandwidth-item" title="Estimated USB input bandwidth. Raw formats are calculated; MJPEG is sampled once after startup when available.">
+                            <span class="bandwidth-label">USB est:</span>
                             <span class="bandwidth-value" data-type="usb">--</span>
                         </span>
-                        <span class="bandwidth-item" title="Network output bandwidth (configured bitrate)">
-                            <span class="bandwidth-label">Net:</span>
+                        <span class="bandwidth-item" title="Configured network bitrate per viewer">
+                            <span class="bandwidth-label">Per viewer:</span>
                             <span class="bandwidth-value" data-type="network">--</span>
+                        </span>
+                        <span class="bandwidth-item" title="Estimated total network output: per-viewer bitrate times active viewers">
+                            <span class="bandwidth-label">Out est:</span>
+                            <span class="bandwidth-value" data-type="output">--</span>
                         </span>
                         <span class="bandwidth-item" title="Active viewers">
                             <span class="bandwidth-label">Viewers:</span>
                             <span class="bandwidth-value" data-type="viewers">--</span>
+                        </span>
+                        <span class="bandwidth-item" title="MediaMTX source state">
+                            <span class="bandwidth-label">Source:</span>
+                            <span class="bandwidth-value" data-type="source">--</span>
                         </span>
                     </div>
                     {% endif %}
@@ -143,6 +151,11 @@
     }, 10000);
 
     // Fetch and display bandwidth stats
+    function formatMbps(value) {
+        if (typeof value !== 'number') return '--';
+        return value.toFixed(value >= 10 ? 0 : 1) + ' Mbps';
+    }
+
     function updateBandwidthStats() {
         fetch('{{ url_for("cameras.api_bandwidth") }}')
             .then(response => response.json())
@@ -154,24 +167,40 @@
                     // Update USB bandwidth
                     const usbEl = container.querySelector('[data-type="usb"]');
                     if (usbEl && stats.usb) {
-                        const usbText = stats.usb.mb_per_second >= 1
+                        if (!stats.usb.available || typeof stats.usb.mb_per_second !== 'number') {
+                            usbEl.textContent = '--';
+                        } else {
+                            const usbText = stats.usb.mb_per_second >= 1
                             ? stats.usb.mb_per_second.toFixed(1) + ' MB/s'
                             : (stats.usb.mb_per_second * 1000).toFixed(0) + ' KB/s';
-                        usbEl.textContent = (stats.usb.is_estimate ? '~' : '') + usbText;
+                            usbEl.textContent = (stats.usb.is_estimate ? '~' : '') + usbText;
+                        }
                     }
 
-                    // Update network bandwidth
+                    // Update per-viewer network bandwidth
                     const netEl = container.querySelector('[data-type="network"]');
                     if (netEl && stats.network) {
-                        netEl.textContent = stats.network.mbps + ' Mbps';
+                        netEl.textContent = formatMbps(stats.network.mbps);
+                    }
+
+                    // Update total estimated network output
+                    const outputEl = container.querySelector('[data-type="output"]');
+                    if (outputEl && stats.output) {
+                        outputEl.textContent = formatMbps(stats.output.mbps);
                     }
 
                     // Update viewers
                     const viewersEl = container.querySelector('[data-type="viewers"]');
-                    if (viewersEl && stats.mediamtx) {
-                        viewersEl.textContent = stats.mediamtx.readers;
+                    if (viewersEl && stats.output) {
+                        viewersEl.textContent = stats.output.readers;
                     } else if (viewersEl) {
                         viewersEl.textContent = '-';
+                    }
+
+                    // Update MediaMTX source state
+                    const sourceEl = container.querySelector('[data-type="source"]');
+                    if (sourceEl && stats.source) {
+                        sourceEl.textContent = stats.source.label;
                     }
                 }
             })

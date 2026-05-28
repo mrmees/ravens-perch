@@ -23,6 +23,30 @@
                 {{ camera.settings.resolution }} @ {{ camera.settings.framerate }}fps
             </span>
         {% endif %}
+        {% if camera.connected %}
+        <div class="camera-bandwidth" id="bandwidth-{{ camera.id }}">
+            <span class="bandwidth-item" title="Estimated USB input bandwidth. Raw formats are calculated; MJPEG is sampled once after startup when available.">
+                <span class="bandwidth-label">USB est:</span>
+                <span class="bandwidth-value" data-type="usb">--</span>
+            </span>
+            <span class="bandwidth-item" title="Configured network bitrate per viewer">
+                <span class="bandwidth-label">Per viewer:</span>
+                <span class="bandwidth-value" data-type="network">--</span>
+            </span>
+            <span class="bandwidth-item" title="Estimated total network output: per-viewer bitrate times active viewers">
+                <span class="bandwidth-label">Out est:</span>
+                <span class="bandwidth-value" data-type="output">--</span>
+            </span>
+            <span class="bandwidth-item" title="Active viewers">
+                <span class="bandwidth-label">Viewers:</span>
+                <span class="bandwidth-value" data-type="viewers">--</span>
+            </span>
+            <span class="bandwidth-item" title="MediaMTX source state">
+                <span class="bandwidth-label">Source:</span>
+                <span class="bandwidth-value" data-type="source">--</span>
+            </span>
+        </div>
+        {% endif %}
     </div>
     <div class="camera-actions">
         <a href="{{ url_for('cameras.camera_detail', camera_id=camera.id) }}"

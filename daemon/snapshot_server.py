@@ -103,6 +103,21 @@ class SnapshotCache:
                 height=height
             )
 
+    def info(self, camera_id: str) -> Optional[Dict]:
+        """Return metadata for the latest cached frame."""
+        camera_id = str(camera_id)
+        with self._lock:
+            frame = self._cache.get(camera_id)
+            if not frame:
+                return None
+
+            return {
+                'bytes': len(frame.data),
+                'age_seconds': time.time() - frame.timestamp,
+                'width': frame.width,
+                'height': frame.height,
+            }
+
     def invalidate(self, camera_id: str):
         """Remove frame from cache."""
         camera_id = str(camera_id)
@@ -421,6 +436,11 @@ def get_placeholder_image() -> bytes:
 def invalidate_cache(camera_id: str):
     """Invalidate cache for a specific camera."""
     _cache.invalidate(str(camera_id))
+
+
+def get_cached_snapshot_info(camera_id: str) -> Optional[Dict]:
+    """Return metadata for the latest in-memory snapshot frame."""
+    return _cache.info(str(camera_id))
 
 
 def clear_cache():

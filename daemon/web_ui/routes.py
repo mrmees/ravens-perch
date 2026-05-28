@@ -34,7 +34,7 @@ from ..camera_manager import (
     get_v4l2_controls, set_v4l2_control, get_v4l2_control_value,
     add_rejected_camera, get_rejected_cameras
 )
-from ..bandwidth import get_camera_bandwidth_stats
+from ..bandwidth import get_camera_bandwidth_stats, schedule_input_bandwidth_sample
 from ..print_status import get_monitor as get_print_monitor
 from ..config import COMMON_RESOLUTIONS, COMMON_FRAMERATES
 from ..logging_utils import apply_log_level
@@ -841,6 +841,7 @@ def restart_camera_stream(camera_id: int):
     success, error = add_or_update_stream(str(camera_id), ffmpeg_cmd, force=True)
 
     if success:
+        schedule_input_bandwidth_sample(str(camera_id), settings)
         add_log("INFO", f"Stream restarted for camera {camera['friendly_name']}", camera_id)
         message = "Stream restarted"
     else:
