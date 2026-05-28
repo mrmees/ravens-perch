@@ -54,7 +54,7 @@
                     {% endif %}
                     {% if camera.connected %}
                     <div class="camera-bandwidth" id="bandwidth-{{ camera.id }}">
-                        <span class="bandwidth-item" title="Estimated USB input bandwidth. Raw formats are calculated; MJPEG is sampled once after startup when available.">
+                        <span class="bandwidth-item" title="Estimated USB input throughput. Raw formats are calculated; MJPEG and encoded formats use resolution/FPS lookup tables.">
                             <span class="bandwidth-label">USB est:</span>
                             <span class="bandwidth-value" data-type="usb">--</span>
                         </span>
@@ -167,12 +167,11 @@
                     // Update USB bandwidth
                     const usbEl = container.querySelector('[data-type="usb"]');
                     if (usbEl && stats.usb) {
-                        if (!stats.usb.available || typeof stats.usb.mb_per_second !== 'number') {
+                        if (!stats.usb.available || typeof stats.usb.mbit_per_second !== 'number') {
                             usbEl.textContent = '--';
                         } else {
-                            const usbText = stats.usb.mb_per_second >= 1
-                            ? stats.usb.mb_per_second.toFixed(1) + ' MB/s'
-                            : (stats.usb.mb_per_second * 1000).toFixed(0) + ' KB/s';
+                            const value = stats.usb.mbit_per_second;
+                            const usbText = value.toFixed(value >= 100 ? 0 : 1) + ' Mbit/s';
                             usbEl.textContent = (stats.usb.is_estimate ? '~' : '') + usbText;
                         }
                     }

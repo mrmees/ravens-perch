@@ -44,7 +44,6 @@ from .moonraker_client import (
     set_url as set_moonraker_url, is_available as moonraker_is_available
 )
 from .print_status import init_monitor, get_monitor, stop_monitor
-from .bandwidth import schedule_input_bandwidth_sample
 from . import db
 
 # Configure logging
@@ -496,7 +495,6 @@ class RavensPerchDaemon:
             success, error = add_or_update_stream(camera_id, ffmpeg_cmd)
             if success:
                 self._record_camera_framerate(camera['id'], settings)
-                schedule_input_bandwidth_sample(camera_id, settings)
                 reconciled += 1
             else:
                 failed += 1

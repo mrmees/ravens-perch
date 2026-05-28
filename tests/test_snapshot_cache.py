@@ -43,16 +43,15 @@ class SnapshotCacheTests(unittest.TestCase):
             patch("daemon.stream_manager.get_client", return_value=client),
             patch("daemon.stream_manager._stop_managed_process"),
             patch("daemon.stream_manager._stop_snapshot_cache") as stop_cache,
-            patch("daemon.stream_manager._reset_input_bandwidth_sample") as reset_sample,
         ):
             success, error = stream_manager.remove_stream("7")
 
         self.assertTrue(success)
         self.assertIsNone(error)
         stop_cache.assert_called_once_with("7")
-        reset_sample.assert_called_once_with("7")
+        self.assertFalse(hasattr(stream_manager, "_reset_input_bandwidth_sample"))
 
-    def test_start_camera_stream_schedules_one_time_input_bandwidth_sample(self):
+    def test_start_camera_stream_does_not_schedule_input_bandwidth_sampling(self):
         settings = {
             "format": "mjpeg",
             "resolution": "640x480",
@@ -61,13 +60,12 @@ class SnapshotCacheTests(unittest.TestCase):
 
         with (
             patch("daemon.stream_manager.add_or_update_stream", return_value=(True, None)),
-            patch("daemon.stream_manager._schedule_input_bandwidth_sample") as schedule_sample,
         ):
             success, error = stream_manager.start_camera_stream("/dev/video0", "7", settings)
 
         self.assertTrue(success)
         self.assertIsNone(error)
-        schedule_sample.assert_called_once_with("7", settings)
+        self.assertFalse(hasattr(stream_manager, "_schedule_input_bandwidth_sample"))
 
     def test_background_refresh_does_not_spawn_ffmpeg_fallback(self):
         class OneShotStop:

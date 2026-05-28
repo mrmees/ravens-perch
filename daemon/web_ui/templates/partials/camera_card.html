@@ -25,7 +25,7 @@
         {% endif %}
         {% if camera.connected %}
         <div class="camera-bandwidth" id="bandwidth-{{ camera.id }}">
-            <span class="bandwidth-item" title="Estimated USB input bandwidth. Raw formats are calculated; MJPEG is sampled once after startup when available.">
+            <span class="bandwidth-item" title="Estimated USB input throughput. Raw formats are calculated; MJPEG and encoded formats use resolution/FPS lookup tables.">
                 <span class="bandwidth-label">USB est:</span>
                 <span class="bandwidth-value" data-type="usb">--</span>
             </span>

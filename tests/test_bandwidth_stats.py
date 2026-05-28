@@ -2,16 +2,12 @@ import unittest
 from unittest.mock import patch
 
 from daemon.bandwidth import (
+    estimate_usb_bandwidth,
     get_camera_bandwidth_stats,
-    reset_input_bandwidth_sample,
-    sample_input_bandwidth_once,
 )
 
 
 class BandwidthStatsTests(unittest.TestCase):
-    def tearDown(self):
-        reset_input_bandwidth_sample("7")
-
     def test_stats_include_source_state_and_total_output(self):
         camera = {
             "id": 7,
@@ -52,70 +48,37 @@ class BandwidthStatsTests(unittest.TestCase):
         self.assertEqual(stats["source"]["label"], "Waiting")
         self.assertEqual(stats["output"]["mbps"], 0.0)
 
-    def test_compressed_usb_bandwidth_is_unavailable_without_one_time_sample(self):
-        camera = {
-            "id": 7,
-            "settings": {
-                "format": "h264",
-                "resolution": "1280x720",
-                "framerate": 30,
-                "bitrate": "2M",
-            },
-        }
+    def test_raw_usb_bandwidth_reports_calculated_mbit_per_second(self):
+        usb = estimate_usb_bandwidth("yuyv", "1920x1080", 30)
 
-        with patch("daemon.bandwidth.get_mediamtx_stream_stats", return_value=None):
-            stats = get_camera_bandwidth_stats(camera)
+        self.assertTrue(usb["available"])
+        self.assertFalse(usb["is_estimate"])
+        self.assertEqual(usb["method"], "calculated")
+        self.assertEqual(usb["format_family"], "raw")
+        self.assertEqual(usb["unit"], "Mbit/s")
+        self.assertEqual(usb["mbit_per_second"], 995.3)
 
-        self.assertFalse(stats["usb"]["available"])
-        self.assertIsNone(stats["usb"]["mb_per_second"])
+    def test_mjpeg_usb_bandwidth_uses_resolution_and_fps_lookup_table(self):
+        usb = estimate_usb_bandwidth("mjpeg", "1280x720", 30)
 
-    def test_mjpeg_usb_bandwidth_uses_one_time_cached_frame_sample(self):
-        camera = {
-            "id": 7,
-            "settings": {
-                "format": "mjpeg",
-                "resolution": "640x480",
-                "framerate": 10,
-                "bitrate": "2M",
-            },
-        }
+        self.assertTrue(usb["available"])
+        self.assertTrue(usb["is_estimate"])
+        self.assertEqual(usb["method"], "lookup")
+        self.assertEqual(usb["format_family"], "mjpeg")
+        self.assertEqual(usb["resolution_bucket"], "720p")
+        self.assertEqual(usb["framerate_bucket"], 30)
+        self.assertEqual(usb["mbit_per_second"], 42.0)
 
-        with (
-            patch("daemon.bandwidth.get_mediamtx_stream_stats", return_value=None),
-            patch(
-                "daemon.bandwidth._input_bandwidth_samples",
-                {"7": {"bytes_per_second": 250_000, "source": "snapshot_sample"}},
-            ),
-        ):
-            stats = get_camera_bandwidth_stats(camera)
+    def test_encoded_usb_bandwidth_uses_encoded_lookup_table(self):
+        usb = estimate_usb_bandwidth("h264", "1920x1080", 30)
 
-        self.assertTrue(stats["usb"]["available"])
-        self.assertTrue(stats["usb"]["sampled"])
-        self.assertEqual(stats["usb"]["mb_per_second"], 0.2)
-
-    def test_mjpeg_one_time_sample_reads_latest_snapshot_size(self):
-        with patch(
-            "daemon.snapshot_server.get_cached_snapshot_info",
-            return_value={"bytes": 25_000, "age_seconds": 1.0},
-        ):
-            sampled = sample_input_bandwidth_once("7", {"format": "mjpeg", "framerate": 10})
-
-        self.assertTrue(sampled)
-
-        with patch("daemon.bandwidth.get_mediamtx_stream_stats", return_value=None):
-            stats = get_camera_bandwidth_stats(
-                {
-                    "id": 7,
-                    "settings": {
-                        "format": "mjpeg",
-                        "resolution": "640x480",
-                        "framerate": 10,
-                    },
-                }
-            )
-
-        self.assertTrue(stats["usb"]["available"])
-        self.assertEqual(stats["usb"]["bytes_per_second"], 250_000)
+        self.assertTrue(usb["available"])
+        self.assertTrue(usb["is_estimate"])
+        self.assertEqual(usb["method"], "lookup")
+        self.assertEqual(usb["format_family"], "encoded")
+        self.assertEqual(usb["resolution_bucket"], "1080p")
+        self.assertEqual(usb["framerate_bucket"], 30)
+        self.assertEqual(usb["mbit_per_second"], 20.0)
 
 
 if __name__ == "__main__":

@@ -150,24 +150,6 @@ def _stop_snapshot_cache(camera_id: str) -> None:
         logger.warning(f"Unable to stop snapshot cache for camera {camera_id}: {e}")
 
 
-def _schedule_input_bandwidth_sample(camera_id: str, settings: Dict) -> None:
-    """Schedule a one-shot compressed input bandwidth sample."""
-    try:
-        from .bandwidth import schedule_input_bandwidth_sample
-        schedule_input_bandwidth_sample(str(camera_id), settings)
-    except Exception as e:
-        logger.debug(f"Unable to schedule input bandwidth sample for camera {camera_id}: {e}")
-
-
-def _reset_input_bandwidth_sample(camera_id: str) -> None:
-    """Clear the cached compressed input bandwidth sample for a stream."""
-    try:
-        from .bandwidth import reset_input_bandwidth_sample
-        reset_input_bandwidth_sample(str(camera_id))
-    except Exception as e:
-        logger.debug(f"Unable to reset input bandwidth sample for camera {camera_id}: {e}")
-
-
 def _sleep_or_stopped(managed: ManagedFFmpegProcess, seconds: float) -> bool:
     """Sleep in small increments. Returns True if the stream was stopped."""
     deadline = time.time() + seconds
@@ -437,7 +419,6 @@ def remove_stream(camera_id: str) -> Tuple[bool, Optional[str]]:
 
     _stop_managed_process(str(camera_id))
     _stop_snapshot_cache(str(camera_id))
-    _reset_input_bandwidth_sample(str(camera_id))
 
     success, _, error = client.api_request(
         f"/v3/config/paths/delete/{path_name}",
@@ -490,7 +471,6 @@ def remove_all_streams() -> int:
     for camera_id in managed_camera_ids:
         _stop_managed_process(camera_id)
         _stop_snapshot_cache(camera_id)
-        _reset_input_bandwidth_sample(camera_id)
 
     streams = list_streams()
     count = 0
@@ -882,6 +862,4 @@ def start_camera_stream(
 
     # Start the stream
     success, error = add_or_update_stream(str(camera_id), ffmpeg_cmd)
-    if success:
-        _schedule_input_bandwidth_sample(str(camera_id), settings)
     return success, error
