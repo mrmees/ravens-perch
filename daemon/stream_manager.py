@@ -130,6 +130,24 @@ def _restart_delay(attempts: int) -> float:
     return min(FFMPEG_INITIAL_RESTART_DELAY * (2 ** max(0, attempts - 1)), FFMPEG_MAX_RESTART_DELAY)
 
 
+def _start_snapshot_cache(camera_id: str) -> None:
+    """Start the RAM-only latest JPEG cache without coupling stream startup to it."""
+    try:
+        from .snapshot_server import start_snapshot_cache
+        start_snapshot_cache(str(camera_id))
+    except Exception as e:
+        logger.warning(f"Unable to start snapshot cache for camera {camera_id}: {e}")
+
+
+def _stop_snapshot_cache(camera_id: str) -> None:
+    """Stop the RAM-only latest JPEG cache without coupling stream shutdown to it."""
+    try:
+        from .snapshot_server import stop_snapshot_cache
+        stop_snapshot_cache(str(camera_id))
+    except Exception as e:
+        logger.warning(f"Unable to stop snapshot cache for camera {camera_id}: {e}")
+
+
 def _sleep_or_stopped(managed: ManagedFFmpegProcess, seconds: float) -> bool:
     """Sleep in small increments. Returns True if the stream was stopped."""
     deadline = time.time() + seconds
@@ -341,12 +359,7 @@ def add_stream(camera_id: str, ffmpeg_command: str) -> Tuple[bool, Optional[str]
 
     Returns: (success, error_message)
     """
-    success, error = ensure_stream_path(camera_id)
-    if not success:
-        logger.error(f"Failed to configure stream path {camera_id}: {error}")
-        return False, error
-
-    return _replace_ffmpeg_process(camera_id, ffmpeg_command)
+    return add_or_update_stream(camera_id, ffmpeg_command, force=True)
 
 
 def ensure_stream_path(camera_id: str) -> Tuple[bool, Optional[str]]:
@@ -403,6 +416,7 @@ def remove_stream(camera_id: str) -> Tuple[bool, Optional[str]]:
     path_name = _path_name(camera_id)
 
     _stop_managed_process(str(camera_id))
+    _stop_snapshot_cache(str(camera_id))
 
     success, _, error = client.api_request(
         f"/v3/config/paths/delete/{path_name}",
@@ -454,6 +468,7 @@ def remove_all_streams() -> int:
 
     for camera_id in managed_camera_ids:
         _stop_managed_process(camera_id)
+        _stop_snapshot_cache(camera_id)
 
     streams = list_streams()
     count = 0
@@ -767,6 +782,7 @@ def add_or_update_stream(camera_id: str, ffmpeg_command: str, force: bool = Fals
 
     if command_unchanged and process_running and not force:
         logger.debug(f"Stream {camera_id} command unchanged, FFmpeg already running")
+        _start_snapshot_cache(camera_id)
         return True, None
 
     if command_unchanged and not force:
@@ -774,7 +790,12 @@ def add_or_update_stream(camera_id: str, ffmpeg_command: str, force: bool = Fals
     else:
         logger.info(f"Starting stream {camera_id} with updated FFmpeg command")
 
-    return _replace_ffmpeg_process(camera_id, ffmpeg_command)
+    success, error = _replace_ffmpeg_process(camera_id, ffmpeg_command)
+    if success:
+        _start_snapshot_cache(camera_id)
+    else:
+        _stop_snapshot_cache(camera_id)
+    return success, error
 
 
 def restart_stream(camera_id: str) -> Tuple[bool, Optional[str]]:

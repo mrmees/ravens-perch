@@ -12,6 +12,7 @@ from dataclasses import dataclass
 
 from .config import (
     SNAPSHOT_CACHE_TTL_MS, SNAPSHOT_TIMEOUT,
+    SNAPSHOT_REFRESH_INTERVAL, SNAPSHOT_STALE_SECONDS,
     MEDIAMTX_RTSP_PORT
 )
 
@@ -64,6 +65,7 @@ class SnapshotCache:
 
     def get(self, camera_id: str) -> Optional[bytes]:
         """Get cached frame if still valid."""
+        camera_id = str(camera_id)
         with self._lock:
             if camera_id not in self._cache:
                 return None
@@ -77,8 +79,22 @@ class SnapshotCache:
 
             return frame.data
 
+    def get_latest(self, camera_id: str, max_age_seconds: float) -> Optional[bytes]:
+        """Get the latest cached frame if it is within the stale window."""
+        camera_id = str(camera_id)
+        with self._lock:
+            frame = self._cache.get(camera_id)
+            if not frame:
+                return None
+
+            if time.time() - frame.timestamp > max_age_seconds:
+                return None
+
+            return frame.data
+
     def put(self, camera_id: str, data: bytes, width: int, height: int):
         """Store frame in cache."""
+        camera_id = str(camera_id)
         with self._lock:
             self._cache[camera_id] = CachedFrame(
                 data=data,
@@ -89,6 +105,7 @@ class SnapshotCache:
 
     def invalidate(self, camera_id: str):
         """Remove frame from cache."""
+        camera_id = str(camera_id)
         with self._lock:
             if camera_id in self._cache:
                 del self._cache[camera_id]
@@ -101,12 +118,99 @@ class SnapshotCache:
 
 # Global cache instance
 _cache = SnapshotCache()
+_snapshot_workers: Dict[str, "SnapshotRefreshWorker"] = {}
+_snapshot_workers_lock = threading.Lock()
+
+
+@dataclass
+class SnapshotRefreshWorker:
+    """Background latest-frame refresh worker state."""
+
+    camera_id: str
+    stop_event: threading.Event
+    thread: threading.Thread
 
 
 def get_rtsp_url(camera_id: str) -> str:
     """Get RTSP URL for a camera."""
     path_name = camera_id.replace(' ', '_').lower()
     return f"rtsp://127.0.0.1:{MEDIAMTX_RTSP_PORT}/{path_name}"
+
+
+def _grab_snapshot_uncached(
+    camera_id: str,
+    allow_ffmpeg: bool = True
+) -> Optional[Tuple[bytes, int, int]]:
+    """Grab one fresh snapshot without consulting the in-memory cache."""
+    rtsp_url = get_rtsp_url(str(camera_id))
+
+    result = grab_frame_av(rtsp_url)
+    if result:
+        return result
+
+    if allow_ffmpeg:
+        return grab_frame_ffmpeg(rtsp_url)
+
+    return None
+
+
+def _snapshot_refresh_loop(camera_id: str, stop_event: threading.Event):
+    """Continuously refresh the latest in-memory JPEG for one camera."""
+    while not stop_event.is_set():
+        try:
+            result = _grab_snapshot_uncached(camera_id, allow_ffmpeg=False)
+            if result and not stop_event.is_set():
+                jpeg_data, width, height = result
+                _cache.put(camera_id, jpeg_data, width, height)
+        except Exception as e:
+            logger.debug(f"Snapshot refresh failed for camera {camera_id}: {e}")
+
+        stop_event.wait(SNAPSHOT_REFRESH_INTERVAL)
+
+
+def start_snapshot_cache(camera_id: str):
+    """Start the background latest-frame cache for a camera."""
+    camera_id = str(camera_id)
+
+    with _snapshot_workers_lock:
+        worker = _snapshot_workers.get(camera_id)
+        if worker and worker.thread.is_alive():
+            return
+
+        stop_event = threading.Event()
+        thread = threading.Thread(
+            target=_snapshot_refresh_loop,
+            args=(camera_id, stop_event),
+            daemon=True,
+            name=f"snapshot-cache-{camera_id}",
+        )
+        _snapshot_workers[camera_id] = SnapshotRefreshWorker(camera_id, stop_event, thread)
+        thread.start()
+
+
+def stop_snapshot_cache(camera_id: str, clear_frame: bool = True):
+    """Stop the background latest-frame cache for a camera."""
+    camera_id = str(camera_id)
+
+    with _snapshot_workers_lock:
+        worker = _snapshot_workers.pop(camera_id, None)
+
+    if worker:
+        worker.stop_event.set()
+        if worker.thread.is_alive() and worker.thread is not threading.current_thread():
+            worker.thread.join(timeout=1)
+
+    if clear_frame:
+        _cache.invalidate(camera_id)
+
+
+def stop_all_snapshot_caches(clear_frames: bool = True):
+    """Stop all background latest-frame caches."""
+    with _snapshot_workers_lock:
+        camera_ids = list(_snapshot_workers.keys())
+
+    for camera_id in camera_ids:
+        stop_snapshot_cache(camera_id, clear_frame=clear_frames)
 
 
 def grab_frame_av(rtsp_url: str, timeout: float = SNAPSHOT_TIMEOUT) -> Optional[Tuple[bytes, int, int]]:
@@ -187,24 +291,15 @@ def grab_snapshot(camera_id: str, use_cache: bool = True) -> Optional[bytes]:
 
     Returns: JPEG bytes or None
     """
+    camera_id = str(camera_id)
+
     # Check cache first
     if use_cache:
-        cached = _cache.get(camera_id)
+        cached = _cache.get_latest(camera_id, SNAPSHOT_STALE_SECONDS)
         if cached:
             return cached
 
-    # Get fresh frame
-    rtsp_url = get_rtsp_url(camera_id)
-
-    # Try PyAV first
-    result = grab_frame_av(rtsp_url)
-    if result:
-        jpeg_data, width, height = result
-        _cache.put(camera_id, jpeg_data, width, height)
-        return jpeg_data
-
-    # Fallback: try FFmpeg subprocess
-    result = grab_frame_ffmpeg(rtsp_url)
+    result = _grab_snapshot_uncached(camera_id)
     if result:
         jpeg_data, width, height = result
         _cache.put(camera_id, jpeg_data, width, height)
@@ -325,7 +420,7 @@ def get_placeholder_image() -> bytes:
 
 def invalidate_cache(camera_id: str):
     """Invalidate cache for a specific camera."""
-    _cache.invalidate(camera_id)
+    _cache.invalidate(str(camera_id))
 
 
 def clear_cache():
