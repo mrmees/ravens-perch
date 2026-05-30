@@ -21,6 +21,28 @@ class UsbTopologyWarningTests(unittest.TestCase):
 
         (class_dir / "device").symlink_to(camera_interface)
 
+    def _make_serial_sysfs(
+        self,
+        root: Path,
+        tty_name: str,
+        bus_name: str,
+        manufacturer: str = "Klipper",
+        product: str = "stm32g0b1xx",
+    ) -> None:
+        class_dir = root / "class" / "tty" / tty_name
+        class_dir.mkdir(parents=True)
+
+        root_bus = root / "devices" / "platform" / "controller" / bus_name
+        serial_interface = root_bus / f"{bus_name[3:]}-9" / f"{bus_name[3:]}-9:1.0"
+        serial_interface.mkdir(parents=True)
+        (root_bus / "speed").write_text("480", encoding="utf-8")
+        (root_bus / "busnum").write_text(bus_name[3:], encoding="utf-8")
+        (root_bus / "product").write_text("EHCI Host Controller", encoding="utf-8")
+        (serial_interface.parent / "manufacturer").write_text(manufacturer, encoding="utf-8")
+        (serial_interface.parent / "product").write_text(product, encoding="utf-8")
+
+        (class_dir / "device").symlink_to(serial_interface)
+
     def test_warns_when_multiple_enabled_cameras_share_usb2_root_bus(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
@@ -51,6 +73,35 @@ class UsbTopologyWarningTests(unittest.TestCase):
         self.assertEqual(warnings[0]["bus"], "usb6")
         self.assertEqual(warnings[0]["speed_mbps"], 480)
         self.assertEqual(warnings[0]["camera_names"], ["Toolhead", "Chamber"])
+        self.assertEqual(warnings[0]["serial_devices"], [])
+
+    def test_warns_when_camera_shares_usb2_root_bus_with_serial_controller(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            self._make_camera_sysfs(root, "video0", "usb9", "480")
+            self._make_serial_sysfs(root, "ttyACM0", "usb9")
+
+            warnings = get_shared_usb2_camera_warnings(
+                [
+                    {
+                        "id": 1,
+                        "friendly_name": "Toolhead",
+                        "device_path": "/dev/video0",
+                        "connected": True,
+                        "enabled": True,
+                    },
+                ],
+                video4linux_root=root / "class" / "video4linux",
+                tty_root=root / "class" / "tty",
+            )
+
+        self.assertEqual(len(warnings), 1)
+        self.assertEqual(warnings[0]["bus"], "usb9")
+        self.assertEqual(warnings[0]["camera_names"], ["Toolhead"])
+        self.assertEqual(len(warnings[0]["serial_devices"]), 1)
+        self.assertEqual(warnings[0]["serial_devices"][0]["name"], "ttyACM0")
+        self.assertEqual(warnings[0]["serial_devices"][0]["manufacturer"], "Klipper")
+        self.assertEqual(warnings[0]["serial_devices"][0]["product"], "stm32g0b1xx")
 
     def test_ignores_disabled_cameras_and_usb3_buses(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -92,6 +143,7 @@ class UsbTopologyWarningTests(unittest.TestCase):
                     },
                 ],
                 video4linux_root=root / "class" / "video4linux",
+                tty_root=root / "class" / "tty",
             )
 
         self.assertEqual(warnings, [])

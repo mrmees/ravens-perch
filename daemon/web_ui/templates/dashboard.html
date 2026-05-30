@@ -26,7 +26,13 @@
     {% for warning in usb_topology_warnings %}
     <p>
         <strong>{{ warning.camera_names|join(', ') }}</strong>
+        {% if warning.serial_devices %}
+        {% if warning.camera_names|length == 1 %}is{% else %}are{% endif %}
+        sharing the same USB 2.0 controller{% if warning.bus %} ({{ warning.bus }}){% endif %}
+        with {{ warning.serial_devices|map(attribute='label')|join(', ') }}.
+        {% else %}
         are connected through the same USB 2.0 controller{% if warning.bus %} ({{ warning.bus }}){% endif %}.
+        {% endif %}
         This can cause dropped frames, cameras failing to start, or Klipper connection issues if the printer/controller is also on that USB bus.
         Move one camera or the printer connection to another USB controller, or reduce the number of active cameras.
     </p>

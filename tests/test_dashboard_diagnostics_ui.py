@@ -24,6 +24,7 @@ class DashboardDiagnosticsUITests(unittest.TestCase):
 
         self.assertIn("USB 2.0 controller", template)
         self.assertIn("Klipper connection issues", template)
+        self.assertIn("printer/controller", template)
         self.assertIn("Move one camera or the printer connection", template)
 
 
