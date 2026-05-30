@@ -357,10 +357,22 @@ def _register_camera_with_moonraker(camera_id: int, friendly_name: str, settings
         update_camera(camera_id, moonraker_uid=uid)
 
 
+def _mark_usb_topology_warnings(cameras: list, warnings: list) -> None:
+    warning_camera_ids = {
+        camera_id
+        for warning in warnings
+        for camera_id in warning.get('camera_ids', [])
+    }
+    for camera in cameras:
+        camera['usb_topology_warning'] = camera.get('id') in warning_camera_ids
+
+
 @bp.route('/')
 def dashboard():
     """Camera dashboard - main page."""
     cameras = get_all_cameras_with_settings()
+    usb_topology_warnings = get_shared_usb2_camera_warnings(cameras)
+    _mark_usb_topology_warnings(cameras, usb_topology_warnings)
 
     # Add stream status to each camera
     for camera in cameras:
@@ -374,7 +386,7 @@ def dashboard():
         'dashboard.html',
         cameras=cameras,
         rejected_cameras=rejected,
-        usb_topology_warnings=get_shared_usb2_camera_warnings(cameras),
+        usb_topology_warnings=usb_topology_warnings,
         system_ip=get_system_ip()
     )
 
@@ -506,6 +518,9 @@ def api_camera_card(camera_id: int):
 
     camera['stream_active'] = is_stream_active(str(camera_id))
     camera['stream_urls'] = get_stream_urls(str(camera_id), get_system_ip())
+    cameras = get_all_cameras_with_settings()
+    usb_topology_warnings = get_shared_usb2_camera_warnings(cameras)
+    _mark_usb_topology_warnings([camera], usb_topology_warnings)
 
     return render_template('partials/camera_card.html', camera=camera)
 

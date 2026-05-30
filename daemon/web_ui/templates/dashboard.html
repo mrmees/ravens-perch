@@ -20,26 +20,6 @@
     </div>
 </div>
 
-{% if usb_topology_warnings %}
-<div class="usb-warning-section">
-    <h3 class="section-title warning-title">USB 2.0 Bandwidth Warning</h3>
-    {% for warning in usb_topology_warnings %}
-    <p>
-        <strong>{{ warning.camera_names|join(', ') }}</strong>
-        {% if warning.serial_devices %}
-        {% if warning.camera_names|length == 1 %}is{% else %}are{% endif %}
-        sharing the same USB 2.0 controller{% if warning.bus %} ({{ warning.bus }}){% endif %}
-        with {{ warning.serial_devices|map(attribute='label')|join(', ') }}.
-        {% else %}
-        are connected through the same USB 2.0 controller{% if warning.bus %} ({{ warning.bus }}){% endif %}.
-        {% endif %}
-        This can cause dropped frames, cameras failing to start, or Klipper connection issues if the printer/controller is also on that USB bus.
-        Move one camera or the printer connection to another USB controller, or reduce the number of active cameras.
-    </p>
-    {% endfor %}
-</div>
-{% endif %}
-
 <div class="camera-grid"
      hx-get="{{ url_for('cameras.api_status') }}"
      hx-trigger="every 5s"
@@ -62,6 +42,15 @@
                             {% endif %}
                         {% else %}
                             <span class="status-badge status-offline">Offline</span>
+                        {% endif %}
+                        {% if camera.usb_topology_warning %}
+                            <span class="usb-warning-badge" title="USB 2.0 topology warning" aria-label="USB 2.0 topology warning">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                                    <line x1="12" y1="9" x2="12" y2="13"></line>
+                                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                                </svg>
+                            </span>
                         {% endif %}
                     </div>
                 </div>
@@ -152,6 +141,26 @@
     <h4>Quick Info</h4>
     <p>Cameras are automatically detected when plugged in. Click "Configure" to adjust settings or view the stream.</p>
     <p>Stream URLs are automatically registered with Moonraker for use in Fluidd/Mainsail.</p>
+</div>
+{% endif %}
+
+{% if usb_topology_warnings %}
+<div class="usb-warning-section">
+    <h3 class="section-title warning-title">USB 2.0 Bandwidth Warning</h3>
+    {% for warning in usb_topology_warnings %}
+    <p>
+        <strong>{{ warning.camera_names|join(', ') }}</strong>
+        {% if warning.serial_devices %}
+        {% if warning.camera_names|length == 1 %}is{% else %}are{% endif %}
+        sharing the same USB 2.0 controller{% if warning.bus %} ({{ warning.bus }}){% endif %}
+        with {{ warning.serial_devices|map(attribute='label')|join(', ') }}.
+        {% else %}
+        are connected through the same USB 2.0 controller{% if warning.bus %} ({{ warning.bus }}){% endif %}.
+        {% endif %}
+        This can cause dropped frames, cameras failing to start, or Klipper connection issues if the printer/controller is also on that USB bus.
+        Move one camera or the printer connection to another USB controller, or reduce the number of active cameras.
+    </p>
+    {% endfor %}
 </div>
 {% endif %}
 {% endblock %}
