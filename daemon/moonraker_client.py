@@ -4,7 +4,7 @@ Ravens Perch - Moonraker API Client
 import socket
 import logging
 from urllib.parse import urlencode
-from typing import Optional, Dict, List, Tuple, Any
+from typing import Optional, Dict, List, Tuple
 
 import requests
 

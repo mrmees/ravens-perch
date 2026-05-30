@@ -3,6 +3,7 @@ Ravens Perch - Snapshot Server
 
 Provides JPEG snapshot endpoints by grabbing frames from RTSP streams.
 """
+import importlib.util
 import io
 import time
 import logging
@@ -39,10 +40,10 @@ except Exception as e:
 PIL_AVAILABLE = False
 if not TURBOJPEG_AVAILABLE:
     try:
-        from PIL import Image
-        PIL_AVAILABLE = True
-    except ImportError:
+        PIL_AVAILABLE = importlib.util.find_spec("PIL.Image") is not None
+    except ModuleNotFoundError:
         PIL_AVAILABLE = False
+    if not PIL_AVAILABLE:
         logger.warning("PIL not available - placeholder images will be minimal")
 
 

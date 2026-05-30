@@ -10,14 +10,14 @@ import time
 import logging
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional, Dict, List, Tuple, Any
+from typing import Optional, Dict, Tuple
 from urllib.parse import urlencode
 
 import requests
 
 from .config import (
     MEDIAMTX_API_BASE, MEDIAMTX_RTSP_PORT, MEDIAMTX_WEBRTC_PORT,
-    ENCODER_DEFAULTS, FFMPEG_INPUT_FORMATS
+    FFMPEG_INPUT_FORMATS
 )
 from .camera_manager import apply_v4l2_controls, is_capture_device
 from .snapshot_access import get_snapshot_token

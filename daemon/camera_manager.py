@@ -1,19 +1,19 @@
 """
 Ravens Perch - Camera Detection and Management
 """
-import os
+import importlib.util
 import re
 import subprocess
 import logging
 import threading
 import time
 from pathlib import Path
-from typing import Optional, Dict, List, Callable, Tuple
+from typing import Optional, Dict, List, Callable
 from dataclasses import dataclass
 
 from .config import (
     FORMAT_PRIORITY, FORMAT_ALIASES, QUALITY_TIERS,
-    DEFAULT_CAMERA_SETTINGS, DEBOUNCE_DELAY
+    DEBOUNCE_DELAY
 )
 from .hardware import estimate_cpu_capability
 
@@ -529,12 +529,10 @@ class CameraMonitor:
 
         self._running = True
 
-        # Try pyudev first
-        try:
-            import pyudev
+        if importlib.util.find_spec("pyudev") is not None:
             self._thread = threading.Thread(target=self._udev_monitor, daemon=True)
             logger.info("Using pyudev for camera monitoring")
-        except ImportError:
+        else:
             self._thread = threading.Thread(target=self._polling_monitor, daemon=True)
             logger.info("Using polling for camera monitoring (pyudev not available)")
 

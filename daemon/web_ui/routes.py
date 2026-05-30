@@ -13,18 +13,17 @@ from ..db import (
     update_camera, save_camera_settings, get_camera_settings,
     get_camera_capabilities, get_logs, get_all_settings,
     set_setting, add_log, delete_camera_completely, delete_all_cameras,
-    ignore_camera, unignore_camera, get_ignored_cameras, is_camera_ignored,
+    ignore_camera, is_camera_ignored,
     create_camera, save_camera_capabilities, mark_camera_connected
 )
 from ..snapshot_server import grab_snapshot, get_placeholder_image
 from ..stream_manager import (
     build_ffmpeg_command, add_or_update_stream, get_stream_urls,
-    is_stream_active, restart_stream, remove_stream, remove_all_streams,
+    is_stream_active, remove_stream, remove_all_streams,
     start_camera_stream
 )
 from ..moonraker_client import (
-    register_camera, update_camera as update_moonraker_camera,
-    unregister_camera as unregister_moonraker_camera,
+    register_camera, unregister_camera as unregister_moonraker_camera,
     build_stream_url, build_snapshot_url, get_system_ip, is_available as moonraker_available,
     detect_klipper_ui_theme
 )
@@ -880,7 +879,6 @@ def delete_camera(camera_id: int):
         return redirect(url_for('cameras.dashboard'))
 
     camera_name = camera['friendly_name']
-    hardware_id = camera.get('hardware_id')
 
     # Stop stream if running
     if camera['connected']:
@@ -1314,7 +1312,7 @@ def api_framerates(camera_id: int):
 
         # Return both dropdowns - main one targeted, standby via OOB swap
         response = ''.join(options)
-        response += f'<select id="standby_framerate" name="standby_framerate" hx-swap-oob="innerHTML">'
+        response += '<select id="standby_framerate" name="standby_framerate" hx-swap-oob="innerHTML">'
         response += ''.join(standby_options)
         response += '</select>'
 

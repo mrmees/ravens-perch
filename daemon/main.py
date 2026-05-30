@@ -9,14 +9,12 @@ This module orchestrates all components:
 - Camera monitoring
 - Web UI server
 """
-import os
 import sys
 import signal
 import logging
 import threading
 import time
 import queue
-from pathlib import Path
 
 from .config import (
     BASE_DIR, LOG_DIR, LOG_LEVEL,
@@ -43,7 +41,7 @@ from .moonraker_client import (
     build_stream_url, build_snapshot_url, get_system_ip,
     set_url as set_moonraker_url, is_available as moonraker_is_available
 )
-from .print_status import init_monitor, get_monitor, stop_monitor
+from .print_status import init_monitor
 from . import db
 
 # Configure logging
@@ -589,7 +587,7 @@ class RavensPerchDaemon:
                 add_log("INFO", f"Camera reconnected: {camera['friendly_name']}", camera_id)
             else:
                 # New camera - probe capabilities and auto-configure
-                logger.info(f"New camera detected, probing capabilities...")
+                logger.info("New camera detected, probing capabilities...")
                 capabilities = probe_capabilities(device_info.path)
 
                 # Count current cameras for quality adjustment
@@ -687,7 +685,7 @@ class RavensPerchDaemon:
             if camera.get('moonraker_uid'):
                 unregister_camera(camera['moonraker_uid'])
                 db.update_camera(camera_id, moonraker_uid=None)
-                logger.debug(f"Unregistered camera from Moonraker")
+                logger.debug("Unregistered camera from Moonraker")
 
         except Exception as e:
             logger.error(f"Error handling camera disconnection: {e}", exc_info=True)
