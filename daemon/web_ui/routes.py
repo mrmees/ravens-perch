@@ -985,7 +985,8 @@ def settings_page():
         encoders=encoders,
         cpu_rating=cpu_rating,
         moonraker_available=moonraker_available(),
-        web_auth=web_auth_status()
+        web_auth=web_auth_status(),
+        raven_lines=RAVEN_LINES
     )
 
 

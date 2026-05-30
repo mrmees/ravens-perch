@@ -244,10 +244,15 @@
         <p class="text-muted" style="margin-top: 1rem;">
             The footer displays lines from Edgar Allan Poe's "The Raven" (1845).
         </p>
-        <button type="button" class="btn btn-secondary btn-sm" onclick="resetPoem()">
-            Restart Poem
-        </button>
-        <span id="poem-reset-status"></span>
+        <div class="about-actions">
+            <button type="button" class="btn btn-secondary btn-sm" onclick="resetPoem()">
+                Restart Poem
+            </button>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="openRavenPoem()">
+                Read Full Poem
+            </button>
+            <span id="poem-reset-status"></span>
+        </div>
     </div>
 
     <div class="settings-card danger-zone">
@@ -261,6 +266,38 @@
             {{ csrf_field() }}
             <button type="submit" class="btn btn-danger">Start Fresh</button>
         </form>
+    </div>
+</div>
+
+<div class="modal-backdrop" id="raven-poem-modal" hidden>
+    <div class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="raven-poem-title">
+        <div class="modal-header">
+            <div class="modal-title">
+                <h3 id="raven-poem-title">The Raven</h3>
+                <p>Edgar Allan Poe, 1845</p>
+            </div>
+            <button type="button"
+                    class="modal-close"
+                    id="raven-poem-close"
+                    onclick="closeRavenPoem()"
+                    aria-label="Close poem">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round">
+                    <line x1="18" y1="6" x2="6" y2="18"></line>
+                    <line x1="6" y1="6" x2="18" y2="18"></line>
+                </svg>
+            </button>
+        </div>
+        <div class="poem-scroll">
+            <div class="poem-text">
+                {% for stanza in raven_lines|batch(6) %}
+                <p>
+                    {% for line in stanza %}
+                        {% if line %}{{ line }}{% if not loop.last %}<br>{% endif %}{% endif %}
+                    {% endfor %}
+                </p>
+                {% endfor %}
+            </div>
+        </div>
     </div>
 </div>
 {% endblock %}
@@ -395,6 +432,42 @@ function detectThemeColors() {
 
 // Auto-detect theme colors on page load
 document.addEventListener('DOMContentLoaded', detectThemeColors);
+
+function openRavenPoem() {
+    const modal = document.getElementById('raven-poem-modal');
+    const closeButton = document.getElementById('raven-poem-close');
+    if (!modal) return;
+
+    modal.hidden = false;
+    document.body.classList.add('modal-open');
+    if (closeButton) {
+        closeButton.focus();
+    }
+}
+
+function closeRavenPoem() {
+    const modal = document.getElementById('raven-poem-modal');
+    if (!modal) return;
+
+    modal.hidden = true;
+    document.body.classList.remove('modal-open');
+}
+
+const ravenPoemModal = document.getElementById('raven-poem-modal');
+if (ravenPoemModal) {
+    ravenPoemModal.addEventListener('click', function(e) {
+        if (e.target === this) {
+            closeRavenPoem();
+        }
+    });
+}
+
+document.addEventListener('keydown', function(e) {
+    const modal = document.getElementById('raven-poem-modal');
+    if (e.key === 'Escape' && modal && !modal.hidden) {
+        closeRavenPoem();
+    }
+});
 
 // Reset poem to beginning
 function resetPoem() {

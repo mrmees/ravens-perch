@@ -5,6 +5,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DASHBOARD_TEMPLATE = ROOT / "daemon/web_ui/templates/dashboard.html"
 CAMERA_CARD_TEMPLATE = ROOT / "daemon/web_ui/templates/partials/camera_card.html"
+STYLE_CSS = ROOT / "daemon/web_ui/static/css/style.css"
 
 
 class DashboardDiagnosticsUITests(unittest.TestCase):
@@ -44,6 +45,23 @@ class DashboardDiagnosticsUITests(unittest.TestCase):
             self.assertIn("usb-warning-badge", template)
             self.assertIn("usb_topology_warning", template)
             self.assertIn("USB 2.0 topology warning", template)
+
+    def test_usb_warning_panel_can_be_dismissed_without_removing_card_icon(self):
+        template = DASHBOARD_TEMPLATE.read_text(encoding="utf-8")
+
+        self.assertIn("data-usb-warning-panel", template)
+        self.assertIn("data-usb-warning-dismiss", template)
+        self.assertIn("ravens-perch-usb-warning-dismissed", template)
+        self.assertIn("localStorage", template)
+        self.assertIn("usb-warning-badge", template)
+
+    def test_usb_warning_has_mobile_footer_spacing(self):
+        styles = STYLE_CSS.read_text(encoding="utf-8")
+
+        self.assertIn(".usb-warning-section", styles)
+        self.assertIn("margin: 1.5rem 0 4.5rem;", styles)
+        self.assertIn("@media (max-width: 600px)", styles)
+        self.assertIn("margin-bottom: 6rem;", styles)
 
 
 if __name__ == "__main__":
