@@ -5,12 +5,11 @@ Polls Moonraker for print status and manages overlay text files
 and dynamic framerate switching.
 """
 import logging
-import os
 import threading
 import time
 from datetime import datetime
 from typing import Dict, Optional, Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
 
 import requests
@@ -284,7 +283,7 @@ class PrintStatusMonitor:
                         if match:
                             self._status.current_layer = int(match.group(1))
                             self._status.total_layers = int(match.group(2))
-                    except:
+                    except (IndexError, ValueError):
                         pass
 
                 # Calculate time remaining based on progress and elapsed time

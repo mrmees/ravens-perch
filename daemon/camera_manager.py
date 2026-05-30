@@ -1,19 +1,19 @@
 """
 Ravens Perch - Camera Detection and Management
 """
-import os
+import importlib.util
 import re
 import subprocess
 import logging
 import threading
 import time
 from pathlib import Path
-from typing import Optional, Dict, List, Callable, Tuple
+from typing import Optional, Dict, List, Callable
 from dataclasses import dataclass
 
 from .config import (
     FORMAT_PRIORITY, FORMAT_ALIASES, QUALITY_TIERS,
-    DEFAULT_CAMERA_SETTINGS, DEBOUNCE_DELAY
+    DEBOUNCE_DELAY
 )
 from .hardware import estimate_cpu_capability
 
@@ -451,32 +451,31 @@ def find_video_devices() -> List[str]:
         #       /dev/video0
         #       /dev/video1
         current_is_usb = False
-        first_device_in_group = None
+        group_devices = []
 
         for line in result.stdout.split('\n'):
             line_stripped = line.strip()
 
             if not line_stripped:
                 # Empty line - end of group
-                if current_is_usb and first_device_in_group:
-                    devices.append(first_device_in_group)
+                if current_is_usb:
+                    devices.extend([path for path in group_devices if is_capture_device(path)])
                 current_is_usb = False
-                first_device_in_group = None
+                group_devices = []
                 continue
 
             if line_stripped.startswith('/dev/'):
                 # Device path line (indented)
-                if current_is_usb and first_device_in_group is None:
-                    # First device in a USB group is the capture device
-                    first_device_in_group = line_stripped
+                if current_is_usb:
+                    group_devices.append(line_stripped)
             elif '(usb-' in line.lower():
                 # Header line for a USB device
                 current_is_usb = True
-                first_device_in_group = None
+                group_devices = []
 
         # Handle last group if no trailing newline
-        if current_is_usb and first_device_in_group:
-            devices.append(first_device_in_group)
+        if current_is_usb:
+            devices.extend([path for path in group_devices if is_capture_device(path)])
 
         logger.debug(f"Found USB video devices: {devices}")
 
@@ -530,12 +529,10 @@ class CameraMonitor:
 
         self._running = True
 
-        # Try pyudev first
-        try:
-            import pyudev
+        if importlib.util.find_spec("pyudev") is not None:
             self._thread = threading.Thread(target=self._udev_monitor, daemon=True)
             logger.info("Using pyudev for camera monitoring")
-        except ImportError:
+        else:
             self._thread = threading.Thread(target=self._polling_monitor, daemon=True)
             logger.info("Using polling for camera monitoring (pyudev not available)")
 

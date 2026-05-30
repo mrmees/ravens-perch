@@ -9,19 +9,18 @@ This module orchestrates all components:
 - Camera monitoring
 - Web UI server
 """
-import os
 import sys
 import signal
 import logging
 import threading
 import time
 import queue
-from pathlib import Path
 
 from .config import (
     BASE_DIR, LOG_DIR, LOG_LEVEL,
     WEB_UI_HOST, WEB_UI_PORT
 )
+from .logging_utils import apply_log_level, resolve_log_level
 from .db import init_db, add_log, get_all_cameras, update_camera
 from .hardware import (
     detect_encoders, check_ffmpeg_available,
@@ -39,9 +38,10 @@ from .stream_manager import (
 )
 from .moonraker_client import (
     detect_moonraker_url, register_camera, unregister_camera,
-    build_stream_url, build_snapshot_url, get_system_ip
+    build_stream_url, build_snapshot_url, get_system_ip,
+    set_url as set_moonraker_url, is_available as moonraker_is_available
 )
-from .print_status import init_monitor, get_monitor, stop_monitor
+from .print_status import init_monitor
 from . import db
 
 # Configure logging
@@ -71,7 +71,7 @@ def setup_logging():
     # Console handler
     console_handler = logging.StreamHandler()
     console_handler.setFormatter(console_formatter)
-    console_handler.setLevel(getattr(logging, LOG_LEVEL, logging.INFO))
+    console_handler.setLevel(getattr(logging, resolve_log_level(LOG_LEVEL), logging.INFO))
 
     # Root logger
     root_logger = logging.getLogger()
@@ -88,6 +88,9 @@ def setup_logging():
 
 logger = setup_logging()
 
+MEDIAMTX_RECONCILE_INTERVAL = 15.0
+MOONRAKER_RECONCILE_INTERVAL = 30.0
+
 
 class RavensPerchDaemon:
     """Main daemon class that orchestrates all components."""
@@ -100,7 +103,15 @@ class RavensPerchDaemon:
         self.moonraker_url = None
         self.print_monitor = None
         self._moonraker_queue = queue.Queue()
+        self._moonraker_queue_lock = threading.Lock()
+        self._queued_moonraker_camera_ids = set()
         self._moonraker_worker = None
+        self._mediamtx_reconciler = None
+        self._moonraker_reconciler = None
+        self._moonraker_cleaned = False
+        self._moonraker_announced = False
+        self._moonraker_unavailable_logged = False
+        self._camera_framerates = {}
 
     def start(self):
         """Start the daemon and all components."""
@@ -118,6 +129,7 @@ class RavensPerchDaemon:
             # Step 1: Initialize database
             logger.info("Initializing database...")
             init_db()
+            self._apply_saved_log_level()
             add_log("INFO", "Ravens Perch starting")
 
             # Initialize encoder cache path
@@ -164,51 +176,9 @@ class RavensPerchDaemon:
                 if removed > 0:
                     logger.info(f"Removed {removed} stale stream(s)")
 
-            # Step 6: Detect Moonraker
+            # Step 6: Detect Moonraker and initialize integrations when available.
             logger.info("Detecting Moonraker...")
-            self.moonraker_url = detect_moonraker_url()
-            if self.moonraker_url:
-                logger.info(f"Moonraker found at: {self.moonraker_url}")
-                add_log("INFO", f"Moonraker found at: {self.moonraker_url}")
-
-                # Step 6b: Clean up stale Moonraker webcam registrations
-                logger.info("Cleaning up stale Moonraker webcam registrations...")
-                cleaned = 0
-                for camera in db.get_all_cameras():
-                    if camera.get('moonraker_uid'):
-                        unregister_camera(camera['moonraker_uid'])
-                        db.update_camera(camera['id'], moonraker_uid=None)
-                        cleaned += 1
-                if cleaned > 0:
-                    logger.info(f"Removed {cleaned} stale webcam registration(s)")
-            else:
-                logger.warning("Moonraker not found - webcam registration disabled")
-                add_log("WARNING", "Moonraker not found")
-
-            # Step 6c: Initialize print status monitor (if Moonraker available)
-            if self.moonraker_url:
-                logger.info("Initializing print status monitor...")
-                # Get overlay update interval from settings (default 5 seconds)
-                overlay_interval = db.get_setting('overlay_update_interval', 5)
-                self.print_monitor = init_monitor(
-                    moonraker_url=self.moonraker_url,
-                    data_dir=str(BASE_DIR),
-                    printing_poll_interval=float(overlay_interval),
-                    standby_poll_interval=30.0,
-                    standby_delay=30.0
-                )
-                self.print_monitor.set_state_change_callback(self._on_print_state_change)
-                self.print_monitor.start()
-                logger.info(f"Print status monitor started (update interval: {overlay_interval}s)")
-
-            # Step 6d: Start Moonraker registration worker (if available)
-            if self.moonraker_url:
-                self._moonraker_worker = threading.Thread(
-                    target=self._moonraker_registration_worker,
-                    daemon=True
-                )
-                self._moonraker_worker.start()
-                logger.info("Moonraker registration worker started")
+            self._ensure_moonraker_integration()
 
             # Step 7: Mark all cameras as disconnected initially
             self._reset_camera_states()
@@ -225,13 +195,18 @@ class RavensPerchDaemon:
             logger.info("Scanning for existing cameras...")
             self.camera_monitor.scan_existing()
 
+            # Step 10: Keep runtime service integrations reconciled after restarts
+            self._start_mediamtx_reconciler()
+            self._start_moonraker_reconciler()
+
             logger.info("Ravens Perch is running")
             add_log("INFO", "Ravens Perch started successfully")
 
             # Announce management URL to Klipper console (if Moonraker available)
-            if self.moonraker_url:
+            if self.moonraker_url and not self._moonraker_announced:
                 from .moonraker_client import announce_management_url
                 announce_management_url()
+                self._moonraker_announced = True
 
             # Keep main thread alive
             while self.running:
@@ -256,6 +231,14 @@ class RavensPerchDaemon:
         if self.camera_monitor:
             self.camera_monitor.stop()
 
+        # Stop daemon-owned FFmpeg publishers and remove dynamic MediaMTX paths
+        try:
+            removed = remove_all_streams()
+            if removed:
+                logger.info(f"Removed {removed} MediaMTX stream path(s)")
+        except Exception as e:
+            logger.warning(f"Error stopping streams: {e}")
+
         add_log("INFO", "Ravens Perch stopped")
         logger.info("Ravens Perch stopped")
 
@@ -279,6 +262,247 @@ class RavensPerchDaemon:
             logger.warning("v4l2-utils not available - some features may not work")
             add_log("WARNING", "v4l2-utils not found")
 
+    def _apply_saved_log_level(self):
+        """Apply the log level stored by the web UI."""
+        configured = db.get_setting('log_level', LOG_LEVEL)
+        applied = apply_log_level(configured, LOG_LEVEL)
+        logger.info(f"Log level set to {applied}")
+
+    def _resolve_moonraker_url(self):
+        """Use configured Moonraker URL when set; otherwise fall back to auto-detection."""
+        configured = db.get_setting('moonraker_url')
+        configured = str(configured).strip() if configured else ""
+
+        if configured:
+            set_moonraker_url(configured)
+            if moonraker_is_available():
+                logger.info(f"Using configured Moonraker URL: {configured}")
+                return configured
+
+            logger.warning(f"Configured Moonraker URL is not available: {configured}")
+            add_log("WARNING", f"Configured Moonraker URL is not available: {configured}")
+            return None
+
+        return detect_moonraker_url()
+
+    def _start_moonraker_worker(self):
+        """Start the Moonraker registration worker if it is not already running."""
+        if self._moonraker_worker and self._moonraker_worker.is_alive():
+            return
+
+        self._moonraker_worker = threading.Thread(
+            target=self._moonraker_registration_worker,
+            daemon=True,
+            name="moonraker-registration-worker",
+        )
+        self._moonraker_worker.start()
+        logger.info("Moonraker registration worker started")
+
+    def _start_moonraker_reconciler(self):
+        """Start a background worker that restores Moonraker integration after boot races."""
+        if self._moonraker_reconciler and self._moonraker_reconciler.is_alive():
+            return
+
+        self._moonraker_reconciler = threading.Thread(
+            target=self._moonraker_reconciler_loop,
+            daemon=True,
+            name="moonraker-reconciler",
+        )
+        self._moonraker_reconciler.start()
+        logger.info("Moonraker reconciler started")
+
+    def _moonraker_reconciler_loop(self):
+        """Periodically ensure Moonraker-dependent integrations are available."""
+        while self.running:
+            try:
+                self._ensure_moonraker_integration()
+            except Exception as e:
+                logger.warning(f"Moonraker reconciliation failed: {e}", exc_info=True)
+
+            self._sleep_while_running(MOONRAKER_RECONCILE_INTERVAL)
+
+    def _ensure_moonraker_integration(self):
+        """Initialize or repair Moonraker integration without touching Moonraker service state."""
+        if self.moonraker_url and moonraker_is_available():
+            available_url = self.moonraker_url
+        else:
+            available_url = self._resolve_moonraker_url()
+
+        if not available_url:
+            if not self._moonraker_unavailable_logged:
+                if self.moonraker_url:
+                    logger.warning("Moonraker is unavailable; webcam registration will retry")
+                else:
+                    logger.warning("Moonraker not found - webcam registration will retry")
+                    add_log("WARNING", "Moonraker not found")
+                self._moonraker_unavailable_logged = True
+            self.moonraker_url = None
+            return False
+
+        first_available = self.moonraker_url != available_url
+        self.moonraker_url = available_url
+        self._moonraker_unavailable_logged = False
+        if first_available:
+            logger.info(f"Moonraker found at: {self.moonraker_url}")
+            add_log("INFO", f"Moonraker found at: {self.moonraker_url}")
+
+        self._cleanup_stale_moonraker_registrations_once()
+        self._ensure_print_monitor()
+        self._start_moonraker_worker()
+        self._queue_missing_moonraker_registrations()
+        return True
+
+    def _cleanup_stale_moonraker_registrations_once(self):
+        """Clear stored webcam UIDs once after Moonraker becomes reachable."""
+        if self._moonraker_cleaned:
+            return
+
+        logger.info("Cleaning up stale Moonraker webcam registrations...")
+        cleaned = 0
+        for camera in db.get_all_cameras():
+            if camera.get('moonraker_uid'):
+                unregister_camera(camera['moonraker_uid'])
+                db.update_camera(camera['id'], moonraker_uid=None)
+                cleaned += 1
+        if cleaned > 0:
+            logger.info(f"Removed {cleaned} stale webcam registration(s)")
+
+        self._moonraker_cleaned = True
+
+    def _ensure_print_monitor(self):
+        """Start print status monitoring once Moonraker is reachable."""
+        if self.print_monitor:
+            return
+
+        logger.info("Initializing print status monitor...")
+        overlay_interval = db.get_setting('overlay_update_interval', 5)
+        self.print_monitor = init_monitor(
+            moonraker_url=self.moonraker_url,
+            data_dir=str(BASE_DIR),
+            printing_poll_interval=float(overlay_interval),
+            standby_poll_interval=30.0,
+            standby_delay=30.0
+        )
+        self.print_monitor.set_state_change_callback(self._on_print_state_change)
+        self.print_monitor.start()
+        logger.info(f"Print status monitor started (update interval: {overlay_interval}s)")
+
+    def _queue_moonraker_registration(self, camera_id: int, friendly_name: str, rotation: int = 0):
+        """Queue one camera registration, coalescing duplicate retries."""
+        with self._moonraker_queue_lock:
+            if camera_id in self._queued_moonraker_camera_ids:
+                return
+            self._queued_moonraker_camera_ids.add(camera_id)
+            self._moonraker_queue.put((camera_id, friendly_name, rotation))
+
+    def _queue_missing_moonraker_registrations(self):
+        """Queue connected enabled cameras that are not registered with Moonraker."""
+        for camera in db.get_all_cameras_with_settings():
+            if not camera['connected'] or not camera['enabled'] or camera.get('moonraker_uid'):
+                continue
+
+            settings = camera.get('settings') or {}
+            rotation = settings.get('rotation', 0)
+            self._queue_moonraker_registration(camera['id'], camera['friendly_name'], rotation)
+
+    def _record_camera_framerate(self, camera_id: int, settings: dict):
+        """Track the effective framerate currently used by a daemon-started stream."""
+        framerate = (settings or {}).get('framerate')
+        if framerate:
+            self._camera_framerates[camera_id] = framerate
+
+    def _printer_effective_standby(self) -> bool:
+        """Return whether print-aware stream settings should use standby values."""
+        if not self.print_monitor:
+            return False
+
+        effective_state = getattr(self.print_monitor, 'effective_state', None)
+        if effective_state:
+            return effective_state == 'standby'
+
+        return not self.print_monitor.status.is_printing
+
+    def _start_mediamtx_reconciler(self):
+        """Start a background worker that restores MediaMTX paths after restarts."""
+        if self._mediamtx_reconciler and self._mediamtx_reconciler.is_alive():
+            return
+
+        self._mediamtx_reconciler = threading.Thread(
+            target=self._mediamtx_reconciler_loop,
+            daemon=True,
+            name="mediamtx-reconciler",
+        )
+        self._mediamtx_reconciler.start()
+        logger.info("MediaMTX reconciler started")
+
+    def _mediamtx_reconciler_loop(self):
+        """Periodically ensure connected enabled cameras have MediaMTX paths."""
+        last_available = None
+
+        while self.running:
+            try:
+                available = wait_for_mediamtx(timeout=2)
+                if available:
+                    if last_available is not True:
+                        logger.info("MediaMTX available; reconciling streams")
+                    self._reconcile_mediamtx_streams()
+                    last_available = True
+                else:
+                    if last_available is not False:
+                        logger.warning("MediaMTX unavailable; streams will reconcile when it returns")
+                    last_available = False
+            except Exception as e:
+                logger.warning(f"MediaMTX reconciliation failed: {e}", exc_info=True)
+
+            self._sleep_while_running(MEDIAMTX_RECONCILE_INTERVAL)
+
+    def _sleep_while_running(self, seconds: float):
+        """Sleep in short increments so shutdown is responsive."""
+        deadline = time.time() + seconds
+        while self.running and time.time() < deadline:
+            time.sleep(min(1.0, max(0.0, deadline - time.time())))
+
+    def _reconcile_mediamtx_streams(self):
+        """Recreate MediaMTX paths and daemon-owned publishers for connected cameras."""
+        reconciled = 0
+        failed = 0
+
+        for camera in db.get_all_cameras_with_settings():
+            if not camera['connected'] or not camera['enabled'] or not camera['device_path']:
+                continue
+
+            settings = (camera['settings'] or {}).copy()
+            camera_id = str(camera['id'])
+
+            overlay_path = None
+            if settings.get('overlay_enabled') and self.print_monitor:
+                self.print_monitor.set_camera_overlay(camera_id, True, settings)
+                overlay_path = str(self.print_monitor.get_overlay_path(camera_id))
+
+            if self.print_monitor and settings.get('standby_enabled') and settings.get('standby_framerate'):
+                if self._printer_effective_standby():
+                    settings['framerate'] = settings['standby_framerate']
+
+            ffmpeg_cmd = build_ffmpeg_command(
+                camera['device_path'],
+                settings,
+                camera_id,
+                settings.get('encoder', 'libx264'),
+                overlay_path=overlay_path,
+            )
+            success, error = add_or_update_stream(camera_id, ffmpeg_cmd)
+            if success:
+                self._record_camera_framerate(camera['id'], settings)
+                reconciled += 1
+            else:
+                failed += 1
+                logger.warning(f"Failed to reconcile stream for camera {camera_id}: {error}")
+
+        if reconciled:
+            logger.debug(f"Reconciled {reconciled} MediaMTX stream(s)")
+        if failed:
+            add_log("WARNING", f"Failed to reconcile {failed} MediaMTX stream(s)")
+
     def _reset_camera_states(self):
         """Mark all cameras as disconnected on startup."""
         cameras = get_all_cameras()
@@ -289,6 +513,8 @@ class RavensPerchDaemon:
     def _start_web_ui(self):
         """Start the web UI in a background thread."""
         try:
+            from .web_ui import routes as web_routes
+            web_routes.set_effective_framerate_callback(self._record_camera_framerate)
             from .web_ui.app import create_app
             app = create_app()
         except Exception as e:
@@ -361,7 +587,7 @@ class RavensPerchDaemon:
                 add_log("INFO", f"Camera reconnected: {camera['friendly_name']}", camera_id)
             else:
                 # New camera - probe capabilities and auto-configure
-                logger.info(f"New camera detected, probing capabilities...")
+                logger.info("New camera detected, probing capabilities...")
                 capabilities = probe_capabilities(device_info.path)
 
                 # Count current cameras for quality adjustment
@@ -385,7 +611,7 @@ class RavensPerchDaemon:
                 add_log("INFO", f"New camera detected: {device_info.hardware_name}", camera_id)
 
                 # Brief delay after probing to ensure V4L2 device is fully released
-                # before FFmpeg tries to open it (prevents runOnInitRestart churn)
+                # before daemon-owned FFmpeg tries to open it.
                 time.sleep(0.5)
 
             # Get current camera data
@@ -404,7 +630,7 @@ class RavensPerchDaemon:
 
             # Apply standby framerate if enabled and printer is idle
             if self.print_monitor and settings.get('standby_enabled') and settings.get('standby_framerate'):
-                if not self.print_monitor.status.is_printing:
+                if self._printer_effective_standby():
                     settings['framerate'] = settings['standby_framerate']
 
             # Start stream (applies v4l2 controls, builds command, starts stream)
@@ -415,6 +641,7 @@ class RavensPerchDaemon:
                 self.print_monitor
             )
             if success:
+                self._record_camera_framerate(camera_id, settings)
                 logger.info(f"Stream started for camera {camera_id}")
             else:
                 logger.error(f"Failed to start stream: {error}")
@@ -424,7 +651,7 @@ class RavensPerchDaemon:
             # Queue Moonraker registration (processed sequentially in background)
             if self.moonraker_url:
                 rotation = settings.get('rotation', 0)
-                self._moonraker_queue.put((camera_id, camera['friendly_name'], rotation))
+                self._queue_moonraker_registration(camera_id, camera['friendly_name'], rotation)
 
         except Exception as e:
             logger.error(f"Error handling camera connection: {e}", exc_info=True)
@@ -458,7 +685,7 @@ class RavensPerchDaemon:
             if camera.get('moonraker_uid'):
                 unregister_camera(camera['moonraker_uid'])
                 db.update_camera(camera_id, moonraker_uid=None)
-                logger.debug(f"Unregistered camera from Moonraker")
+                logger.debug("Unregistered camera from Moonraker")
 
         except Exception as e:
             logger.error(f"Error handling camera disconnection: {e}", exc_info=True)
@@ -472,6 +699,14 @@ class RavensPerchDaemon:
                 continue
 
             try:
+                camera = db.get_camera_with_settings(cam_id)
+                if not camera or not camera['connected'] or not camera['enabled']:
+                    logger.debug(f"Skipping Moonraker registration for inactive camera {cam_id}")
+                    continue
+
+                settings = camera.get('settings') or {}
+                friendly_name = camera['friendly_name']
+                rotation = settings.get('rotation', rotation)
                 host = get_system_ip()
                 stream_url = build_stream_url(str(cam_id), host)
                 snapshot_url = build_snapshot_url(str(cam_id), host)
@@ -492,6 +727,8 @@ class RavensPerchDaemon:
             except Exception as e:
                 logger.error(f"Moonraker registration error for camera {cam_id}: {e}")
             finally:
+                with self._moonraker_queue_lock:
+                    self._queued_moonraker_camera_ids.discard(cam_id)
                 self._moonraker_queue.task_done()
 
             # Small delay between registrations to avoid overwhelming Moonraker

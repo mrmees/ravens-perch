@@ -2,6 +2,7 @@
 Description=MediaMTX RTSP/WebRTC/HLS Server
 Documentation=https://github.com/bluenviron/mediamtx
 After=network.target
+PartOf=ravens-perch.service
 
 [Service]
 Type=simple

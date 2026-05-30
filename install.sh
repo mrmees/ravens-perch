@@ -19,6 +19,9 @@ INSTALL_DIR="${HOME}/ravens-perch"
 MEDIAMTX_VERSION="v1.5.1"
 KLIPPER_CONFIG_DIR="${HOME}/printer_data/config"
 MOONRAKER_URL="http://127.0.0.1:7125"
+CURRENT_RAVENS_SERVICES=(ravens-perch mediamtx)
+LEGACY_RAVENS_SERVICES=(web-ui camera-hotplug snapfeeder raven-watchdog)
+NGINX_CONFIGURED=false
 
 # Logging functions
 log_info() {
@@ -89,6 +92,26 @@ check_user() {
         log_error "Do not run this script as root. Run as your normal user."
         exit 1
     fi
+}
+
+# Stop old services before replacing files, and remove units from the retired
+# split-service stack so they cannot keep running after a reinstall.
+cleanup_existing_services() {
+    log_info "Stopping existing Ravens Perch services..."
+    local service
+
+    for service in "${CURRENT_RAVENS_SERVICES[@]}" "${LEGACY_RAVENS_SERVICES[@]}"; do
+        sudo systemctl stop "${service}.service" 2>/dev/null || true
+    done
+
+    log_info "Removing legacy Ravens Perch service units..."
+    for service in "${LEGACY_RAVENS_SERVICES[@]}"; do
+        sudo systemctl disable "${service}.service" 2>/dev/null || true
+        sudo rm -f "/etc/systemd/system/${service}.service"
+    done
+
+    sudo systemctl daemon-reload
+    log_success "Existing service cleanup complete"
 }
 
 # Migrate from crowsnest
@@ -218,15 +241,7 @@ except:
         log_info "No existing cameras to remove"
     fi
 
-    # Restart Moonraker to apply changes
-    log_info "Restarting Moonraker..."
-    if systemctl is-active --quiet moonraker.service 2>/dev/null; then
-        sudo systemctl restart moonraker.service || true
-        sleep 2
-        log_success "Moonraker restarted"
-    else
-        log_warn "Moonraker service not running"
-    fi
+    log_info "Moonraker was not restarted. Restart it manually if you want it to reload moonraker.conf now."
 
     log_success "Migration from crowsnest complete"
     echo ""
@@ -347,11 +362,100 @@ install_mediamtx() {
         # Set API address
         if grep -q "^apiAddress:" mediamtx.yml; then
             sed -i 's/^apiAddress:.*/apiAddress: 127.0.0.1:9997/' mediamtx.yml
+        else
+            echo "apiAddress: 127.0.0.1:9997" >> mediamtx.yml
         fi
     fi
 
     cd "${INSTALL_DIR}"
     log_success "MediaMTX installed"
+}
+
+# Configure optional web UI Basic Auth
+valid_web_auth_username() {
+    [[ "$1" =~ ^[A-Za-z0-9._-]+$ ]]
+}
+
+configure_web_auth() {
+    local auth_env_file="${INSTALL_DIR}/data/web-auth.env"
+    local password_file="${INSTALL_DIR}/data/web-ui-password"
+    local choice="${RAVENS_PERCH_ENABLE_WEB_AUTH:-}"
+    local username="${RAVENS_PERCH_WEB_AUTH_USERNAME:-}"
+    local username_default="${username:-ravens}"
+    local password="${RAVENS_PERCH_WEB_AUTH_PASSWORD:-}"
+    local password_confirm=""
+
+    if [ -z "$choice" ]; then
+        read -r -p "Enable Basic Auth for the web UI? (Y/n): " choice
+    fi
+
+    case "${choice,,}" in
+        n|no|false|0)
+            cat > "$auth_env_file" << EOF
+RAVENS_PERCH_WEB_AUTH_DISABLED=1
+EOF
+            chmod 600 "$auth_env_file"
+            log_info "Web UI Basic Auth disabled"
+            return
+            ;;
+    esac
+
+    while true; do
+        if [ -z "${RAVENS_PERCH_WEB_AUTH_USERNAME:-}" ]; then
+            read -r -p "Web UI username [${username_default}]: " username
+            username="${username:-$username_default}"
+        fi
+
+        if valid_web_auth_username "$username"; then
+            break
+        fi
+
+        if [ -n "${RAVENS_PERCH_WEB_AUTH_USERNAME:-}" ]; then
+            log_error "Invalid RAVENS_PERCH_WEB_AUTH_USERNAME. Use letters, numbers, dots, underscores, or dashes."
+            exit 1
+        fi
+
+        log_warn "Username may only contain letters, numbers, dots, underscores, or dashes."
+        username=""
+    done
+
+    if [ -n "$password" ]; then
+        log_info "Using Web UI password from RAVENS_PERCH_WEB_AUTH_PASSWORD"
+    else
+        while true; do
+            read -r -s -p "Web UI password: " password
+            echo ""
+
+            if [ -z "$password" ]; then
+                log_warn "Password cannot be empty."
+                continue
+            fi
+
+            read -r -s -p "Confirm Web UI password: " password_confirm
+            echo ""
+
+            if [ "$password" = "$password_confirm" ]; then
+                break
+            fi
+
+            log_warn "Passwords did not match. Try again."
+            password=""
+        done
+    fi
+
+    mkdir -p "$(dirname "$password_file")"
+    printf '%s\n' "$password" > "$password_file"
+    chmod 600 "$password_file"
+
+    cat > "$auth_env_file" << EOF
+RAVENS_PERCH_WEB_AUTH_USERNAME=${username}
+RAVENS_PERCH_WEB_AUTH_PASSWORD_FILE=${password_file}
+EOF
+    chmod 600 "$auth_env_file"
+
+    log_success "Web UI Basic Auth enabled"
+    log_info "Web UI username: ${username}"
+    log_info "Web UI password saved at: ${password_file}"
 }
 
 # Create Python virtual environment
@@ -373,8 +477,8 @@ create_venv() {
     pip install --upgrade pip wheel setuptools
 
     # Install core requirements
-    log_info "Installing core packages: flask, requests, psutil, ruamel.yaml..."
-    pip install flask requests psutil ruamel.yaml
+    log_info "Installing core packages: flask, requests, psutil, ruamel.yaml, pillow..."
+    pip install flask requests psutil ruamel.yaml pillow
 
     # Install optional packages (may fail on some platforms)
     log_info "Installing optional packages..."
@@ -411,14 +515,17 @@ create_mediamtx_service() {
 [Unit]
 Description=MediaMTX Streaming Server
 After=network.target
+PartOf=ravens-perch.service
 
 [Service]
 Type=simple
 User=${RAVENS_USER}
 WorkingDirectory=${INSTALL_DIR}/mediamtx
-ExecStart=${INSTALL_DIR}/mediamtx/mediamtx
+ExecStart=${INSTALL_DIR}/mediamtx/mediamtx ${INSTALL_DIR}/mediamtx/mediamtx.yml
 Restart=on-failure
 RestartSec=5
+TimeoutStopSec=10
+SyslogIdentifier=mediamtx
 
 [Install]
 WantedBy=multi-user.target
@@ -441,6 +548,7 @@ Wants=mediamtx.service
 Type=simple
 User=${RAVENS_USER}
 Environment="RAVENS_PERCH_DIR=${INSTALL_DIR}"
+EnvironmentFile=-${INSTALL_DIR}/data/web-auth.env
 Environment="PATH=/usr/local/bin:/usr/bin:/bin"
 WorkingDirectory=${INSTALL_DIR}
 ExecStart=${INSTALL_DIR}/venv/bin/python -m daemon.main
@@ -478,6 +586,7 @@ location /cameras/ {
     proxy_set_header X-Real-IP $remote_addr;
     proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
     proxy_set_header X-Forwarded-Proto $scheme;
+    proxy_set_header Authorization $http_authorization;
 }
 EOF
     log_success "Created ${snippet_file}"
@@ -486,7 +595,7 @@ EOF
     local target_conf=""
 
     for conf in /etc/nginx/sites-enabled/*; do
-        if [ -f "$conf" ] && grep -q "listen 80" "$conf" 2>/dev/null; then
+        if [ -f "$conf" ] && grep -Eq "listen[[:space:]]+80([[:space:];]|$)" "$conf" 2>/dev/null; then
             # Resolve symlink to get the actual file
             target_conf=$(readlink -f "$conf")
             log_info "Found active site on port 80: ${target_conf}"
@@ -496,20 +605,23 @@ EOF
 
     if [ -z "$target_conf" ]; then
         log_warn "Could not find nginx site configuration serving port 80."
+        log_warn "Ravens Perch will still run locally, but the printer UI and Moonraker snapshots need the nginx /cameras/ proxy."
         log_info "Please manually add to your nginx server block:"
         echo ""
         echo "    include /etc/nginx/snippets/ravens-perch.conf;"
         echo ""
-        return
+        return 1
     fi
 
     # Check if already configured (either include or direct location)
     if grep -q "ravens-perch.conf" "$target_conf" 2>/dev/null; then
         log_info "Ravens Perch already configured in ${target_conf}"
+        NGINX_CONFIGURED=true
         return
     fi
     if grep -q "location /cameras/" "$target_conf" 2>/dev/null; then
         log_info "/cameras/ location already exists in ${target_conf}"
+        NGINX_CONFIGURED=true
         return
     fi
 
@@ -565,19 +677,23 @@ PYTHON_SCRIPT
         sudo cp "${target_conf}.ravens-perch.bak" "$target_conf"
         log_info "Please manually add to ${target_conf}:"
         echo "    include /etc/nginx/snippets/ravens-perch.conf;"
-        return
+        return 1
     fi
 
     # Test and reload nginx
     if sudo nginx -t 2>/dev/null; then
         sudo systemctl reload nginx || true
+        NGINX_CONFIGURED=true
         log_success "Nginx configured and reloaded"
     else
         log_warn "Nginx config test failed - restoring backup..."
         sudo cp "${target_conf}.ravens-perch.bak" "$target_conf"
-        sudo nginx -t && sudo systemctl reload nginx
+        if sudo nginx -t >/dev/null 2>&1; then
+            sudo systemctl reload nginx || true
+        fi
         log_info "Please manually add to your nginx config:"
         echo "    include /etc/nginx/snippets/ravens-perch.conf;"
+        return 1
     fi
 }
 
@@ -667,14 +783,12 @@ start_services() {
 
     sudo systemctl daemon-reload
 
-    # Enable services
-    sudo systemctl enable mediamtx ravens-perch
+    # Enable the app service. MediaMTX is wanted by ravens-perch and is kept
+    # in the same lifecycle via PartOf=ravens-perch.service.
+    sudo systemctl disable mediamtx 2>/dev/null || true
+    sudo systemctl enable ravens-perch
 
-    # Start MediaMTX first
-    sudo systemctl start mediamtx || log_warn "MediaMTX may already be running"
-    sleep 2
-
-    # Start Ravens Perch
+    # Start Ravens Perch; systemd will start MediaMTX first.
     sudo systemctl start ravens-perch || log_warn "Ravens Perch may already be running"
 
     log_success "Services started"
@@ -749,6 +863,39 @@ except:
     log_success "Camera cleanup complete"
 }
 
+ravens_perch_auth_env_value() {
+    local key="$1"
+    local auth_env_file="${INSTALL_DIR}/data/web-auth.env"
+
+    if [ ! -f "$auth_env_file" ]; then
+        return 0
+    fi
+
+    grep -E "^${key}=" "$auth_env_file" 2>/dev/null | head -n 1 | cut -d= -f2-
+}
+
+ravens_perch_api_curl() {
+    local path="$1"
+    local auth_env_file="${INSTALL_DIR}/data/web-auth.env"
+    local url="http://127.0.0.1:8585${path}"
+    local username=""
+    local password_file=""
+    local password=""
+
+    if [ -f "$auth_env_file" ] && ! grep -q "^RAVENS_PERCH_WEB_AUTH_DISABLED=1$" "$auth_env_file" 2>/dev/null; then
+        username="$(ravens_perch_auth_env_value "RAVENS_PERCH_WEB_AUTH_USERNAME")"
+        password_file="$(ravens_perch_auth_env_value "RAVENS_PERCH_WEB_AUTH_PASSWORD_FILE")"
+
+        if [ -n "$username" ] && [ -n "$password_file" ] && [ -r "$password_file" ]; then
+            password="$(tr -d '\r\n' < "$password_file")"
+            curl -s --user "${username}:${password}" "$url"
+            return
+        fi
+    fi
+
+    curl -s "$url"
+}
+
 # Verify installation - check service and cameras
 verify_installation() {
     echo ""
@@ -758,7 +905,7 @@ verify_installation() {
     log_info "Waiting for Ravens Perch service..."
     local retries=30
     while [ $retries -gt 0 ]; do
-        if curl -s "http://127.0.0.1:8585/cameras/api/health" >/dev/null 2>&1; then
+        if ravens_perch_api_curl "/cameras/api/health" >/dev/null 2>&1; then
             log_success "Ravens Perch service is running"
             break
         fi
@@ -800,7 +947,7 @@ print(count)
     local stable_checks=0
 
     while [ $camera_retries -gt 0 ]; do
-        rp_cameras=$(curl -s "http://127.0.0.1:8585/cameras/api/status" 2>/dev/null)
+        rp_cameras=$(ravens_perch_api_curl "/cameras/api/status" 2>/dev/null || true)
         rp_count=$(echo "$rp_cameras" | python3 -c "import sys,json; data=json.load(sys.stdin); print(len(data) if isinstance(data, list) else 0)" 2>/dev/null || echo "0")
 
         if [ "$rp_count" -gt 0 ]; then
@@ -856,7 +1003,7 @@ for cam in data:
     fi
 
     # Check MediaMTX streams
-    local mtx_paths=$(curl -s "http://127.0.0.1:8888/v3/paths/list" 2>/dev/null)
+    local mtx_paths=$(curl -s "http://127.0.0.1:9997/v3/paths/list" 2>/dev/null)
     local mtx_count=$(echo "$mtx_paths" | python3 -c "import sys,json; data=json.load(sys.stdin); print(len(data.get('items', [])))" 2>/dev/null || echo "0")
 
     if [ "$mtx_count" -gt 0 ]; then
@@ -878,8 +1025,14 @@ print_success() {
     echo -e "${GREEN}║         Ravens Perch Installed Successfully!               ║${NC}"
     echo -e "${GREEN}╚════════════════════════════════════════════════════════════╝${NC}"
     echo ""
-    echo -e "Web UI:        ${BLUE}http://${ip}/cameras/${NC}"
-    echo -e "Direct access: ${BLUE}http://${ip}:8585/cameras/${NC}"
+    if [ "$NGINX_CONFIGURED" = true ]; then
+        echo -e "Web UI:        ${BLUE}http://${ip}/cameras/${NC}"
+    else
+        echo -e "${YELLOW}Web UI proxy was not configured automatically.${NC}"
+        echo "Add this line to your nginx server block, then reload nginx:"
+        echo "  include /etc/nginx/snippets/ravens-perch.conf;"
+    fi
+    echo -e "Local service: ${BLUE}http://127.0.0.1:8585/cameras/${NC} (on this host only)"
     echo ""
     echo "Commands:"
     echo "  sudo systemctl status ravens-perch   - Check status"
@@ -912,14 +1065,16 @@ main() {
 
     install_system_packages
     create_directories
+    cleanup_existing_services
     migrate_from_crowsnest
     copy_source_files
     install_mediamtx
     create_venv
     init_database
+    configure_web_auth
     create_mediamtx_service
     create_ravens_service
-    configure_nginx
+    configure_nginx || true
     configure_printer_ui
 
     # Clean existing Moonraker cameras before starting service

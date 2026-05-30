@@ -180,7 +180,7 @@ journalctl -u ravens-perch -f</code></pre>
                 <ul>
                     <li>Increase bitrate in Advanced Settings (try 4M or higher for 1080p)</li>
                     <li>Reduce resolution if CPU is overloaded</li>
-                    <li>Use MJPEG format to reduce USB bandwidth</li>
+                    <li>Try lower resolution or another camera format; USB bus allocation is device-dependent</li>
                     <li>Connect cameras to different USB controllers</li>
                     <li>Use hardware encoding to reduce CPU load</li>
                 </ul>
@@ -266,7 +266,7 @@ cat ~/.config/ravens-perch/config.json 2>/dev/null || cat /etc/ravens-perch/conf
                 <ul>
                     <li>Verify Moonraker URL in Settings page</li>
                     <li>Use "Scan for Cameras" to re-register cameras</li>
-                    <li>Ensure Moonraker is running: <code>sudo systemctl status moonraker</code></li>
+                    <li>Confirm Moonraker responds at the URL configured in Settings</li>
                 </ul>
             </div>
         </details>

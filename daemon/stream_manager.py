@@ -1,19 +1,272 @@
 """
 Ravens Perch - MediaMTX Stream Manager
 """
+import os
+import shlex
+import signal
+import subprocess
+import threading
 import time
 import logging
-from typing import Optional, Dict, List, Tuple, Any
+from dataclasses import dataclass
+from pathlib import Path
+from typing import Optional, Dict, Tuple
+from urllib.parse import urlencode
 
 import requests
 
 from .config import (
     MEDIAMTX_API_BASE, MEDIAMTX_RTSP_PORT, MEDIAMTX_WEBRTC_PORT,
-    ENCODER_DEFAULTS, FFMPEG_INPUT_FORMATS, WEB_UI_PORT
+    FFMPEG_INPUT_FORMATS
 )
-from .camera_manager import apply_v4l2_controls
+from .camera_manager import apply_v4l2_controls, is_capture_device
+from .snapshot_access import get_snapshot_token
 
 logger = logging.getLogger(__name__)
+
+FFMPEG_INITIAL_RESTART_DELAY = 2.0
+FFMPEG_MAX_RESTART_DELAY = 60.0
+
+
+@dataclass
+class ManagedFFmpegProcess:
+    """Daemon-owned FFmpeg process state for one MediaMTX publisher path."""
+
+    camera_id: str
+    command: str
+    device_path: Optional[str]
+    process: Optional[subprocess.Popen] = None
+    monitor_thread: Optional[threading.Thread] = None
+    stop_requested: bool = False
+    restart_attempts: int = 0
+
+
+_process_lock = threading.RLock()
+_managed_processes: Dict[str, ManagedFFmpegProcess] = {}
+
+
+def _path_name(camera_id: str) -> str:
+    """Convert a camera ID to the MediaMTX path name used by this app."""
+    return camera_id.replace(' ', '_').lower()
+
+
+def _is_ravens_path(path_name: str) -> bool:
+    """Return whether a MediaMTX path is managed by the daemon database."""
+    return str(path_name).isdigit()
+
+
+def _publisher_path_payload(path_name: str) -> Dict:
+    """Build a MediaMTX path config that accepts daemon-owned publishers only."""
+    return {
+        "name": path_name,
+        "source": "publisher",
+        # Clear old runOnInit hooks from prior versions so MediaMTX cannot
+        # respawn FFmpeg on its own when a camera is missing.
+        "runOnInit": "",
+        "runOnInitRestart": False,
+    }
+
+
+def _extract_device_path(ffmpeg_command: str) -> Optional[str]:
+    """Extract the V4L2 input device from a generated FFmpeg command."""
+    try:
+        parts = shlex.split(ffmpeg_command)
+    except ValueError as e:
+        logger.warning(f"Unable to parse FFmpeg command: {e}")
+        return None
+
+    for index, part in enumerate(parts[:-1]):
+        if part == "-i" and parts[index + 1].startswith("/dev/video"):
+            return parts[index + 1]
+    return None
+
+
+def _device_ready(device_path: Optional[str]) -> Tuple[bool, Optional[str]]:
+    """Return whether a V4L2 device exists and is still a capture device."""
+    if not device_path:
+        return True, None
+
+    if not Path(device_path).exists():
+        return False, f"Device not present: {device_path}"
+
+    if not is_capture_device(device_path):
+        return False, f"Device is not a capture device: {device_path}"
+
+    return True, None
+
+
+def _start_ffmpeg_process(managed: ManagedFFmpegProcess) -> Tuple[bool, Optional[str]]:
+    """Start FFmpeg for a managed stream without creating a monitor thread."""
+    ready, error = _device_ready(managed.device_path)
+    if not ready:
+        return False, error
+
+    success, error = ensure_stream_path(managed.camera_id)
+    if not success:
+        return False, f"MediaMTX path unavailable: {error}"
+
+    try:
+        args = shlex.split(managed.command)
+    except ValueError as e:
+        return False, f"Invalid FFmpeg command: {e}"
+
+    if not args or Path(args[0]).name != "ffmpeg":
+        return False, "Invalid FFmpeg command: expected ffmpeg executable"
+
+    try:
+        process = subprocess.Popen(args, start_new_session=True)
+    except FileNotFoundError:
+        return False, "FFmpeg executable not found"
+    except Exception as e:
+        return False, f"Failed to start FFmpeg: {e}"
+
+    with _process_lock:
+        managed.process = process
+
+    logger.info(f"Started FFmpeg for camera {managed.camera_id} (pid {process.pid})")
+    return True, None
+
+
+def _restart_delay(attempts: int) -> float:
+    """Calculate capped exponential backoff for FFmpeg restarts."""
+    return min(FFMPEG_INITIAL_RESTART_DELAY * (2 ** max(0, attempts - 1)), FFMPEG_MAX_RESTART_DELAY)
+
+
+def _start_snapshot_cache(camera_id: str) -> None:
+    """Start the RAM-only latest JPEG cache without coupling stream startup to it."""
+    try:
+        from .snapshot_server import start_snapshot_cache
+        start_snapshot_cache(str(camera_id))
+    except Exception as e:
+        logger.warning(f"Unable to start snapshot cache for camera {camera_id}: {e}")
+
+
+def _stop_snapshot_cache(camera_id: str) -> None:
+    """Stop the RAM-only latest JPEG cache without coupling stream shutdown to it."""
+    try:
+        from .snapshot_server import stop_snapshot_cache
+        stop_snapshot_cache(str(camera_id))
+    except Exception as e:
+        logger.warning(f"Unable to stop snapshot cache for camera {camera_id}: {e}")
+
+
+def _sleep_or_stopped(managed: ManagedFFmpegProcess, seconds: float) -> bool:
+    """Sleep in small increments. Returns True if the stream was stopped."""
+    deadline = time.time() + seconds
+    while time.time() < deadline:
+        with _process_lock:
+            if managed.stop_requested:
+                return True
+        time.sleep(min(1.0, max(0.0, deadline - time.time())))
+    return False
+
+
+def _monitor_ffmpeg_process(camera_id: str) -> None:
+    """Monitor one FFmpeg process and restart it with backoff when appropriate."""
+    while True:
+        with _process_lock:
+            managed = _managed_processes.get(camera_id)
+            if not managed or managed.stop_requested:
+                return
+            process = managed.process
+
+        if process is None:
+            managed.restart_attempts += 1
+            delay = _restart_delay(managed.restart_attempts)
+            logger.warning(f"FFmpeg for camera {camera_id} is not running; retrying in {delay:.0f}s")
+            if _sleep_or_stopped(managed, delay):
+                return
+            success, error = _start_ffmpeg_process(managed)
+            if not success:
+                logger.warning(f"FFmpeg restart for camera {camera_id} skipped: {error}")
+            continue
+
+        return_code = process.wait()
+
+        with _process_lock:
+            managed = _managed_processes.get(camera_id)
+            if not managed or managed.stop_requested:
+                return
+            managed.process = None
+            managed.restart_attempts += 1
+            delay = _restart_delay(managed.restart_attempts)
+
+        logger.warning(
+            f"FFmpeg for camera {camera_id} exited with code {return_code}; "
+            f"retrying in {delay:.0f}s"
+        )
+
+        if _sleep_or_stopped(managed, delay):
+            return
+
+        success, error = _start_ffmpeg_process(managed)
+        if not success:
+            logger.warning(f"FFmpeg restart for camera {camera_id} skipped: {error}")
+
+
+def _stop_managed_process(camera_id: str) -> None:
+    """Stop and forget the daemon-owned FFmpeg process for a camera."""
+    with _process_lock:
+        managed = _managed_processes.pop(str(camera_id), None)
+        if not managed:
+            return
+        managed.stop_requested = True
+        process = managed.process
+        monitor_thread = managed.monitor_thread
+
+    if process and process.poll() is None:
+        logger.info(f"Stopping FFmpeg for camera {camera_id} (pid {process.pid})")
+        try:
+            os.killpg(process.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        except Exception:
+            process.terminate()
+
+        try:
+            process.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            logger.warning(f"FFmpeg for camera {camera_id} did not stop gracefully; killing")
+            try:
+                os.killpg(process.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            except Exception:
+                process.kill()
+            process.wait(timeout=5)
+
+    if monitor_thread and monitor_thread.is_alive() and monitor_thread is not threading.current_thread():
+        monitor_thread.join(timeout=2)
+
+
+def _replace_ffmpeg_process(camera_id: str, ffmpeg_command: str) -> Tuple[bool, Optional[str]]:
+    """Replace any existing FFmpeg process for a camera with a new command."""
+    camera_id = str(camera_id)
+    _stop_managed_process(camera_id)
+
+    managed = ManagedFFmpegProcess(
+        camera_id=camera_id,
+        command=ffmpeg_command,
+        device_path=_extract_device_path(ffmpeg_command),
+    )
+
+    success, error = _start_ffmpeg_process(managed)
+    if not success:
+        return False, error
+
+    monitor_thread = threading.Thread(
+        target=_monitor_ffmpeg_process,
+        args=(camera_id,),
+        daemon=True,
+        name=f"ffmpeg-monitor-{camera_id}",
+    )
+    managed.monitor_thread = monitor_thread
+
+    with _process_lock:
+        _managed_processes[camera_id] = managed
+
+    monitor_thread.start()
+    return True, None
 
 
 class MediaMTXClient:
@@ -104,21 +357,23 @@ def wait_for_available(timeout: int = 30) -> bool:
 
 def add_stream(camera_id: str, ffmpeg_command: str) -> Tuple[bool, Optional[str]]:
     """
-    Add a new stream to MediaMTX.
+    Configure a MediaMTX publisher path and start FFmpeg for it.
 
     Returns: (success, error_message)
     """
+    return add_or_update_stream(camera_id, ffmpeg_command, force=True)
+
+
+def ensure_stream_path(camera_id: str) -> Tuple[bool, Optional[str]]:
+    """
+    Ensure MediaMTX has a publisher path for a camera.
+
+    The path intentionally does not contain runOnInit. Ravens Perch owns the
+    FFmpeg process lifecycle so retries can be bounded and device-aware.
+    """
     client = get_client()
-
-    # URL-encode the camera_id for the path
-    path_name = camera_id.replace(' ', '_').lower()
-
-    payload = {
-        "name": path_name,
-        "source": "publisher",
-        "runOnInit": ffmpeg_command,
-        "runOnInitRestart": True,
-    }
+    path_name = _path_name(camera_id)
+    payload = _publisher_path_payload(path_name)
 
     success, _, error = client.api_request(
         f"/v3/config/paths/add/{path_name}",
@@ -127,39 +382,30 @@ def add_stream(camera_id: str, ffmpeg_command: str) -> Tuple[bool, Optional[str]
     )
 
     if success:
-        logger.info(f"Added stream: {path_name}")
-    else:
-        logger.error(f"Failed to add stream {path_name}: {error}")
+        logger.info(f"Configured stream path: {path_name}")
+        return True, None
 
-    return success, error
+    if error and "already exists" in error.lower():
+        success, _, error = client.api_request(
+            f"/v3/config/paths/patch/{path_name}",
+            method="PATCH",
+            data=payload
+        )
+        if success:
+            logger.debug(f"Updated stream path: {path_name}")
+            return True, None
+
+    logger.error(f"Failed to configure stream path {path_name}: {error}")
+    return False, error
 
 
 def update_stream(camera_id: str, ffmpeg_command: str) -> Tuple[bool, Optional[str]]:
     """
-    Update an existing stream in MediaMTX.
+    Update an existing stream and restart daemon-owned FFmpeg if needed.
 
     Returns: (success, error_message)
     """
-    client = get_client()
-    path_name = camera_id.replace(' ', '_').lower()
-
-    payload = {
-        "runOnInit": ffmpeg_command,
-        "runOnInitRestart": True,
-    }
-
-    success, _, error = client.api_request(
-        f"/v3/config/paths/patch/{path_name}",
-        method="PATCH",
-        data=payload
-    )
-
-    if success:
-        logger.info(f"Updated stream: {path_name}")
-    else:
-        logger.error(f"Failed to update stream {path_name}: {error}")
-
-    return success, error
+    return add_or_update_stream(camera_id, ffmpeg_command, force=True)
 
 
 def remove_stream(camera_id: str) -> Tuple[bool, Optional[str]]:
@@ -169,7 +415,10 @@ def remove_stream(camera_id: str) -> Tuple[bool, Optional[str]]:
     Returns: (success, error_message)
     """
     client = get_client()
-    path_name = camera_id.replace(' ', '_').lower()
+    path_name = _path_name(camera_id)
+
+    _stop_managed_process(str(camera_id))
+    _stop_snapshot_cache(str(camera_id))
 
     success, _, error = client.api_request(
         f"/v3/config/paths/delete/{path_name}",
@@ -189,13 +438,13 @@ def remove_stream(camera_id: str) -> Tuple[bool, Optional[str]]:
 
 def list_streams() -> Dict[str, Dict]:
     """
-    List all active streams.
+    List all configured MediaMTX paths.
 
     Returns: {path_name: stream_info}
     """
     client = get_client()
 
-    success, data, error = client.api_request("/v3/paths/list")
+    success, data, error = client.api_request("/v3/config/paths/list")
 
     if not success:
         logger.error(f"Failed to list streams: {error}")
@@ -216,10 +465,20 @@ def remove_all_streams() -> int:
 
     Returns: count of streams removed
     """
+    with _process_lock:
+        managed_camera_ids = list(_managed_processes.keys())
+
+    for camera_id in managed_camera_ids:
+        _stop_managed_process(camera_id)
+        _stop_snapshot_cache(camera_id)
+
     streams = list_streams()
     count = 0
 
     for path_name in streams.keys():
+        if not _is_ravens_path(path_name):
+            logger.debug(f"Skipping non-Ravens MediaMTX path during cleanup: {path_name}")
+            continue
         success, _ = remove_stream(path_name)
         if success:
             count += 1
@@ -234,7 +493,7 @@ def get_stream_status(camera_id: str) -> Optional[Dict]:
     Returns stream info dict or None if not found.
     """
     client = get_client()
-    path_name = camera_id.replace(' ', '_').lower()
+    path_name = _path_name(camera_id)
 
     success, data, _ = client.api_request(f"/v3/paths/get/{path_name}")
 
@@ -464,7 +723,7 @@ def build_ffmpeg_command(
 
     # Common output settings
     cmd_parts.extend([
-        "-g", str(framerate * 2),  # Keyframe interval (2 seconds)
+        "-g", str(framerate),  # Keyframe interval (1 second)
         "-f", "rtsp",
         "-rtsp_transport", "tcp",
         f"rtsp://127.0.0.1:{MEDIAMTX_RTSP_PORT}/{stream_name}"
@@ -490,13 +749,14 @@ def get_stream_urls(camera_id: str, host: str = "127.0.0.1") -> Dict[str, str]:
         'snapshot': 'http://...'
     }
     """
-    path_name = camera_id.replace(' ', '_').lower()
+    path_name = _path_name(camera_id)
+    snapshot_query = urlencode({"token": get_snapshot_token()})
 
     return {
         'rtsp': f"rtsp://{host}:{MEDIAMTX_RTSP_PORT}/{path_name}",
         'webrtc': f"http://{host}:{MEDIAMTX_WEBRTC_PORT}/{path_name}/",
         'hls': f"http://{host}:8888/{path_name}/",
-        'snapshot': f"http://{host}:{WEB_UI_PORT}/cameras/snapshot/{camera_id}.jpg",
+        'snapshot': f"http://{host}/cameras/snapshot/{camera_id}.jpg?{snapshot_query}",
     }
 
 
@@ -511,53 +771,47 @@ def add_or_update_stream(camera_id: str, ffmpeg_command: str, force: bool = Fals
     Returns:
         Tuple of (success, error_message)
     """
-    # Try to add first
-    success, error = add_stream(camera_id, ffmpeg_command)
+    camera_id = str(camera_id)
 
-    if not success and error and "already exists" in error.lower():
-        # Stream exists - check if the command has actually changed
-        if not force:
-            client = get_client()
-            path_name = camera_id.replace(' ', '_').lower()
-            get_success, data, _ = client.api_request(f"/v3/config/paths/get/{path_name}")
+    success, error = ensure_stream_path(camera_id)
+    if not success:
+        return False, error
 
-            if get_success and data:
-                current_command = data.get('runOnInit', '')
-                if current_command == ffmpeg_command:
-                    # Command hasn't changed - no need to restart
-                    logger.debug(f"Stream {camera_id} command unchanged, skipping restart")
-                    return True, None
+    with _process_lock:
+        managed = _managed_processes.get(camera_id)
+        process = managed.process if managed else None
+        process_running = process is not None and process.poll() is None
+        command_unchanged = managed is not None and managed.command == ffmpeg_command
 
-        # Command changed or force=True - remove and re-add to restart
-        logger.info(f"Restarting stream {camera_id} with updated configuration")
-        remove_stream(camera_id)
-        time.sleep(0.3)  # Brief delay to ensure cleanup
-        return add_stream(camera_id, ffmpeg_command)
+    if command_unchanged and process_running and not force:
+        logger.debug(f"Stream {camera_id} command unchanged, FFmpeg already running")
+        _start_snapshot_cache(camera_id)
+        return True, None
 
+    if command_unchanged and not force:
+        logger.info(f"FFmpeg for stream {camera_id} is not running; starting it")
+    else:
+        logger.info(f"Starting stream {camera_id} with updated FFmpeg command")
+
+    success, error = _replace_ffmpeg_process(camera_id, ffmpeg_command)
+    if success:
+        _start_snapshot_cache(camera_id)
+    else:
+        _stop_snapshot_cache(camera_id)
     return success, error
 
 
 def restart_stream(camera_id: str) -> Tuple[bool, Optional[str]]:
-    """Restart a stream by removing and re-adding it."""
-    client = get_client()
-    path_name = camera_id.replace(' ', '_').lower()
+    """Restart a daemon-owned FFmpeg stream using the last known command."""
+    camera_id = str(camera_id)
+    with _process_lock:
+        managed = _managed_processes.get(camera_id)
+        ffmpeg_command = managed.command if managed else None
 
-    # Get current config
-    success, data, error = client.api_request(f"/v3/config/paths/get/{path_name}")
-    if not success:
-        return False, f"Failed to get stream config: {error}"
+    if not ffmpeg_command:
+        return False, "No daemon-managed FFmpeg command found for stream"
 
-    # Remove the stream
-    remove_stream(camera_id)
-    time.sleep(0.5)
-
-    # Re-add with same config
-    if data:
-        ffmpeg_command = data.get('runOnInit', '')
-        if ffmpeg_command:
-            return add_stream(camera_id, ffmpeg_command)
-
-    return False, "No FFmpeg command found in stream config"
+    return add_or_update_stream(camera_id, ffmpeg_command, force=True)
 
 
 def start_camera_stream(
@@ -607,4 +861,5 @@ def start_camera_stream(
     )
 
     # Start the stream
-    return add_or_update_stream(str(camera_id), ffmpeg_cmd)
+    success, error = add_or_update_stream(str(camera_id), ffmpeg_cmd)
+    return success, error

@@ -93,6 +93,7 @@
                   hx-swap="innerHTML"
                   hx-target="#settings-status"
                   id="settings-form">
+            {{ csrf_field() }}
 
             <!-- Basic Settings Tab -->
             <div class="tab-panel active" id="tab-basic">
@@ -452,10 +453,12 @@
                     <div class="danger-actions">
                         <form action="{{ url_for('cameras.delete_camera', camera_id=camera.id) }}" method="POST"
                               onsubmit="return confirm('Delete this camera?');">
+                            {{ csrf_field() }}
                             <button type="submit" class="btn btn-danger btn-sm">Delete</button>
                         </form>
                         <form action="{{ url_for('cameras.ignore_camera_route', camera_id=camera.id) }}" method="POST"
                               onsubmit="return confirm('Ignore this camera permanently?');">
+                            {{ csrf_field() }}
                             <button type="submit" class="btn btn-danger btn-sm">Ignore</button>
                         </form>
                     </div>

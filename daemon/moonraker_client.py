@@ -3,14 +3,16 @@ Ravens Perch - Moonraker API Client
 """
 import socket
 import logging
-from typing import Optional, Dict, List, Tuple, Any
+from urllib.parse import urlencode
+from typing import Optional, Dict, List, Tuple
 
 import requests
 
 from .config import (
     MOONRAKER_DEFAULT_URL, MOONRAKER_FALLBACK_URLS,
-    MEDIAMTX_WEBRTC_PORT, WEB_UI_PORT
+    MEDIAMTX_WEBRTC_PORT
 )
+from .snapshot_access import get_snapshot_token
 
 logger = logging.getLogger(__name__)
 
@@ -427,12 +429,13 @@ def build_snapshot_url(camera_id: str, host: Optional[str] = None) -> str:
     Build snapshot URL for a camera.
 
     Uses the system IP if host is not provided.
-    Connects directly to the Flask app port to avoid nginx dependency.
+    Uses the nginx /cameras/ route because the Flask app binds localhost.
     """
     if host is None:
         host = get_system_ip()
 
-    return f"http://{host}:{WEB_UI_PORT}/cameras/snapshot/{camera_id}.jpg"
+    query = urlencode({"token": get_snapshot_token()})
+    return f"http://{host}/cameras/snapshot/{camera_id}.jpg?{query}"
 
 
 # ============ Server Info ============

@@ -1,0 +1,123 @@
+import queue
+import threading
+import unittest
+from types import SimpleNamespace
+from unittest.mock import Mock, patch
+
+from daemon.main import RavensPerchDaemon
+
+
+class MoonrakerReconcileTests(unittest.TestCase):
+    def test_late_moonraker_availability_initializes_worker_and_queues_connected_cameras(self):
+        daemon = RavensPerchDaemon()
+        daemon.running = True
+        monitor = Mock()
+
+        with (
+            patch.object(daemon, "_resolve_moonraker_url", return_value="http://127.0.0.1:7125"),
+            patch.object(daemon, "_start_moonraker_worker") as start_worker,
+            patch("daemon.main.init_monitor", return_value=monitor),
+            patch("daemon.main.db.get_setting", return_value=5),
+            patch("daemon.main.db.get_all_cameras", return_value=[]),
+            patch(
+                "daemon.main.db.get_all_cameras_with_settings",
+                return_value=[
+                    {
+                        "id": 7,
+                        "connected": True,
+                        "enabled": True,
+                        "moonraker_uid": None,
+                        "friendly_name": "Toolhead Camera",
+                        "settings": {"rotation": 90},
+                    }
+                ],
+            ),
+            patch("daemon.main.add_log"),
+        ):
+            daemon._ensure_moonraker_integration()
+
+        self.assertEqual(daemon.moonraker_url, "http://127.0.0.1:7125")
+        start_worker.assert_called_once()
+        monitor.set_state_change_callback.assert_called_once_with(daemon._on_print_state_change)
+        monitor.start.assert_called_once()
+        self.assertEqual(daemon._moonraker_queue.get_nowait(), (7, "Toolhead Camera", 90))
+        with self.assertRaises(queue.Empty):
+            daemon._moonraker_queue.get_nowait()
+
+    def test_camera_connect_records_effective_standby_framerate(self):
+        daemon = RavensPerchDaemon()
+        daemon.print_monitor = SimpleNamespace(status=SimpleNamespace(is_printing=False))
+        device = SimpleNamespace(
+            path="/dev/video0",
+            hardware_name="USB Camera",
+            serial_number="abc",
+            hardware_id="usb:abc",
+        )
+
+        with (
+            patch("daemon.main.db.is_camera_ignored", return_value=False),
+            patch(
+                "daemon.main.db.get_camera_by_hardware_id",
+                return_value={
+                    "id": 3,
+                    "connected": False,
+                    "device_path": None,
+                    "friendly_name": "USB Camera",
+                },
+            ),
+            patch("daemon.main.db.mark_camera_connected"),
+            patch(
+                "daemon.main.db.get_camera_with_settings",
+                return_value={
+                    "id": 3,
+                    "enabled": True,
+                    "friendly_name": "USB Camera",
+                    "settings": {
+                        "framerate": 30,
+                        "standby_enabled": True,
+                        "standby_framerate": 5,
+                    },
+                },
+            ),
+            patch("daemon.main.start_camera_stream", return_value=(True, None)),
+            patch("daemon.main.add_log"),
+        ):
+            daemon._on_camera_connected(device)
+
+        self.assertEqual(daemon._camera_framerates[3], 5)
+
+    def test_registration_worker_skips_camera_that_disconnected_while_queued(self):
+        daemon = RavensPerchDaemon()
+        daemon.running = True
+        daemon._queued_moonraker_camera_ids.add(11)
+        daemon._moonraker_queue.put((11, "Old Camera", 0))
+
+        def disconnected_camera(_camera_id):
+            daemon.running = False
+            return {
+                "id": 11,
+                "connected": False,
+                "enabled": True,
+                "friendly_name": "Old Camera",
+                "settings": {},
+            }
+
+        with (
+            patch(
+                "daemon.main.db.get_camera_with_settings",
+                side_effect=disconnected_camera,
+            ),
+            patch("daemon.main.register_camera") as register_camera,
+            patch("daemon.main.time.sleep"),
+        ):
+            worker = threading.Thread(target=daemon._moonraker_registration_worker)
+            worker.start()
+            worker.join(timeout=2)
+
+        self.assertFalse(worker.is_alive())
+        register_camera.assert_not_called()
+        self.assertNotIn(11, daemon._queued_moonraker_camera_ids)
+
+
+if __name__ == "__main__":
+    unittest.main()

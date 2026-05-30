@@ -14,6 +14,7 @@
             {% endif %}
         </span>
         <form action="{{ url_for('cameras.scan_cameras') }}" method="POST" style="display: inline;">
+            {{ csrf_field() }}
             <button type="submit" class="btn btn-primary">Scan for Cameras</button>
         </form>
     </div>
@@ -42,6 +43,15 @@
                         {% else %}
                             <span class="status-badge status-offline">Offline</span>
                         {% endif %}
+                        {% if camera.usb_topology_warning %}
+                            <span class="usb-warning-badge" title="USB 2.0 topology warning" aria-label="USB 2.0 topology warning">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                                    <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"></path>
+                                    <line x1="12" y1="9" x2="12" y2="13"></line>
+                                    <line x1="12" y1="17" x2="12.01" y2="17"></line>
+                                </svg>
+                            </span>
+                        {% endif %}
                     </div>
                 </div>
                 <div class="camera-info">
@@ -53,17 +63,21 @@
                     {% endif %}
                     {% if camera.connected %}
                     <div class="camera-bandwidth" id="bandwidth-{{ camera.id }}">
-                        <span class="bandwidth-item" title="Estimated USB input bandwidth">
-                            <span class="bandwidth-label">USB:</span>
-                            <span class="bandwidth-value" data-type="usb">--</span>
-                        </span>
-                        <span class="bandwidth-item" title="Network output bandwidth (configured bitrate)">
-                            <span class="bandwidth-label">Net:</span>
+                        <span class="bandwidth-item" title="Configured network bitrate per viewer">
+                            <span class="bandwidth-label">Per viewer:</span>
                             <span class="bandwidth-value" data-type="network">--</span>
+                        </span>
+                        <span class="bandwidth-item" title="Estimated total network output: per-viewer bitrate times active viewers">
+                            <span class="bandwidth-label">Out est:</span>
+                            <span class="bandwidth-value" data-type="output">--</span>
                         </span>
                         <span class="bandwidth-item" title="Active viewers">
                             <span class="bandwidth-label">Viewers:</span>
                             <span class="bandwidth-value" data-type="viewers">--</span>
+                        </span>
+                        <span class="bandwidth-item" title="MediaMTX source state">
+                            <span class="bandwidth-label">Source:</span>
+                            <span class="bandwidth-value" data-type="source">--</span>
                         </span>
                     </div>
                     {% endif %}
@@ -129,10 +143,68 @@
     <p>Stream URLs are automatically registered with Moonraker for use in Fluidd/Mainsail.</p>
 </div>
 {% endif %}
+
+{% if usb_topology_warnings %}
+<div class="usb-warning-section" data-usb-warning-panel>
+    <div class="usb-warning-header">
+        <h3 class="section-title warning-title">USB 2.0 Bandwidth Warning</h3>
+        <button type="button"
+                class="usb-warning-dismiss"
+                data-usb-warning-dismiss
+                aria-label="Dismiss USB 2.0 bandwidth warning"
+                title="Dismiss warning">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+        </button>
+    </div>
+    {% for warning in usb_topology_warnings %}
+    <p>
+        <strong>{{ warning.camera_names|join(', ') }}</strong>
+        {% if warning.serial_devices %}
+        {% if warning.camera_names|length == 1 %}is{% else %}are{% endif %}
+        sharing the same USB 2.0 controller{% if warning.bus %} ({{ warning.bus }}){% endif %}
+        with {{ warning.serial_devices|map(attribute='label')|join(', ') }}.
+        {% else %}
+        are connected through the same USB 2.0 controller{% if warning.bus %} ({{ warning.bus }}){% endif %}.
+        {% endif %}
+        This can cause dropped frames, cameras failing to start, or Klipper connection issues if the printer/controller is also on that USB bus.
+        Move one camera or the printer connection to another USB controller, or reduce the number of active cameras.
+    </p>
+    {% endfor %}
+</div>
+{% endif %}
 {% endblock %}
 
 {% block scripts %}
 <script>
+    (function() {
+        const panel = document.querySelector('[data-usb-warning-panel]');
+        const dismissButton = document.querySelector('[data-usb-warning-dismiss]');
+        const storageKey = 'ravens-perch-usb-warning-dismissed';
+
+        if (!panel || !dismissButton) return;
+
+        try {
+            if (localStorage.getItem(storageKey) === 'true') {
+                panel.hidden = true;
+                return;
+            }
+        } catch (err) {
+            // Continue without persistence if storage is unavailable.
+        }
+
+        dismissButton.addEventListener('click', () => {
+            panel.hidden = true;
+            try {
+                localStorage.setItem(storageKey, 'true');
+            } catch (err) {
+                // Dismiss for this page load even if storage is unavailable.
+            }
+        });
+    })();
+
     // Refresh thumbnails periodically
     setInterval(() => {
         document.querySelectorAll('.camera-preview img').forEach(img => {
@@ -142,6 +214,11 @@
     }, 10000);
 
     // Fetch and display bandwidth stats
+    function formatMbps(value) {
+        if (typeof value !== 'number') return '--';
+        return value.toFixed(value >= 10 ? 0 : 1) + ' Mbps';
+    }
+
     function updateBandwidthStats() {
         fetch('{{ url_for("cameras.api_bandwidth") }}')
             .then(response => response.json())
@@ -150,27 +227,30 @@
                     const container = document.getElementById('bandwidth-' + cameraId);
                     if (!container || !stats) continue;
 
-                    // Update USB bandwidth
-                    const usbEl = container.querySelector('[data-type="usb"]');
-                    if (usbEl && stats.usb) {
-                        const usbText = stats.usb.mb_per_second >= 1
-                            ? stats.usb.mb_per_second.toFixed(1) + ' MB/s'
-                            : (stats.usb.mb_per_second * 1000).toFixed(0) + ' KB/s';
-                        usbEl.textContent = (stats.usb.is_estimate ? '~' : '') + usbText;
-                    }
-
-                    // Update network bandwidth
+                    // Update per-viewer network bandwidth
                     const netEl = container.querySelector('[data-type="network"]');
                     if (netEl && stats.network) {
-                        netEl.textContent = stats.network.mbps + ' Mbps';
+                        netEl.textContent = formatMbps(stats.network.mbps);
+                    }
+
+                    // Update total estimated network output
+                    const outputEl = container.querySelector('[data-type="output"]');
+                    if (outputEl && stats.output) {
+                        outputEl.textContent = formatMbps(stats.output.mbps);
                     }
 
                     // Update viewers
                     const viewersEl = container.querySelector('[data-type="viewers"]');
-                    if (viewersEl && stats.mediamtx) {
-                        viewersEl.textContent = stats.mediamtx.readers;
+                    if (viewersEl && stats.output) {
+                        viewersEl.textContent = stats.output.readers;
                     } else if (viewersEl) {
                         viewersEl.textContent = '-';
+                    }
+
+                    // Update MediaMTX source state
+                    const sourceEl = container.querySelector('[data-type="source"]');
+                    if (sourceEl && stats.source) {
+                        sourceEl.textContent = stats.source.label;
                     }
                 }
             })

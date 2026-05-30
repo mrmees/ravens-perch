@@ -20,8 +20,8 @@ MEDIAMTX_API_PORT = 9997
 MEDIAMTX_API_BASE = f"http://127.0.0.1:{MEDIAMTX_API_PORT}"
 
 # Web UI
-WEB_UI_PORT = 8585
-WEB_UI_HOST = "0.0.0.0"
+WEB_UI_PORT = int(os.environ.get("RAVENS_PERCH_WEB_UI_PORT", "8585"))
+WEB_UI_HOST = os.environ.get("RAVENS_PERCH_WEB_UI_HOST", "127.0.0.1")
 
 # Moonraker
 MOONRAKER_DEFAULT_URL = "http://127.0.0.1:7125"
@@ -124,6 +124,8 @@ DEFAULT_CAMERA_SETTINGS = {
 # Snapshot settings
 SNAPSHOT_CACHE_TTL_MS = 100  # Cache duration in milliseconds
 SNAPSHOT_TIMEOUT = 5.0  # Seconds to wait for frame
+SNAPSHOT_REFRESH_INTERVAL = 1.0  # Seconds between background snapshot refreshes
+SNAPSHOT_STALE_SECONDS = 10.0  # Serve last good snapshot for this long after refresh failures
 
 # Logging
 LOG_ROTATION_SIZE = 10 * 1024 * 1024  # 10 MB

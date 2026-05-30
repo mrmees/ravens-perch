@@ -19,6 +19,9 @@ NC='\033[0m' # No Color
 
 INSTALL_DIR="${HOME}/ravens-perch"
 KLIPPER_CONFIG_DIR="${HOME}/printer_data/config"
+CURRENT_RAVENS_SERVICES=(ravens-perch mediamtx)
+LEGACY_RAVENS_SERVICES=(web-ui camera-hotplug snapfeeder raven-watchdog)
+ALL_RAVENS_SERVICES=("${CURRENT_RAVENS_SERVICES[@]}" "${LEGACY_RAVENS_SERVICES[@]}")
 
 # Parse arguments
 DEV_MODE=false
@@ -97,26 +100,26 @@ fi
 
 # Stop services
 log_info "Stopping services..."
-for service in ravens-perch mediamtx; do
-    if systemctl is-active --quiet ${service}.service 2>/dev/null; then
+for service in "${ALL_RAVENS_SERVICES[@]}"; do
+    if systemctl is-active --quiet "${service}.service" 2>/dev/null; then
         log_info "Stopping ${service}..."
-        sudo systemctl stop ${service}.service || true
+        sudo systemctl stop "${service}.service" || true
     fi
 done
 log_success "Services stopped"
 
 # Disable services
 log_info "Disabling services..."
-for service in ravens-perch mediamtx; do
-    if systemctl is-enabled --quiet ${service}.service 2>/dev/null; then
-        sudo systemctl disable ${service}.service || true
+for service in "${ALL_RAVENS_SERVICES[@]}"; do
+    if systemctl is-enabled --quiet "${service}.service" 2>/dev/null; then
+        sudo systemctl disable "${service}.service" || true
     fi
 done
 log_success "Services disabled"
 
 # Remove service files
 log_info "Removing service files..."
-for service in ravens-perch mediamtx; do
+for service in "${ALL_RAVENS_SERVICES[@]}"; do
     if [ -f "/etc/systemd/system/${service}.service" ]; then
         sudo rm -f "/etc/systemd/system/${service}.service"
     fi
@@ -276,12 +279,7 @@ PYTHON_SCRIPT
             log_warn "Crowsnest service not found - may need manual reinstall"
         fi
 
-        # Restart Moonraker
-        if systemctl is-active --quiet moonraker.service 2>/dev/null; then
-            log_info "Restarting Moonraker..."
-            sudo systemctl restart moonraker.service || true
-            log_success "Moonraker restarted"
-        fi
+        log_info "Moonraker was not restarted. Restart it manually if you want it to reload moonraker.conf now."
 
         log_success "Crowsnest restored"
     else

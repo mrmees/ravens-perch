@@ -1,7 +1,6 @@
 """
 Ravens Perch - Hardware Detection (Encoders, Platform)
 """
-import os
 import subprocess
 import logging
 import json
