@@ -41,7 +41,9 @@
         <section id="format" class="help-section">
             <h2>Video Format</h2>
             <p>
-                The format determines how raw video data is sent from the camera over USB.
+                The format determines how the camera sends frames over USB. Actual USB bus
+                allocation is camera and driver dependent, so Ravens Perch warns about risky
+                USB topology instead of showing a precise USB bandwidth estimate.
             </p>
 
             <div class="settings-table">
@@ -49,7 +51,7 @@
                     <thead>
                         <tr>
                             <th>Format</th>
-                            <th>USB Bandwidth</th>
+                            <th>USB Bus Impact</th>
                             <th>CPU Load</th>
                             <th>Quality</th>
                         </tr>
@@ -57,7 +59,7 @@
                     <tbody>
                         <tr>
                             <td><strong>MJPEG</strong></td>
-                            <td class="impact-low">Low</td>
+                            <td class="impact-medium">Device-dependent</td>
                             <td class="impact-low">Low</td>
                             <td>Good (some compression artifacts)</td>
                         </tr>
@@ -69,7 +71,7 @@
                         </tr>
                         <tr>
                             <td><strong>H.264</strong></td>
-                            <td class="impact-low">Very Low</td>
+                            <td class="impact-low">Usually low</td>
                             <td class="impact-low">Very Low</td>
                             <td>Good (camera encodes)</td>
                         </tr>
@@ -80,10 +82,10 @@
             <div class="help-detail">
                 <h4>MJPEG (Recommended for most cameras)</h4>
                 <p>
-                    Each frame is compressed as a JPEG image. This significantly reduces USB
-                    bandwidth while maintaining good quality. The CPU only needs to decode
-                    the JPEG and re-encode for streaming. Best choice for USB 2.0 cameras
-                    and multi-camera setups.
+                    Each frame is compressed as a JPEG image. This often reduces camera data
+                    compared with raw formats while maintaining good quality, but some UVC
+                    cameras still reserve a large USB 2.0 transfer lane. The CPU only needs
+                    to decode the JPEG and re-encode for streaming.
                 </p>
 
                 <h4>YUYV (Raw/Uncompressed)</h4>
@@ -97,7 +99,7 @@
                 <h4>H.264 (If supported by camera)</h4>
                 <p>
                     The camera itself encodes the video, dramatically reducing both USB
-                    bandwidth and CPU load. Ideal if your camera supports it, though
+                    payload and CPU load. Ideal if your camera supports it, though
                     fewer USB cameras offer this option.
                 </p>
             </div>

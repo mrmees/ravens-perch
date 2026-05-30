@@ -20,6 +20,20 @@
     </div>
 </div>
 
+{% if usb_topology_warnings %}
+<div class="usb-warning-section">
+    <h3 class="section-title warning-title">USB 2.0 Bandwidth Warning</h3>
+    {% for warning in usb_topology_warnings %}
+    <p>
+        <strong>{{ warning.camera_names|join(', ') }}</strong>
+        are connected through the same USB 2.0 controller{% if warning.bus %} ({{ warning.bus }}){% endif %}.
+        This can cause dropped frames, cameras failing to start, or Klipper connection issues if the printer/controller is also on that USB bus.
+        Move one camera or the printer connection to another USB controller, or reduce the number of active cameras.
+    </p>
+    {% endfor %}
+</div>
+{% endif %}
+
 <div class="camera-grid"
      hx-get="{{ url_for('cameras.api_status') }}"
      hx-trigger="every 5s"
@@ -54,10 +68,6 @@
                     {% endif %}
                     {% if camera.connected %}
                     <div class="camera-bandwidth" id="bandwidth-{{ camera.id }}">
-                        <span class="bandwidth-item" title="Estimated USB input throughput. Raw formats are calculated; MJPEG and encoded formats use resolution/FPS lookup tables.">
-                            <span class="bandwidth-label">USB est:</span>
-                            <span class="bandwidth-value" data-type="usb">--</span>
-                        </span>
                         <span class="bandwidth-item" title="Configured network bitrate per viewer">
                             <span class="bandwidth-label">Per viewer:</span>
                             <span class="bandwidth-value" data-type="network">--</span>
@@ -163,18 +173,6 @@
                 for (const [cameraId, stats] of Object.entries(data)) {
                     const container = document.getElementById('bandwidth-' + cameraId);
                     if (!container || !stats) continue;
-
-                    // Update USB bandwidth
-                    const usbEl = container.querySelector('[data-type="usb"]');
-                    if (usbEl && stats.usb) {
-                        if (!stats.usb.available || typeof stats.usb.mbit_per_second !== 'number') {
-                            usbEl.textContent = '--';
-                        } else {
-                            const value = stats.usb.mbit_per_second;
-                            const usbText = value.toFixed(value >= 100 ? 0 : 1) + ' Mbit/s';
-                            usbEl.textContent = (stats.usb.is_estimate ? '~' : '') + usbText;
-                        }
-                    }
 
                     // Update per-viewer network bandwidth
                     const netEl = container.querySelector('[data-type="network"]');

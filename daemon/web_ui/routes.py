@@ -35,6 +35,7 @@ from ..camera_manager import (
     add_rejected_camera, get_rejected_cameras
 )
 from ..bandwidth import get_camera_bandwidth_stats
+from ..usb_topology import get_shared_usb2_camera_warnings
 from ..print_status import get_monitor as get_print_monitor
 from ..config import COMMON_RESOLUTIONS, COMMON_FRAMERATES
 from ..logging_utils import apply_log_level
@@ -373,6 +374,7 @@ def dashboard():
         'dashboard.html',
         cameras=cameras,
         rejected_cameras=rejected,
+        usb_topology_warnings=get_shared_usb2_camera_warnings(cameras),
         system_ip=get_system_ip()
     )
 

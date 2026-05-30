@@ -510,6 +510,20 @@ a:hover {
     gap: 0.5rem;
 }
 
+.usb-warning-section {
+    margin-bottom: 1.5rem;
+    padding: 1rem 1.25rem;
+    background-color: rgba(255, 152, 0, 0.08);
+    border: 1px solid var(--warning);
+    border-radius: var(--radius);
+}
+
+.usb-warning-section p {
+    margin: 0.5rem 0 0;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
 /* Empty State */
 .empty-state {
     text-align: center;
