@@ -27,6 +27,12 @@ from ..moonraker_client import (
     build_stream_url, build_snapshot_url, get_system_ip, is_available as moonraker_available,
     detect_klipper_ui_theme
 )
+from ..moonraker_auth import (
+    MoonrakerApiKeyError,
+    clear_moonraker_api_key,
+    moonraker_api_key_configured,
+    save_moonraker_api_key,
+)
 from ..hardware import estimate_cpu_capability, detect_encoders, get_platform_info, clear_encoder_cache
 from ..camera_manager import (
     find_video_devices, get_device_info, probe_capabilities, auto_configure,
@@ -983,6 +989,7 @@ def settings_page():
         encoders=encoders,
         cpu_rating=cpu_rating,
         moonraker_available=moonraker_available(),
+        moonraker_api_key_configured=moonraker_api_key_configured(),
         web_auth=web_auth_status(),
         raven_lines=RAVEN_LINES
     )
@@ -1002,6 +1009,16 @@ def update_global_settings():
     if 'moonraker_url' in request.form:
         moonraker_url = request.form['moonraker_url'].strip()
         set_setting('moonraker_url', moonraker_url)
+
+    if request.form.get('clear_moonraker_api_key'):
+        clear_moonraker_api_key()
+        add_log("INFO", "Moonraker API key cleared")
+    elif request.form.get('moonraker_api_key', '').strip():
+        try:
+            save_moonraker_api_key(request.form['moonraker_api_key'])
+            add_log("INFO", "Moonraker API key updated")
+        except MoonrakerApiKeyError as e:
+            return _settings_message(str(e), "error")
 
     if 'log_level' in request.form:
         log_level = apply_log_level(request.form['log_level'])

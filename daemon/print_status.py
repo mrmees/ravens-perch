@@ -14,6 +14,8 @@ from pathlib import Path
 
 import requests
 
+from .moonraker_auth import moonraker_auth_headers
+
 logger = logging.getLogger(__name__)
 
 
@@ -196,6 +198,7 @@ class PrintStatusMonitor:
                 f"{self.moonraker_url}/printer/objects/query"
                 "?print_stats&display_status&virtual_sdcard"
                 "&extruder&heater_bed&fan&gcode_move&motion_report",
+                headers=moonraker_auth_headers(),
                 timeout=5
             )
 
@@ -308,6 +311,7 @@ class PrintStatusMonitor:
             response = requests.get(
                 f"{self.moonraker_url}/server/files/metadata",
                 params={"filename": filename},
+                headers=moonraker_auth_headers(),
                 timeout=5
             )
             if response.status_code == 200:

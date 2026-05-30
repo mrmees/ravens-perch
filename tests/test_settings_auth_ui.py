@@ -39,6 +39,15 @@ class SettingsAuthUITests(unittest.TestCase):
         self.assertIn("closeRavenPoem", template)
         self.assertIn("raven_lines=RAVEN_LINES", routes)
 
+    def test_settings_page_has_moonraker_api_key_controls(self):
+        template = SETTINGS_TEMPLATE.read_text(encoding="utf-8")
+        routes = ROUTES_PY.read_text(encoding="utf-8")
+
+        self.assertIn('name="moonraker_api_key"', template)
+        self.assertIn('name="clear_moonraker_api_key"', template)
+        self.assertIn("Leave blank to keep", template)
+        self.assertIn("moonraker_api_key_configured", routes)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -35,6 +35,16 @@ class InstallLifecycleTests(unittest.TestCase):
         self.assertIn('rp_cameras=$(ravens_perch_api_curl "/cameras/api/status"', text)
         self.assertNotIn('curl -s "http://127.0.0.1:8585/cameras/api/status"', text)
 
+    def test_installer_prompts_for_moonraker_api_key_and_uses_helper(self):
+        text = INSTALL_SH.read_text(encoding="utf-8")
+
+        self.assertIn("configure_moonraker_api_key", text)
+        self.assertIn("RAVENS_PERCH_MOONRAKER_API_KEY", text)
+        self.assertIn("moonraker_curl", text)
+        self.assertIn("X-Api-Key:", text)
+        self.assertIn("Keeping existing Moonraker API key", text)
+        self.assertNotIn('curl -s "http://127.0.0.1:7125/server/webcams/list"', text)
+
 
 if __name__ == "__main__":
     unittest.main()

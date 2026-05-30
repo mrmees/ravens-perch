@@ -12,6 +12,7 @@ from .config import (
     MOONRAKER_DEFAULT_URL, MOONRAKER_FALLBACK_URLS,
     MEDIAMTX_WEBRTC_PORT
 )
+from .moonraker_auth import moonraker_auth_headers
 from .snapshot_access import get_snapshot_token
 
 logger = logging.getLogger(__name__)
@@ -39,14 +40,15 @@ class MoonrakerClient:
         Returns: (success, data, error_message)
         """
         url = f"{self.base_url.rstrip('/')}{endpoint}"
+        headers = moonraker_auth_headers()
 
         try:
             if method == "GET":
-                response = self.session.get(url, params=params, timeout=timeout)
+                response = self.session.get(url, params=params, headers=headers, timeout=timeout)
             elif method == "POST":
-                response = self.session.post(url, json=data, params=params, timeout=timeout)
+                response = self.session.post(url, json=data, params=params, headers=headers, timeout=timeout)
             elif method == "DELETE":
-                response = self.session.delete(url, params=params, timeout=timeout)
+                response = self.session.delete(url, params=params, headers=headers, timeout=timeout)
             else:
                 return False, None, f"Unsupported method: {method}"
 

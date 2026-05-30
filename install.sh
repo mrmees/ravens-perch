@@ -40,6 +40,59 @@ log_error() {
     echo -e "${RED}[ERROR]${NC} $1"
 }
 
+configure_moonraker_api_key() {
+    local key_file="${INSTALL_DIR}/data/moonraker-api-key"
+    local api_key="${RAVENS_PERCH_MOONRAKER_API_KEY:-}"
+    local env_provided=false
+
+    if [ -n "${RAVENS_PERCH_MOONRAKER_API_KEY+x}" ]; then
+        env_provided=true
+    elif [ -s "$key_file" ]; then
+        read -r -p "Moonraker API key (leave blank to keep current): " api_key
+    else
+        read -r -p "Moonraker API key (leave blank if not required): " api_key
+    fi
+
+    if [ -z "$api_key" ]; then
+        if [ "$env_provided" = false ] && [ -s "$key_file" ]; then
+            log_info "Keeping existing Moonraker API key"
+            return
+        fi
+
+        rm -f "$key_file"
+        log_info "Moonraker API key not configured"
+        return
+    fi
+
+    if [[ "$api_key" == *$'\n'* || "$api_key" == *$'\r'* ]]; then
+        log_error "Moonraker API key cannot contain line breaks."
+        exit 1
+    fi
+
+    mkdir -p "$(dirname "$key_file")"
+    printf '%s\n' "$api_key" > "$key_file"
+    chmod 600 "$key_file"
+    log_success "Moonraker API key saved at: ${key_file}"
+}
+
+moonraker_curl() {
+    local url="$1"
+    shift
+
+    local key_file="${INSTALL_DIR}/data/moonraker-api-key"
+    local api_key=""
+
+    if [ -r "$key_file" ]; then
+        api_key="$(tr -d '\r\n' < "$key_file")"
+    fi
+
+    if [ -n "$api_key" ]; then
+        curl -s -H "X-Api-Key: ${api_key}" "$@" "$url"
+    else
+        curl -s "$@" "$url"
+    fi
+}
+
 # Detect architecture
 detect_arch() {
     local arch=$(uname -m)
@@ -166,7 +219,7 @@ migrate_from_crowsnest() {
 
     # Backup current cameras from Moonraker
     log_info "Backing up camera configuration from Moonraker..."
-    if curl -s "${MOONRAKER_URL}/server/webcams/list" > "${backup_dir}/webcams.json" 2>/dev/null; then
+    if moonraker_curl "${MOONRAKER_URL}/server/webcams/list" > "${backup_dir}/webcams.json" 2>/dev/null; then
         log_success "Camera configuration backed up to ${backup_dir}/webcams.json"
     else
         log_warn "Could not backup cameras (Moonraker may not be running)"
@@ -217,7 +270,7 @@ PYTHON_SCRIPT
     # Delete existing cameras from Moonraker
     log_info "Clearing existing cameras from Moonraker..."
     # Get list of cameras and delete each one
-    local cameras=$(curl -s "${MOONRAKER_URL}/server/webcams/list" 2>/dev/null | python3 -c "
+    local cameras=$(moonraker_curl "${MOONRAKER_URL}/server/webcams/list" 2>/dev/null | python3 -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
@@ -230,7 +283,8 @@ except:
     if [ -n "$cameras" ]; then
         while IFS= read -r cam_name; do
             if [ -n "$cam_name" ]; then
-                curl -s -X POST "${MOONRAKER_URL}/server/webcams/delete" \
+                moonraker_curl "${MOONRAKER_URL}/server/webcams/delete" \
+                    -X POST \
                     -H "Content-Type: application/json" \
                     -d "{\"name\": \"$cam_name\"}" >/dev/null 2>&1 || true
                 log_info "Removed camera: $cam_name"
@@ -798,10 +852,8 @@ start_services() {
 manage_existing_cameras() {
     log_info "Checking for existing Moonraker cameras..."
 
-    local MOONRAKER_URL="http://127.0.0.1:7125"
-
     # Get list of existing cameras
-    local cameras_json=$(curl -s "${MOONRAKER_URL}/server/webcams/list" 2>/dev/null)
+    local cameras_json=$(moonraker_curl "${MOONRAKER_URL}/server/webcams/list" 2>/dev/null)
     if [ -z "$cameras_json" ]; then
         log_info "Could not connect to Moonraker, skipping camera cleanup"
         return
@@ -847,7 +899,7 @@ except:
 
         read -p "  Delete this camera? (Y/n): " delete_choice </dev/tty
         if [[ "$delete_choice" != "n" && "$delete_choice" != "N" ]]; then
-            local delete_result=$(curl -s -X DELETE "${MOONRAKER_URL}/server/webcams/item?uid=${uid}" 2>&1)
+            local delete_result=$(moonraker_curl "${MOONRAKER_URL}/server/webcams/item?uid=${uid}" -X DELETE 2>&1)
             if echo "$delete_result" | grep -q "error"; then
                 log_warn "  Failed to delete: ${name}"
                 echo "  Response: ${delete_result}"
@@ -993,7 +1045,7 @@ for cam in data:
     fi
 
     # Check Moonraker registrations
-    local mr_cameras=$(curl -s "http://127.0.0.1:7125/server/webcams/list" 2>/dev/null)
+    local mr_cameras=$(moonraker_curl "${MOONRAKER_URL}/server/webcams/list" 2>/dev/null)
     local mr_count=$(echo "$mr_cameras" | python3 -c "import sys,json; data=json.load(sys.stdin); print(len(data.get('result', {}).get('webcams', [])))" 2>/dev/null || echo "0")
 
     if [ "$mr_count" -gt 0 ]; then
@@ -1065,6 +1117,7 @@ main() {
 
     install_system_packages
     create_directories
+    configure_moonraker_api_key
     cleanup_existing_services
     migrate_from_crowsnest
     copy_source_files
