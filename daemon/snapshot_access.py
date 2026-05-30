@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Optional
 
 from .config import DATA_DIR
+from .secret_files import write_secret_file
 
 DEFAULT_SNAPSHOT_TOKEN_FILE = DATA_DIR / "snapshot-token"
 _token_lock = threading.Lock()
@@ -41,9 +42,7 @@ def get_snapshot_token(token_file: Optional[Path] = None) -> str:
 
         token = secrets.token_urlsafe(32)
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(token + "\n", encoding="utf-8")
-            path.chmod(0o600)
+            write_secret_file(path, token + "\n")
         except OSError:
             pass
 

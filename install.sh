@@ -447,9 +447,10 @@ configure_web_auth() {
 
     case "${choice,,}" in
         n|no|false|0)
-            cat > "$auth_env_file" << EOF
+            (umask 077; cat > "$auth_env_file" << EOF
 RAVENS_PERCH_WEB_AUTH_DISABLED=1
 EOF
+)
             chmod 600 "$auth_env_file"
             log_info "Web UI Basic Auth disabled"
             return
@@ -500,13 +501,16 @@ EOF
     fi
 
     mkdir -p "$(dirname "$password_file")"
-    printf '%s\n' "$password" > "$password_file"
+    touch "$password_file"
+    chmod 600 "$password_file"
+    (umask 077; printf '%s\n' "$password" > "$password_file")
     chmod 600 "$password_file"
 
-    cat > "$auth_env_file" << EOF
+    (umask 077; cat > "$auth_env_file" << EOF
 RAVENS_PERCH_WEB_AUTH_USERNAME=${username}
 RAVENS_PERCH_WEB_AUTH_PASSWORD_FILE=${password_file}
 EOF
+)
     chmod 600 "$auth_env_file"
 
     log_success "Web UI Basic Auth enabled"

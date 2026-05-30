@@ -27,6 +27,12 @@ class InstallAuthPromptTests(unittest.TestCase):
         self.assertNotIn("secrets.token_urlsafe", body)
         self.assertNotIn("Web UI password already exists", body)
 
+    def test_basic_auth_setup_writes_secrets_with_restrictive_umask(self):
+        body = _configure_web_auth_body()
+
+        self.assertIn("(umask 077; printf '%s\\n' \"$password\" > \"$password_file\")", body)
+        self.assertIn('(umask 077; cat > "$auth_env_file" << EOF', body)
+
 
 if __name__ == "__main__":
     unittest.main()

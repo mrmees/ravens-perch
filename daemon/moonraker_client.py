@@ -1,9 +1,11 @@
 """
 Ravens Perch - Moonraker API Client
 """
+import ipaddress
+import os
 import socket
 import logging
-from urllib.parse import urlencode
+from urllib.parse import urlencode, urlparse
 from typing import Optional, Dict, List, Tuple
 
 import requests
@@ -16,13 +18,56 @@ from .moonraker_auth import moonraker_auth_headers
 from .snapshot_access import get_snapshot_token
 
 logger = logging.getLogger(__name__)
+_TRUE_VALUES = {"1", "true", "yes", "on"}
+
+
+class MoonrakerUrlError(ValueError):
+    """Raised when a configured Moonraker URL is unsafe or invalid."""
+
+
+def _allow_remote_moonraker() -> bool:
+    return os.environ.get("RAVENS_PERCH_ALLOW_REMOTE_MOONRAKER", "").strip().lower() in _TRUE_VALUES
+
+
+def _is_allowed_moonraker_host(hostname: str) -> bool:
+    host = hostname.strip().lower()
+    if host == "localhost" or host.endswith(".local"):
+        return True
+    if "." not in host:
+        return True
+
+    try:
+        address = ipaddress.ip_address(host)
+    except ValueError:
+        return False
+
+    return address.is_loopback or address.is_private or address.is_link_local
+
+
+def validate_moonraker_url(url: str) -> str:
+    """Validate and normalize a Moonraker URL before storing or using it."""
+    clean_url = (url or "").strip().rstrip("/")
+    parsed = urlparse(clean_url)
+
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc or not parsed.hostname:
+        raise MoonrakerUrlError("Moonraker URL must be an http(s) URL.")
+
+    if parsed.username or parsed.password:
+        raise MoonrakerUrlError("Moonraker URL cannot include embedded credentials.")
+
+    if not _allow_remote_moonraker() and not _is_allowed_moonraker_host(parsed.hostname):
+        raise MoonrakerUrlError(
+            "Moonraker URL must point to localhost, a private network address, or a .local host."
+        )
+
+    return clean_url
 
 
 class MoonrakerClient:
     """Client for Moonraker API."""
 
     def __init__(self, url: Optional[str] = None):
-        self.base_url = url or MOONRAKER_DEFAULT_URL
+        self.base_url = validate_moonraker_url(url or MOONRAKER_DEFAULT_URL)
         self.session = requests.Session()
         self._webcam_endpoint = "/server/webcams"
 

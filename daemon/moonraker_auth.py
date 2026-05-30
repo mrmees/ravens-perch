@@ -6,6 +6,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 from .config import DATA_DIR
+from .secret_files import write_secret_file
 
 
 DEFAULT_API_KEY_FILE = DATA_DIR / "moonraker-api-key"
@@ -42,19 +43,7 @@ def save_moonraker_api_key(api_key: str, key_file: Optional[Path] = None) -> Pat
     """Save a Moonraker API key to a file readable only by the service user."""
     clean_key = _validate_api_key(api_key)
     path = _api_key_file(key_file)
-    path.parent.mkdir(parents=True, exist_ok=True)
-
-    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
-    try:
-        os.fchmod(fd, 0o600)
-        file_obj = os.fdopen(fd, "w", encoding="utf-8")
-    except Exception:
-        os.close(fd)
-        raise
-
-    with file_obj:
-        file_obj.write(f"{clean_key}\n")
-
+    write_secret_file(path, f"{clean_key}\n")
     return path
 
 

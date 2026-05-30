@@ -51,7 +51,7 @@ class MoonrakerApiKeyConfigTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             key_file = Path(tmp) / "moonraker-api-key"
 
-            with patch("daemon.moonraker_auth.os.open", wraps=os.open) as open_mock:
+            with patch("daemon.secret_files.os.open", wraps=os.open) as open_mock:
                 save_moonraker_api_key("secret-key", key_file=key_file)
 
             self.assertEqual(open_mock.call_args.args[2], 0o600)

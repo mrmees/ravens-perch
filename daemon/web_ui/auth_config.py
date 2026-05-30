@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Dict, Optional
 
 from ..config import DATA_DIR
+from ..secret_files import write_secret_file
 
 DEFAULT_USERNAME = "ravens"
 DEFAULT_AUTH_ENV_FILE = DATA_DIR / "web-auth.env"
@@ -127,12 +128,10 @@ def save_web_auth_credentials(
     auth_env_file = _auth_env_file(config_file)
     web_password_file = Path(password_file) if password_file else auth_env_file.parent / DEFAULT_PASSWORD_FILE.name
 
-    web_password_file.parent.mkdir(parents=True, exist_ok=True)
-    web_password_file.write_text(password + "\n", encoding="utf-8")
-    web_password_file.chmod(0o600)
+    write_secret_file(web_password_file, password + "\n")
 
-    auth_env_file.parent.mkdir(parents=True, exist_ok=True)
-    auth_env_file.write_text(
+    write_secret_file(
+        auth_env_file,
         "\n".join(
             [
                 f"RAVENS_PERCH_WEB_AUTH_USERNAME={username}",
@@ -140,9 +139,7 @@ def save_web_auth_credentials(
                 "",
             ]
         ),
-        encoding="utf-8",
     )
-    auth_env_file.chmod(0o600)
 
     return load_web_auth_config(config_file=auth_env_file)
 

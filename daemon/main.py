@@ -39,7 +39,8 @@ from .stream_manager import (
 from .moonraker_client import (
     detect_moonraker_url, register_camera, unregister_camera,
     build_stream_url, build_snapshot_url, get_system_ip,
-    set_url as set_moonraker_url, is_available as moonraker_is_available
+    set_url as set_moonraker_url, is_available as moonraker_is_available,
+    MoonrakerUrlError, validate_moonraker_url
 )
 from .print_status import init_monitor
 from . import db
@@ -274,6 +275,13 @@ class RavensPerchDaemon:
         configured = str(configured).strip() if configured else ""
 
         if configured:
+            try:
+                configured = validate_moonraker_url(configured)
+            except MoonrakerUrlError as e:
+                logger.warning(f"Ignoring configured Moonraker URL: {e}")
+                add_log("WARNING", f"Ignoring configured Moonraker URL: {e}")
+                return detect_moonraker_url()
+
             set_moonraker_url(configured)
             if moonraker_is_available():
                 logger.info(f"Using configured Moonraker URL: {configured}")

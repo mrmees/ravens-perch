@@ -13,6 +13,7 @@ from flask import Flask, Response, abort, request, session
 from markupsafe import Markup, escape
 
 from ..config import DATA_DIR, WEB_UI_HOST, WEB_UI_PORT
+from ..secret_files import write_secret_file
 from ..snapshot_access import valid_snapshot_token
 from .auth_config import load_web_auth_config
 
@@ -36,9 +37,7 @@ def _read_secret_file(path: Path) -> Optional[str]:
 
 def _write_secret_file(path: Path, value: str) -> None:
     try:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(value + "\n", encoding="utf-8")
-        path.chmod(0o600)
+        write_secret_file(path, value + "\n")
     except OSError as e:
         logger.warning(f"Unable to write web UI secret file {path}: {e}")
 
@@ -136,6 +135,22 @@ def create_app():
         if not expected or not provided or not hmac.compare_digest(provided, expected):
             abort(400, "Invalid CSRF token")
         return None
+
+    @app.after_request
+    def add_security_headers(response):
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("X-Frame-Options", "SAMEORIGIN")
+        response.headers.setdefault("Referrer-Policy", "same-origin")
+
+        if request.endpoint in {
+            "cameras.snapshot",
+            "cameras.settings_page",
+            "cameras.logs_page",
+            "cameras.api_logs",
+        }:
+            response.headers["Cache-Control"] = "no-store"
+
+        return response
 
     @app.context_processor
     def inject_security_helpers():

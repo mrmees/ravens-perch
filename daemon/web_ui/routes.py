@@ -25,7 +25,7 @@ from ..stream_manager import (
 from ..moonraker_client import (
     register_camera, unregister_camera as unregister_moonraker_camera,
     build_stream_url, build_snapshot_url, get_system_ip, is_available as moonraker_available,
-    detect_klipper_ui_theme
+    detect_klipper_ui_theme, MoonrakerUrlError, validate_moonraker_url
 )
 from ..moonraker_auth import (
     MoonrakerApiKeyError,
@@ -1008,6 +1008,11 @@ def update_global_settings():
     """Update global settings."""
     if 'moonraker_url' in request.form:
         moonraker_url = request.form['moonraker_url'].strip()
+        if moonraker_url:
+            try:
+                moonraker_url = validate_moonraker_url(moonraker_url)
+            except MoonrakerUrlError as e:
+                return _settings_message(str(e), "error")
         set_setting('moonraker_url', moonraker_url)
 
     if request.form.get('clear_moonraker_api_key'):
