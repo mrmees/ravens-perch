@@ -43,6 +43,8 @@ class InstallLifecycleTests(unittest.TestCase):
         self.assertIn("moonraker_curl", text)
         self.assertIn("X-Api-Key:", text)
         self.assertIn("Keeping existing Moonraker API key", text)
+        self.assertIn('(umask 077; printf \'%s\\n\' "$api_key" > "$key_file")', text)
+        self.assertIn(': "${MOONRAKER_URL:?manage_existing_cameras requires MOONRAKER_URL to be set}"', text)
         self.assertNotIn('curl -s "http://127.0.0.1:7125/server/webcams/list"', text)
 
 

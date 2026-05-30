@@ -70,7 +70,9 @@ configure_moonraker_api_key() {
     fi
 
     mkdir -p "$(dirname "$key_file")"
-    printf '%s\n' "$api_key" > "$key_file"
+    touch "$key_file"
+    chmod 600 "$key_file"
+    (umask 077; printf '%s\n' "$api_key" > "$key_file")
     chmod 600 "$key_file"
     log_success "Moonraker API key saved at: ${key_file}"
 }
@@ -850,6 +852,7 @@ start_services() {
 
 # Manage existing Moonraker cameras
 manage_existing_cameras() {
+    : "${MOONRAKER_URL:?manage_existing_cameras requires MOONRAKER_URL to be set}"
     log_info "Checking for existing Moonraker cameras..."
 
     # Get list of existing cameras

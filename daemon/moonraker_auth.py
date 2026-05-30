@@ -25,7 +25,7 @@ def _validate_api_key(api_key: str) -> str:
     clean_key = api_key.strip()
     if not clean_key:
         raise MoonrakerApiKeyError("Moonraker API key cannot be empty.")
-    if "\n" in api_key or "\r" in api_key:
+    if "\n" in clean_key or "\r" in clean_key:
         raise MoonrakerApiKeyError("Moonraker API key cannot contain line breaks.")
     return clean_key
 
@@ -43,8 +43,18 @@ def save_moonraker_api_key(api_key: str, key_file: Optional[Path] = None) -> Pat
     clean_key = _validate_api_key(api_key)
     path = _api_key_file(key_file)
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(f"{clean_key}\n", encoding="utf-8")
-    path.chmod(0o600)
+
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_TRUNC, 0o600)
+    try:
+        os.fchmod(fd, 0o600)
+        file_obj = os.fdopen(fd, "w", encoding="utf-8")
+    except Exception:
+        os.close(fd)
+        raise
+
+    with file_obj:
+        file_obj.write(f"{clean_key}\n")
+
     return path
 
 

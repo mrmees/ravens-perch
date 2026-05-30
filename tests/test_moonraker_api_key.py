@@ -1,3 +1,4 @@
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -37,6 +38,23 @@ class MoonrakerApiKeyConfigTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as tmp:
             with self.assertRaises(MoonrakerApiKeyError):
                 save_moonraker_api_key("bad\nkey", key_file=Path(tmp) / "moonraker-api-key")
+
+    def test_accepts_api_key_with_terminal_trailing_newline(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            key_file = Path(tmp) / "moonraker-api-key"
+
+            save_moonraker_api_key("secret-key\n", key_file=key_file)
+
+            self.assertEqual(read_moonraker_api_key(key_file=key_file), "secret-key")
+
+    def test_save_creates_file_with_restrictive_mode(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            key_file = Path(tmp) / "moonraker-api-key"
+
+            with patch("daemon.moonraker_auth.os.open", wraps=os.open) as open_mock:
+                save_moonraker_api_key("secret-key", key_file=key_file)
+
+            self.assertEqual(open_mock.call_args.args[2], 0o600)
 
     def test_auth_headers_are_empty_without_key(self):
         with tempfile.TemporaryDirectory() as tmp:
