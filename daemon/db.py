@@ -112,7 +112,7 @@ def init_db():
                 camera_id INTEGER UNIQUE REFERENCES cameras(id) ON DELETE CASCADE,
                 format TEXT DEFAULT 'mjpeg',
                 resolution TEXT DEFAULT '1280x720',
-                framerate INTEGER DEFAULT 30,
+                framerate REAL DEFAULT 30,
                 encoder TEXT DEFAULT 'libx264',
                 bitrate TEXT DEFAULT '4M',
                 preset TEXT DEFAULT 'ultrafast',
@@ -143,8 +143,8 @@ def init_db():
                 overlay_show_live_velocity BOOLEAN DEFAULT FALSE,
                 overlay_show_flow_rate BOOLEAN DEFAULT FALSE,
                 overlay_show_filament_type BOOLEAN DEFAULT FALSE,
-                printing_framerate INTEGER,
-                standby_framerate INTEGER,
+                printing_framerate REAL,
+                standby_framerate REAL,
                 standby_enabled BOOLEAN DEFAULT FALSE,
                 overlay_standby_text TEXT
             )
@@ -226,8 +226,8 @@ def init_db():
             ("overlay_show_live_velocity", "BOOLEAN DEFAULT FALSE"),
             ("overlay_show_flow_rate", "BOOLEAN DEFAULT FALSE"),
             ("overlay_show_filament_type", "BOOLEAN DEFAULT FALSE"),
-            ("printing_framerate", "INTEGER"),
-            ("standby_framerate", "INTEGER"),
+            ("printing_framerate", "REAL"),
+            ("standby_framerate", "REAL"),
             ("standby_enabled", "BOOLEAN DEFAULT FALSE"),
             ("overlay_standby_text", "TEXT"),
         ]

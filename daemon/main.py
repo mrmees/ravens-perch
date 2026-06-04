@@ -583,6 +583,10 @@ class RavensPerchDaemon:
                 # Existing camera - update connection status
                 camera_id = camera['id']
                 db.mark_camera_connected(camera_id, device_info.path)
+                capabilities = probe_capabilities(device_info.path)
+                if capabilities:
+                    db.save_camera_capabilities(camera_id, capabilities)
+                    logger.info(f"Refreshed capabilities for camera: {camera['friendly_name']}")
                 logger.info(f"Reconnected known camera: {camera['friendly_name']}")
                 add_log("INFO", f"Camera reconnected: {camera['friendly_name']}", camera_id)
             else:

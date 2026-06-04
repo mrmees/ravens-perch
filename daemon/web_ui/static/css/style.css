@@ -1159,6 +1159,12 @@ details.settings-card > *:not(summary) {
     border: 1px solid var(--success);
 }
 
+.alert-warning {
+    background-color: rgba(255, 152, 0, 0.16);
+    color: var(--warning);
+    border: 1px solid var(--warning);
+}
+
 .alert-error {
     background-color: rgba(244, 67, 54, 0.2);
     color: var(--error);
@@ -1182,6 +1188,11 @@ details.settings-card > *:not(summary) {
 .flash-success {
     background-color: rgba(76, 175, 80, 0.2);
     color: var(--success);
+}
+
+.flash-warning {
+    background-color: rgba(255, 152, 0, 0.16);
+    color: var(--warning);
 }
 
 .flash-error {
