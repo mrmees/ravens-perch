@@ -301,6 +301,13 @@ def get_camera_by_ravens_id(camera_id: str) -> Optional[Dict]:
 
     for webcam in webcams:
         extra_data = webcam.get('extra_data', {})
+        if not isinstance(extra_data, dict):
+            continue
+
+        ravens_perch = extra_data.get('ravens_perch', {})
+        if isinstance(ravens_perch, dict) and ravens_perch.get('camera_id') == camera_id:
+            return webcam
+
         if extra_data.get('ravens_perch_id') == camera_id:
             return webcam
 

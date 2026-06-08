@@ -3,7 +3,11 @@ import unittest
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from daemon.moonraker_client import build_stream_extra_data, register_camera
+from daemon.moonraker_client import (
+    build_stream_extra_data,
+    get_camera_by_ravens_id,
+    register_camera,
+)
 
 
 class MoonrakerStreamExtraDataTests(unittest.TestCase):
@@ -122,6 +126,17 @@ class MoonrakerStreamExtraDataTests(unittest.TestCase):
         self.assertEqual(uid, "uid-12")
         self.assertIsNone(error)
         self.assertEqual(update.call_args.kwargs["extra_data"], new_extra_data)
+
+    def test_get_camera_by_ravens_id_uses_nested_extra_data(self):
+        webcam = {
+            "uid": "uid-12",
+            "extra_data": {
+                "ravens_perch": {"camera_id": "12"},
+            },
+        }
+
+        with patch("daemon.moonraker_client.list_cameras", return_value=[webcam]):
+            self.assertEqual(get_camera_by_ravens_id("12"), webcam)
 
 
 if __name__ == "__main__":
