@@ -10,7 +10,7 @@ import requests
 
 from .config import (
     MOONRAKER_DEFAULT_URL, MOONRAKER_FALLBACK_URLS,
-    MEDIAMTX_WEBRTC_PORT
+    MEDIAMTX_HLS_PORT, MEDIAMTX_RTSP_PORT, MEDIAMTX_WEBRTC_PORT
 )
 from .snapshot_access import get_snapshot_token
 
@@ -411,6 +411,11 @@ def get_system_ip() -> str:
         return "127.0.0.1"
 
 
+def _stream_path_name(camera_id: str) -> str:
+    """Convert a camera ID to the MediaMTX path name used by Ravens Perch."""
+    return str(camera_id).replace(' ', '_').lower()
+
+
 def build_stream_url(camera_id: str, host: Optional[str] = None) -> str:
     """
     Build WebRTC stream URL for a camera.
@@ -420,7 +425,7 @@ def build_stream_url(camera_id: str, host: Optional[str] = None) -> str:
     if host is None:
         host = get_system_ip()
 
-    path_name = camera_id.replace(' ', '_').lower()
+    path_name = _stream_path_name(camera_id)
     return f"http://{host}:{MEDIAMTX_WEBRTC_PORT}/{path_name}/"
 
 
@@ -436,6 +441,41 @@ def build_snapshot_url(camera_id: str, host: Optional[str] = None) -> str:
 
     query = urlencode({"token": get_snapshot_token()})
     return f"http://{host}/cameras/snapshot/{camera_id}.jpg?{query}"
+
+
+def build_stream_extra_data(camera_id: str, host: Optional[str] = None) -> Dict:
+    """Build Ravens Perch stream metadata for Moonraker webcam extra_data."""
+    if host is None:
+        host = get_system_ip()
+
+    camera_id = str(camera_id)
+    path_name = _stream_path_name(camera_id)
+
+    return {
+        "ravens_perch": {
+            "schema_version": 1,
+            "camera_id": camera_id,
+            "path": path_name,
+            "streams": {
+                "webrtc": {
+                    "url": build_stream_url(camera_id, host),
+                    "protocol": "webrtc",
+                },
+                "rtsp": {
+                    "url": f"rtsp://{host}:{MEDIAMTX_RTSP_PORT}/{path_name}",
+                    "protocol": "rtsp",
+                },
+                "hls": {
+                    "url": f"http://{host}:{MEDIAMTX_HLS_PORT}/{path_name}/",
+                    "protocol": "hls",
+                },
+                "snapshot": {
+                    "url": build_snapshot_url(camera_id, host),
+                    "protocol": "http",
+                },
+            },
+        }
+    }
 
 
 # ============ Server Info ============
