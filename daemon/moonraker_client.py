@@ -143,7 +143,8 @@ def register_camera(
     snapshot_url: str,
     flip_horizontal: bool = False,
     flip_vertical: bool = False,
-    rotation: int = 0
+    rotation: int = 0,
+    extra_data: Optional[Dict] = None
 ) -> Tuple[bool, Optional[str], Optional[str]]:
     """
     Register a camera with Moonraker.
@@ -195,6 +196,8 @@ def register_camera(
         "rotation": rotation,
         "aspect_ratio": "16:9",
     }
+    if extra_data is not None:
+        data["extra_data"] = extra_data
 
     success, result, error = client._request(
         "/server/webcams/item",
