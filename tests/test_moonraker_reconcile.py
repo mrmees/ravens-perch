@@ -118,6 +118,49 @@ class MoonrakerReconcileTests(unittest.TestCase):
         register_camera.assert_not_called()
         self.assertNotIn(11, daemon._queued_moonraker_camera_ids)
 
+    def test_registration_worker_passes_stream_extra_data(self):
+        daemon = RavensPerchDaemon()
+        daemon.running = True
+        daemon._queued_moonraker_camera_ids.add(7)
+        daemon._moonraker_queue.put((7, "Queued Name", 0))
+        extra_data = {"ravens_perch": {"camera_id": "7"}}
+
+        def connected_camera(_camera_id):
+            daemon.running = False
+            return {
+                "id": 7,
+                "connected": True,
+                "enabled": True,
+                "friendly_name": "Toolhead Camera",
+                "settings": {"rotation": 90},
+            }
+
+        with (
+            patch("daemon.main.db.get_camera_with_settings", side_effect=connected_camera),
+            patch("daemon.main.get_system_ip", return_value="printer.local"),
+            patch("daemon.main.build_stream_url", return_value="webrtc-url"),
+            patch("daemon.main.build_snapshot_url", return_value="snapshot-url"),
+            patch("daemon.main.build_stream_extra_data", return_value=extra_data) as build_extra,
+            patch("daemon.main.register_camera", return_value=(True, "uid-7", None)) as register,
+            patch("daemon.main.db.update_camera"),
+            patch("daemon.main.time.sleep"),
+        ):
+            worker = threading.Thread(target=daemon._moonraker_registration_worker)
+            worker.start()
+            worker.join(timeout=2)
+
+        self.assertFalse(worker.is_alive())
+        build_extra.assert_called_once_with("7", "printer.local")
+        register.assert_called_once_with(
+            "7",
+            "Toolhead Camera",
+            "webrtc-url",
+            "snapshot-url",
+            rotation=90,
+            extra_data=extra_data,
+        )
+        self.assertNotIn(7, daemon._queued_moonraker_camera_ids)
+
 
 if __name__ == "__main__":
     unittest.main()

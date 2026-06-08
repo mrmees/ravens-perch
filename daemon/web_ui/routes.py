@@ -26,7 +26,8 @@ from ..stream_manager import (
 )
 from ..moonraker_client import (
     register_camera, unregister_camera as unregister_moonraker_camera,
-    build_stream_url, build_snapshot_url, get_system_ip, is_available as moonraker_available,
+    build_stream_url, build_snapshot_url, build_stream_extra_data,
+    get_system_ip, is_available as moonraker_available,
     detect_klipper_ui_theme
 )
 from ..hardware import estimate_cpu_capability, detect_encoders, get_platform_info, clear_encoder_cache
@@ -461,6 +462,7 @@ def _register_camera_with_moonraker(camera_id: int, friendly_name: str, settings
     host = get_system_ip()
     stream_url = build_stream_url(str(camera_id), host)
     snapshot_url = build_snapshot_url(str(camera_id), host)
+    extra_data = build_stream_extra_data(str(camera_id), host)
     rotation = settings.get('rotation', 0)
 
     success, uid, _ = register_camera(
@@ -468,7 +470,8 @@ def _register_camera_with_moonraker(camera_id: int, friendly_name: str, settings
         friendly_name,
         stream_url,
         snapshot_url,
-        rotation=rotation
+        rotation=rotation,
+        extra_data=extra_data
     )
     if success and uid:
         update_camera(camera_id, moonraker_uid=uid)
@@ -917,6 +920,7 @@ def rename_camera(camera_id: int):
         host = get_system_ip()
         stream_url = build_stream_url(str(camera_id), host)
         snapshot_url = build_snapshot_url(str(camera_id), host)
+        extra_data = build_stream_extra_data(str(camera_id), host)
         settings = get_camera_settings(camera_id) or {}
         rotation = settings.get('rotation', 0)
 
@@ -925,7 +929,8 @@ def rename_camera(camera_id: int):
             new_name,
             stream_url,
             snapshot_url,
-            rotation=rotation
+            rotation=rotation,
+            extra_data=extra_data
         )
         if success and new_uid:
             update_camera(camera_id, moonraker_uid=new_uid)

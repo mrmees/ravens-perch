@@ -38,7 +38,7 @@ from .stream_manager import (
 )
 from .moonraker_client import (
     detect_moonraker_url, register_camera, unregister_camera,
-    build_stream_url, build_snapshot_url, get_system_ip,
+    build_stream_url, build_snapshot_url, build_stream_extra_data, get_system_ip,
     set_url as set_moonraker_url, is_available as moonraker_is_available
 )
 from .print_status import init_monitor
@@ -714,13 +714,15 @@ class RavensPerchDaemon:
                 host = get_system_ip()
                 stream_url = build_stream_url(str(cam_id), host)
                 snapshot_url = build_snapshot_url(str(cam_id), host)
+                extra_data = build_stream_extra_data(str(cam_id), host)
 
                 success, moonraker_uid, error = register_camera(
                     str(cam_id),
                     friendly_name,
                     stream_url,
                     snapshot_url,
-                    rotation=rotation
+                    rotation=rotation,
+                    extra_data=extra_data
                 )
 
                 if success and moonraker_uid:
