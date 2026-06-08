@@ -317,7 +317,8 @@ def probe_capabilities(device_path: str) -> Dict:
             # Parse framerate line (e.g., "Interval: Discrete 0.033s (30.000 fps)")
             fps_match = re.search(r"\((\d+(?:\.\d+)?)\s*fps\)", line)
             if fps_match and current_format and current_resolution:
-                fps = int(float(fps_match.group(1)))
+                fps_value = float(fps_match.group(1))
+                fps = int(fps_value) if fps_value.is_integer() else fps_value
                 if fps not in capabilities[current_format][current_resolution]:
                     capabilities[current_format][current_resolution].append(fps)
 

@@ -21,6 +21,8 @@ class ScanRouteTests(unittest.TestCase):
             app.test_request_context("/cameras/scan", method="POST"),
             patch("daemon.web_ui.routes.find_video_devices", return_value=["/dev/video2"]),
             patch("daemon.web_ui.routes.get_device_info", return_value=device),
+            patch("daemon.web_ui.routes.probe_capabilities", return_value={"mjpeg": {"640x480": [30]}}),
+            patch("daemon.web_ui.routes.save_camera_capabilities"),
             patch("daemon.web_ui.routes.is_camera_ignored", return_value=False),
             patch(
                 "daemon.web_ui.routes.get_camera_by_hardware_id",

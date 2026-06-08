@@ -2,6 +2,8 @@
 Ravens Perch - Web UI Route Handlers
 """
 import logging
+from typing import Dict, List, Optional, Union
+
 from flask import (
     Blueprint, render_template, request, jsonify,
     redirect, url_for, Response, flash
@@ -31,7 +33,7 @@ from ..hardware import estimate_cpu_capability, detect_encoders, get_platform_in
 from ..camera_manager import (
     find_video_devices, get_device_info, probe_capabilities, auto_configure,
     get_v4l2_controls, set_v4l2_control, get_v4l2_control_value,
-    add_rejected_camera, get_rejected_cameras
+    add_rejected_camera, get_rejected_cameras, find_closest_resolution
 )
 from ..bandwidth import get_camera_bandwidth_stats
 from ..usb_topology import get_shared_usb2_camera_warnings
@@ -49,6 +51,7 @@ logger = logging.getLogger(__name__)
 
 bp = Blueprint('cameras', __name__)
 _effective_framerate_callback = None
+Framerate = Union[int, float]
 
 
 def set_effective_framerate_callback(callback):
@@ -60,6 +63,121 @@ def set_effective_framerate_callback(callback):
 def _record_effective_framerate(camera_id: int, settings: dict):
     if _effective_framerate_callback:
         _effective_framerate_callback(camera_id, settings)
+
+
+def _get_capability_map(camera_id: int) -> Dict:
+    caps = get_camera_capabilities(camera_id)
+    if caps and caps.get('capabilities'):
+        return caps['capabilities']
+    return {}
+
+
+def _supported_resolutions(capabilities: Dict, fmt: str) -> List[str]:
+    if capabilities and fmt in capabilities and capabilities[fmt]:
+        return list(capabilities[fmt].keys())
+    return COMMON_RESOLUTIONS
+
+
+def _normalize_framerate_value(framerate: float) -> Framerate:
+    return int(framerate) if framerate.is_integer() else framerate
+
+
+def _parse_framerate(value: Optional[str]) -> Optional[Framerate]:
+    if value is None or value == '':
+        return None
+    return _normalize_framerate_value(float(value))
+
+
+def _format_framerate_value(framerate: Optional[Framerate]) -> str:
+    if framerate is None:
+        return "unset"
+    framerate_float = float(framerate)
+    return str(int(framerate_float)) if framerate_float.is_integer() else f"{framerate_float:g}"
+
+
+def _same_framerate(left: Optional[Framerate], right: Optional[Framerate]) -> bool:
+    if left is None or right is None:
+        return left is right
+    return abs(float(left) - float(right)) < 0.001
+
+
+def _matching_framerate(framerate: Optional[Framerate], supported: List[Framerate]) -> Optional[Framerate]:
+    if framerate is None:
+        return None
+    for supported_framerate in supported:
+        if _same_framerate(framerate, supported_framerate):
+            return supported_framerate
+    return None
+
+
+def _supported_framerates(capabilities: Dict, fmt: str, resolution: str) -> List[Framerate]:
+    if capabilities and fmt in capabilities and resolution in capabilities[fmt]:
+        return sorted(capabilities[fmt][resolution])
+    return COMMON_FRAMERATES
+
+
+def _closest_framerate(framerate: Optional[Framerate], supported: List[Framerate]) -> Optional[Framerate]:
+    if not supported:
+        return framerate
+    matching = _matching_framerate(framerate, supported)
+    if matching is not None:
+        return matching
+    if framerate is None:
+        return supported[0]
+    return min(supported, key=lambda fps: abs(float(fps) - float(framerate)))
+
+
+def _normalize_camera_mode_settings(camera_id: int, settings: Dict) -> List[str]:
+    """Constrain submitted mode settings to cached camera capabilities."""
+    capabilities = _get_capability_map(camera_id)
+    if not capabilities:
+        return []
+
+    current_settings = get_camera_settings(camera_id) or {}
+    effective = dict(current_settings)
+    effective.update(settings)
+    notes = []
+
+    fmt = effective.get('format') or 'mjpeg'
+    if fmt not in capabilities:
+        replacement = next(iter(capabilities))
+        settings['format'] = replacement
+        fmt = replacement
+        notes.append(f"Input format was changed to {replacement.upper()} because the selected format is not available.")
+
+    resolution = effective.get('resolution') or ''
+    supported_resolutions = _supported_resolutions(capabilities, fmt)
+    if resolution not in supported_resolutions:
+        replacement = find_closest_resolution(resolution, supported_resolutions) if resolution else supported_resolutions[0]
+        settings['resolution'] = replacement
+        resolution = replacement
+        notes.append(f"Resolution was changed to {replacement} because the selected resolution is not available for {fmt.upper()}.")
+
+    supported_framerates = _supported_framerates(capabilities, fmt, resolution)
+    framerate = effective.get('framerate')
+    normalized_framerate = _closest_framerate(framerate, supported_framerates)
+    if normalized_framerate is not None and framerate != normalized_framerate:
+        settings['framerate'] = normalized_framerate
+        normalized_fps_label = _format_framerate_value(normalized_framerate)
+        submitted_fps_label = _format_framerate_value(framerate)
+        notes.append(
+            f"Framerate was changed to {normalized_fps_label} fps because "
+            f"{submitted_fps_label} fps is not available for {fmt.upper()} {resolution}."
+        )
+
+    standby_framerate = effective.get('standby_framerate')
+    if effective.get('standby_enabled') and standby_framerate is not None:
+        normalized_standby = _closest_framerate(standby_framerate, supported_framerates)
+        if normalized_standby is not None and standby_framerate != normalized_standby:
+            settings['standby_framerate'] = normalized_standby
+            normalized_standby_label = _format_framerate_value(normalized_standby)
+            submitted_standby_label = _format_framerate_value(standby_framerate)
+            notes.append(
+                f"Idle framerate was changed to {normalized_standby_label} fps because "
+                f"{submitted_standby_label} fps is not available for {fmt.upper()} {resolution}."
+            )
+
+    return notes
 
 
 # ============ The Raven (Edgar Allan Poe, 1845) ============
@@ -422,6 +540,9 @@ def scan_cameras():
 
                 # Update connection status
                 mark_camera_connected(existing['id'], device_path)
+                capabilities = probe_capabilities(device_path)
+                if capabilities:
+                    save_camera_capabilities(existing['id'], capabilities)
                 updated += 1
                 camera = get_camera_with_settings(existing['id'])
                 if camera and camera['enabled']:
@@ -538,18 +659,13 @@ def camera_detail(camera_id: int):
     camera['stream_urls'] = get_stream_urls(str(camera_id), get_system_ip())
 
     # Get capabilities for dropdowns
-    caps = get_camera_capabilities(camera_id)
-    capabilities = caps['capabilities'] if caps else {}
+    capabilities = _get_capability_map(camera_id)
 
     # Build resolution options from capabilities
-    resolutions = []
-    if camera['settings'] and camera['settings'].get('format'):
-        fmt = camera['settings']['format']
-        if fmt in capabilities:
-            resolutions = list(capabilities[fmt].keys())
-
-    if not resolutions:
-        resolutions = COMMON_RESOLUTIONS
+    fmt = (camera['settings'] or {}).get('format') or 'mjpeg'
+    resolution = (camera['settings'] or {}).get('resolution') or '1280x720'
+    resolutions = _supported_resolutions(capabilities, fmt)
+    framerates = _supported_framerates(capabilities, fmt, resolution)
 
     # Get encoders
     encoders = detect_encoders()
@@ -584,7 +700,7 @@ def camera_detail(camera_id: int):
         camera=camera,
         capabilities=capabilities,
         resolutions=resolutions,
-        framerates=COMMON_FRAMERATES,
+        framerates=framerates,
         encoders=encoders,
         system_ip=get_system_ip(),
         ffmpeg_cmd=ffmpeg_cmd,
@@ -605,7 +721,7 @@ def update_settings(camera_id: int):
     if 'resolution' in request.form:
         settings['resolution'] = request.form['resolution']
     if 'framerate' in request.form:
-        settings['framerate'] = int(request.form['framerate'])
+        settings['framerate'] = _parse_framerate(request.form['framerate'])
     if 'format' in request.form:
         settings['format'] = request.form['format']
     if 'encoder' in request.form:
@@ -679,7 +795,7 @@ def update_settings(camera_id: int):
         settings['standby_enabled'] = '1' in request.form.getlist('standby_enabled')
         if settings['standby_enabled'] and 'standby_framerate' in request.form:
             val = request.form['standby_framerate']
-            settings['standby_framerate'] = int(val) if val else None
+            settings['standby_framerate'] = _parse_framerate(val)
         elif not settings['standby_enabled']:
             settings['standby_framerate'] = None
 
@@ -692,8 +808,12 @@ def update_settings(camera_id: int):
         if print_monitor:
             print_monitor.set_poll_interval(float(interval))
 
+    validation_notes = _normalize_camera_mode_settings(camera_id, settings)
+
     # Save settings
     save_camera_settings(camera_id, settings)
+    for note in validation_notes:
+        add_log("WARNING", note, camera_id)
     add_log("INFO", f"Settings updated for camera {camera['friendly_name']}", camera_id)
 
     # Update print monitor overlay setting if changed
@@ -738,8 +858,14 @@ def update_settings(camera_id: int):
                 current_settings.get('encoder', 'libx264'),
                 overlay_path=overlay_path
             )
-        return render_template('partials/settings_success.html', ffmpeg_cmd=ffmpeg_cmd)
+        return render_template(
+            'partials/settings_success.html',
+            ffmpeg_cmd=ffmpeg_cmd,
+            validation_notes=validation_notes
+        )
 
+    for note in validation_notes:
+        flash(note, "warning")
     flash("Settings updated successfully", "success")
     return redirect(url_for('cameras.camera_detail', camera_id=camera_id))
 
@@ -1230,15 +1356,8 @@ def api_resolutions(camera_id: int):
     fmt = request.args.get('format', 'mjpeg')
     current_resolution = request.args.get('resolution', '')
 
-    caps = get_camera_capabilities(camera_id)
-    if caps and caps['capabilities']:
-        capabilities = caps['capabilities']
-        if fmt in capabilities:
-            resolutions = list(capabilities[fmt].keys())
-        else:
-            resolutions = COMMON_RESOLUTIONS
-    else:
-        resolutions = COMMON_RESOLUTIONS
+    capabilities = _get_capability_map(camera_id)
+    resolutions = _supported_resolutions(capabilities, fmt)
 
     # Return HTML options for HTMX requests
     if request.headers.get('HX-Request'):
@@ -1269,46 +1388,42 @@ def api_framerates(camera_id: int):
     current_framerate = request.args.get('framerate', '')
     current_standby = request.args.get('standby_framerate', '')
 
-    # Convert to int for comparison if provided
     try:
-        current_framerate_int = int(current_framerate) if current_framerate else None
+        current_framerate_value = _parse_framerate(current_framerate)
     except ValueError:
-        current_framerate_int = None
+        current_framerate_value = None
 
     try:
-        current_standby_int = int(current_standby) if current_standby else None
+        current_standby_value = _parse_framerate(current_standby)
     except ValueError:
-        current_standby_int = None
+        current_standby_value = None
 
-    caps = get_camera_capabilities(camera_id)
-    if caps and caps['capabilities']:
-        capabilities = caps['capabilities']
-        if fmt in capabilities and resolution in capabilities[fmt]:
-            framerates = sorted(capabilities[fmt][resolution])
-        else:
-            framerates = COMMON_FRAMERATES
-    else:
-        framerates = COMMON_FRAMERATES
+    capabilities = _get_capability_map(camera_id)
+    framerates = _supported_framerates(capabilities, fmt, resolution)
 
     # Return HTML options for HTMX requests
     if request.headers.get('HX-Request'):
         # Try to preserve current selection, otherwise select first
-        preserved = current_framerate_int in framerates
-        selected_framerate = current_framerate_int if preserved else (framerates[0] if framerates else None)
+        matched_framerate = _matching_framerate(current_framerate_value, framerates)
+        preserved = matched_framerate is not None
+        selected_framerate = matched_framerate if preserved else (framerates[0] if framerates else None)
 
         options = []
         for fps in framerates:
-            selected = 'selected' if fps == selected_framerate else ''
-            options.append(f'<option value="{fps}" {selected}>{fps} fps</option>')
+            selected = 'selected' if _same_framerate(fps, selected_framerate) else ''
+            fps_value = _format_framerate_value(fps)
+            options.append(f'<option value="{fps_value}" {selected}>{fps_value} fps</option>')
 
         # Also build options for standby framerate dropdown (out-of-band swap)
-        standby_preserved = current_standby_int in framerates
-        selected_standby = current_standby_int if standby_preserved else (framerates[0] if framerates else None)
+        matched_standby = _matching_framerate(current_standby_value, framerates)
+        standby_preserved = matched_standby is not None
+        selected_standby = matched_standby if standby_preserved else (framerates[0] if framerates else None)
 
         standby_options = []
         for fps in framerates:
-            selected = 'selected' if fps == selected_standby else ''
-            standby_options.append(f'<option value="{fps}" {selected}>{fps} fps</option>')
+            selected = 'selected' if _same_framerate(fps, selected_standby) else ''
+            fps_value = _format_framerate_value(fps)
+            standby_options.append(f'<option value="{fps_value}" {selected}>{fps_value} fps</option>')
 
         # Return both dropdowns - main one targeted, standby via OOB swap
         response = ''.join(options)
@@ -1317,7 +1432,7 @@ def api_framerates(camera_id: int):
         response += '</select>'
 
         headers = {}
-        if not preserved and current_framerate_int is not None:
+        if not preserved and current_framerate_value is not None:
             headers['HX-Trigger'] = 'selectionChanged'
         return response, 200, headers
 

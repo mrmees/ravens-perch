@@ -2,6 +2,14 @@
     Settings saved successfully.
 </div>
 
+{% if validation_notes %}
+<div class="alert alert-warning">
+    {% for note in validation_notes %}
+    <div>{{ note }}</div>
+    {% endfor %}
+</div>
+{% endif %}
+
 <div id="ffmpeg-command-section" hx-swap-oob="true" class="info-section" style="margin-top: 1rem;">
     {% if ffmpeg_cmd %}
     <h4>FFmpeg Command</h4>
