@@ -127,6 +127,14 @@ def is_available() -> bool:
 
 # ============ Webcam API ============
 
+def _merge_extra_data(existing_extra_data: Optional[Dict], new_extra_data: Optional[Dict]) -> Dict:
+    """Merge Ravens Perch metadata into existing Moonraker webcam extra_data."""
+    merged = existing_extra_data.copy() if isinstance(existing_extra_data, dict) else {}
+    if isinstance(new_extra_data, dict):
+        merged.update(new_extra_data)
+    return merged
+
+
 def get_ravens_camera_by_name(webcam_name: str) -> Optional[Dict]:
     """Find an existing Ravens Perch webcam by name."""
     webcams = list_cameras()
@@ -164,15 +172,18 @@ def register_camera(
         logger.info(f"Camera {webcam_name} already exists (uid: {existing_uid}), updating...")
 
         # Update existing camera
-        success, error = update_camera(
-            existing_uid,
-            stream_url=stream_url,
-            snapshot_url=snapshot_url,
-            flip_horizontal=flip_horizontal,
-            flip_vertical=flip_vertical,
-            rotation=rotation,
-            enabled=True
-        )
+        updates = {
+            "stream_url": stream_url,
+            "snapshot_url": snapshot_url,
+            "flip_horizontal": flip_horizontal,
+            "flip_vertical": flip_vertical,
+            "rotation": rotation,
+            "enabled": True,
+        }
+        if extra_data is not None:
+            updates["extra_data"] = _merge_extra_data(existing.get('extra_data'), extra_data)
+
+        success, error = update_camera(existing_uid, **updates)
 
         if success:
             return True, existing_uid, None

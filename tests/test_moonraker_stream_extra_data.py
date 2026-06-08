@@ -69,6 +69,60 @@ class MoonrakerStreamExtraDataTests(unittest.TestCase):
         payload = client._request.call_args.kwargs["data"]
         self.assertEqual(payload["extra_data"], extra_data)
 
+    def test_register_camera_preserves_unrelated_extra_data_when_updating_webcam(self):
+        existing = {
+            "uid": "uid-12",
+            "extra_data": {
+                "fluidd": {"layout": "compact"},
+                "ravens_perch": {"camera_id": "old"},
+            },
+        }
+        new_extra_data = {"ravens_perch": {"camera_id": "12", "schema_version": 1}}
+
+        with (
+            patch("daemon.moonraker_client.get_ravens_camera_by_name", return_value=existing),
+            patch("daemon.moonraker_client.update_camera", return_value=(True, None)) as update,
+        ):
+            success, uid, error = register_camera(
+                "12",
+                "Toolhead Camera",
+                "http://printer.local:8889/12/",
+                "http://printer.local/cameras/snapshot/12.jpg?token=snapshot-secret",
+                extra_data=new_extra_data,
+            )
+
+        self.assertTrue(success)
+        self.assertEqual(uid, "uid-12")
+        self.assertIsNone(error)
+        self.assertEqual(
+            update.call_args.kwargs["extra_data"],
+            {
+                "fluidd": {"layout": "compact"},
+                "ravens_perch": {"camera_id": "12", "schema_version": 1},
+            },
+        )
+
+    def test_register_camera_replaces_malformed_extra_data_when_updating_webcam(self):
+        existing = {"uid": "uid-12", "extra_data": "not-an-object"}
+        new_extra_data = {"ravens_perch": {"camera_id": "12", "schema_version": 1}}
+
+        with (
+            patch("daemon.moonraker_client.get_ravens_camera_by_name", return_value=existing),
+            patch("daemon.moonraker_client.update_camera", return_value=(True, None)) as update,
+        ):
+            success, uid, error = register_camera(
+                "12",
+                "Toolhead Camera",
+                "http://printer.local:8889/12/",
+                "http://printer.local/cameras/snapshot/12.jpg?token=snapshot-secret",
+                extra_data=new_extra_data,
+            )
+
+        self.assertTrue(success)
+        self.assertEqual(uid, "uid-12")
+        self.assertIsNone(error)
+        self.assertEqual(update.call_args.kwargs["extra_data"], new_extra_data)
+
 
 if __name__ == "__main__":
     unittest.main()
