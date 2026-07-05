@@ -93,6 +93,11 @@ def init_db():
             CREATE TABLE IF NOT EXISTS cameras (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 hardware_id TEXT UNIQUE NOT NULL,
+                identity_key TEXT UNIQUE,
+                identity_strategy TEXT DEFAULT 'legacy',
+                by_path TEXT,
+                by_id TEXT,
+                reported_serial_number TEXT,
                 hardware_name TEXT NOT NULL,
                 serial_number TEXT,
                 friendly_name TEXT,
@@ -185,6 +190,7 @@ def init_db():
             CREATE TABLE IF NOT EXISTS ignored_cameras (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 hardware_id TEXT UNIQUE NOT NULL,
+                identity_key TEXT UNIQUE,
                 hardware_name TEXT,
                 reason TEXT,
                 ignored_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
@@ -240,6 +246,49 @@ def init_db():
                 except Exception as e:
                     logger.debug(f"Column {col_name} may already exist: {e}")
 
+        cursor.execute("PRAGMA table_info(cameras)")
+        camera_columns = {row['name'] for row in cursor.fetchall()}
+        camera_new_columns = [
+            ("identity_key", "TEXT"),
+            ("identity_strategy", "TEXT DEFAULT 'legacy'"),
+            ("by_path", "TEXT"),
+            ("by_id", "TEXT"),
+            ("reported_serial_number", "TEXT"),
+        ]
+        for col_name, col_def in camera_new_columns:
+            if col_name not in camera_columns:
+                cursor.execute(f"ALTER TABLE cameras ADD COLUMN {col_name} {col_def}")
+                logger.info(f"Added column {col_name} to cameras")
+
+        cursor.execute("""
+            UPDATE cameras
+            SET identity_key = hardware_id
+            WHERE identity_key IS NULL OR identity_key = ''
+        """)
+        cursor.execute("""
+            UPDATE cameras
+            SET identity_strategy = 'legacy'
+            WHERE identity_strategy IS NULL OR identity_strategy = ''
+        """)
+        cursor.execute("""
+            UPDATE cameras
+            SET reported_serial_number = serial_number
+            WHERE reported_serial_number IS NULL AND serial_number IS NOT NULL
+        """)
+        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_cameras_identity_key ON cameras(identity_key)")
+
+        cursor.execute("PRAGMA table_info(ignored_cameras)")
+        ignored_columns = {row['name'] for row in cursor.fetchall()}
+        if "identity_key" not in ignored_columns:
+            cursor.execute("ALTER TABLE ignored_cameras ADD COLUMN identity_key TEXT")
+            logger.info("Added column identity_key to ignored_cameras")
+        cursor.execute("""
+            UPDATE ignored_cameras
+            SET identity_key = hardware_id
+            WHERE identity_key IS NULL OR identity_key = ''
+        """)
+        cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_ignored_cameras_identity_key ON ignored_cameras(identity_key)")
+
         conn.commit()
         logger.info("Database initialized successfully")
 
@@ -251,6 +300,15 @@ def get_camera_by_hardware_id(hardware_id: str) -> Optional[Dict]:
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute("SELECT * FROM cameras WHERE hardware_id = ?", (hardware_id,))
+        row = cursor.fetchone()
+        return dict(row) if row else None
+
+
+def get_camera_by_identity_key(identity_key: str) -> Optional[Dict]:
+    """Lookup camera by canonical identity key."""
+    with get_connection() as conn:
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM cameras WHERE identity_key = ?", (identity_key,))
         row = cursor.fetchone()
         return dict(row) if row else None
 
@@ -278,12 +336,22 @@ def get_camera_by_device_path(device_path: str) -> Optional[Dict]:
 
 def create_camera(hardware_name: str, serial_number: Optional[str],
                   friendly_name: Optional[str] = None,
-                  device_path: Optional[str] = None) -> int:
+                  device_path: Optional[str] = None,
+                  identity_key: Optional[str] = None,
+                  identity_strategy: str = "legacy",
+                  by_path: Optional[str] = None,
+                  by_id: Optional[str] = None,
+                  reported_serial_number: Optional[str] = None) -> int:
     """Create a new camera record. Returns the camera ID.
 
-    If camera with same hardware_id already exists, returns existing ID.
+    If camera with same identity_key already exists, returns existing ID.
     """
-    hardware_id = f"{hardware_name}-{serial_number}" if serial_number else hardware_name
+    if identity_key is None:
+        identity_key = f"{hardware_name}-{serial_number}" if serial_number else hardware_name
+        identity_strategy = "legacy"
+    hardware_id = identity_key
+    if reported_serial_number is None:
+        reported_serial_number = serial_number
     if not friendly_name:
         friendly_name = hardware_name
 
@@ -292,20 +360,34 @@ def create_camera(hardware_name: str, serial_number: Optional[str],
 
         # Use INSERT OR IGNORE to handle race conditions
         cursor.execute("""
-            INSERT OR IGNORE INTO cameras (hardware_id, hardware_name, serial_number,
-                                 friendly_name, device_path, connected, last_seen)
-            VALUES (?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
-        """, (hardware_id, hardware_name, serial_number, friendly_name, device_path))
+            INSERT OR IGNORE INTO cameras (
+                hardware_id, identity_key, identity_strategy, hardware_name,
+                serial_number, reported_serial_number, by_path, by_id,
+                friendly_name, device_path, connected, last_seen
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, CURRENT_TIMESTAMP)
+        """, (
+            hardware_id, identity_key, identity_strategy, hardware_name,
+            serial_number, reported_serial_number, by_path, by_id,
+            friendly_name, device_path,
+        ))
 
         if cursor.rowcount == 0:
             # Camera already exists, get its ID
-            cursor.execute("SELECT id FROM cameras WHERE hardware_id = ?", (hardware_id,))
+            cursor.execute("SELECT id FROM cameras WHERE identity_key = ?", (identity_key,))
             camera_id = cursor.fetchone()[0]
             # Update connection status
             cursor.execute("""
-                UPDATE cameras SET connected = 1, device_path = ?, last_seen = CURRENT_TIMESTAMP
+                UPDATE cameras
+                SET connected = 1,
+                    device_path = ?,
+                    identity_strategy = ?,
+                    by_path = ?,
+                    by_id = ?,
+                    reported_serial_number = ?,
+                    last_seen = CURRENT_TIMESTAMP
                 WHERE id = ?
-            """, (device_path, camera_id))
+            """, (device_path, identity_strategy, by_path, by_id, reported_serial_number, camera_id))
             conn.commit()
             logger.info(f"Camera already exists {camera_id}: {friendly_name} ({hardware_id})")
             return camera_id
@@ -626,41 +708,40 @@ def get_all_cameras_with_settings(connected_only: bool = False) -> List[Dict]:
 
 # ============ Ignored Cameras Functions ============
 
-def is_camera_ignored(hardware_id: str) -> bool:
-    """Check if a hardware ID is in the ignore list."""
+def is_camera_ignored(identity_key: str) -> bool:
+    """Check if an identity key is in the ignore list."""
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "SELECT id FROM ignored_cameras WHERE hardware_id = ?",
-            (hardware_id,)
+            "SELECT id FROM ignored_cameras WHERE identity_key = ?",
+            (identity_key,)
         )
         return cursor.fetchone() is not None
 
 
-def ignore_camera(hardware_id: str, hardware_name: str = None, reason: str = None) -> bool:
-    """Add a camera to the ignore list."""
+def ignore_camera(identity_key: str, hardware_name: str = None, reason: str = None) -> bool:
+    """Add a serial-identified camera to the ignore list."""
     with get_connection() as conn:
         cursor = conn.cursor()
         try:
             cursor.execute("""
-                INSERT INTO ignored_cameras (hardware_id, hardware_name, reason)
-                VALUES (?, ?, ?)
-            """, (hardware_id, hardware_name, reason))
+                INSERT INTO ignored_cameras (hardware_id, identity_key, hardware_name, reason)
+                VALUES (?, ?, ?, ?)
+            """, (identity_key, identity_key, hardware_name, reason))
             conn.commit()
-            logger.info(f"Added camera to ignore list: {hardware_id}")
+            logger.info(f"Added camera to ignore list: {identity_key}")
             return True
         except sqlite3.IntegrityError:
-            # Already ignored
             return True
 
 
-def unignore_camera(hardware_id: str) -> bool:
-    """Remove a camera from the ignore list."""
+def unignore_camera(identity_key: str) -> bool:
+    """Remove an identity key from the ignore list."""
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
-            "DELETE FROM ignored_cameras WHERE hardware_id = ?",
-            (hardware_id,)
+            "DELETE FROM ignored_cameras WHERE identity_key = ?",
+            (identity_key,)
         )
         conn.commit()
         return cursor.rowcount > 0
