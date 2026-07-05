@@ -15,7 +15,12 @@ from .config import (
     FORMAT_PRIORITY, FORMAT_ALIASES, QUALITY_TIERS,
     DEBOUNCE_DELAY
 )
-from .camera_identity import DeviceInfo, legacy_hardware_id, resolve_device_identities
+from .camera_identity import (
+    DeviceInfo,
+    ResolvedDevice,
+    legacy_hardware_id,
+    resolve_device_identities,
+)
 from .hardware import estimate_cpu_capability
 
 logger = logging.getLogger(__name__)
@@ -524,14 +529,14 @@ class CameraMonitor:
 
     def __init__(
         self,
-        on_connect: Callable[[DeviceInfo], None],
+        on_connect: Callable[[ResolvedDevice], None],
         on_disconnect: Callable[[str], None]
     ):
         self.on_connect = on_connect
         self.on_disconnect = on_disconnect
         self._running = False
         self._thread: Optional[threading.Thread] = None
-        self._known_devices: Dict[str, str] = {}  # path -> hardware_id
+        self._known_devices: Dict[str, str] = {}  # path -> identity_key
         self._debounce_lock = threading.Lock()
         self._pending_events: Dict[str, float] = {}
 
@@ -583,18 +588,34 @@ class CameraMonitor:
     def _polling_monitor(self):
         """Monitor using polling fallback."""
         while self._running:
-            current_devices = set(find_video_devices())
-            known_paths = set(self._known_devices.keys())
-
-            # New devices
-            for device_path in current_devices - known_paths:
-                self._schedule_connect(device_path)
-
-            # Removed devices
-            for device_path in known_paths - current_devices:
-                self._schedule_disconnect(device_path)
-
+            self._scan_current_devices()
             time.sleep(2)  # Poll interval
+
+    def _scan_current_devices(self):
+        """Resolve the current capture-device batch and dispatch new identities."""
+        device_infos = []
+        for device_path in find_video_devices():
+            device_info = get_device_info(device_path)
+            if device_info:
+                device_infos.append(device_info)
+
+        current_paths = {device.path for device in device_infos}
+        for known_path in list(self._known_devices.keys()):
+            if known_path not in current_paths:
+                self._schedule_disconnect(known_path)
+
+        for resolved in resolve_device_identities(device_infos):
+            device_path = resolved.device.path
+            current_identity = resolved.identity_key or f"rejected:{device_path}"
+            known_identity = self._known_devices.get(device_path)
+            if known_identity == current_identity:
+                continue
+
+            self._known_devices[device_path] = current_identity
+            try:
+                self.on_connect(resolved)
+            except Exception as e:
+                logger.error(f"Error in connect callback: {e}")
 
     def _schedule_connect(self, device_path: str):
         """Schedule a connection event with debouncing."""
@@ -619,13 +640,7 @@ class CameraMonitor:
                 logger.debug(f"Skipping non-capture device: {device_path}")
                 return
 
-            device_info = get_device_info(device_path)
-            if device_info:
-                self._known_devices[device_path] = device_info.hardware_id
-                try:
-                    self.on_connect(device_info)
-                except Exception as e:
-                    logger.error(f"Error in connect callback: {e}")
+            self._scan_current_devices()
 
         with self._debounce_lock:
             self._pending_events[device_path] = time.time()
@@ -649,14 +664,7 @@ class CameraMonitor:
 
     def scan_existing(self):
         """Scan for existing cameras (call on startup)."""
-        for device_path in find_video_devices():
-            device_info = get_device_info(device_path)
-            if device_info:
-                self._known_devices[device_path] = device_info.hardware_id
-                try:
-                    self.on_connect(device_info)
-                except Exception as e:
-                    logger.error(f"Error processing existing camera: {e}")
+        self._scan_current_devices()
 
 
 def get_v4l2_controls(device_path: str) -> Dict[str, Dict]:
