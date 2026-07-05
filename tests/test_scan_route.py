@@ -117,6 +117,72 @@ class ScanRouteTests(unittest.TestCase):
         )
         delete_camera_completely.assert_called_once_with(4)
 
+    def test_ignore_camera_route_rejects_usb_path_camera_without_delete_or_ignore(self):
+        app = create_app()
+
+        with (
+            app.test_request_context("/cameras/4/ignore", method="POST"),
+            patch(
+                "daemon.web_ui.routes.get_camera_by_id",
+                return_value={
+                    "id": 4,
+                    "connected": False,
+                    "friendly_name": "USB Port Camera",
+                    "hardware_id": "usb-path:USB Camera:pci-1-index0",
+                    "identity_key": "usb-path:USB Camera:pci-1-index0",
+                    "identity_strategy": "usb_path",
+                    "moonraker_uid": None,
+                },
+            ),
+            patch("daemon.web_ui.routes.ignore_camera") as ignore_camera,
+            patch("daemon.web_ui.routes.delete_camera_completely") as delete_camera_completely,
+            patch("daemon.web_ui.routes.flash") as flash,
+            patch("daemon.web_ui.routes.redirect", return_value="redirected"),
+            patch("daemon.web_ui.routes.url_for", return_value="/cameras/"),
+        ):
+            response = routes.ignore_camera_route(4)
+
+        self.assertEqual(response, "redirected")
+        ignore_camera.assert_not_called()
+        delete_camera_completely.assert_not_called()
+        flash.assert_called_once()
+        self.assertEqual(flash.call_args.args[1], "error")
+
+    def test_delete_camera_with_ignore_does_not_ignore_usb_path_camera(self):
+        app = create_app()
+
+        with (
+            app.test_request_context("/cameras/4/delete", method="POST", data={"also_ignore": "true"}),
+            patch(
+                "daemon.web_ui.routes.get_camera_by_id",
+                return_value={
+                    "id": 4,
+                    "connected": False,
+                    "friendly_name": "USB Port Camera",
+                    "hardware_id": "usb-path:USB Camera:pci-1-index0",
+                    "identity_key": "usb-path:USB Camera:pci-1-index0",
+                    "identity_strategy": "usb_path",
+                    "moonraker_uid": None,
+                },
+            ),
+            patch("daemon.web_ui.routes.ignore_camera") as ignore_camera,
+            patch(
+                "daemon.web_ui.routes.delete_camera_completely",
+                return_value=(True, "usb-path:USB Camera:pci-1-index0"),
+            ) as delete_camera_completely,
+            patch("daemon.web_ui.routes.add_log"),
+            patch("daemon.web_ui.routes.flash") as flash,
+            patch("daemon.web_ui.routes.redirect", return_value="redirected"),
+            patch("daemon.web_ui.routes.url_for", return_value="/cameras/"),
+        ):
+            response = routes.delete_camera(4)
+
+        self.assertEqual(response, "redirected")
+        delete_camera_completely.assert_called_once_with(4)
+        ignore_camera.assert_not_called()
+        flash.assert_called_once()
+        self.assertEqual(flash.call_args.args[1], "success")
+
 
 if __name__ == "__main__":
     unittest.main()

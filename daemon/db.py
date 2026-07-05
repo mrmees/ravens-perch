@@ -61,9 +61,15 @@ def get_connection():
     try:
         yield conn
     except sqlite3.Error as e:
+        if conn.in_transaction:
+            conn.rollback()
         # If connection is broken, clear it so next call creates a fresh one
         logger.warning(f"Database error, will reconnect: {e}")
         _thread_local.connection = None
+        raise
+    except Exception:
+        if conn.in_transaction:
+            conn.rollback()
         raise
 
 
@@ -115,6 +121,33 @@ def _legacy_hardware_id_from_serial_identity(identity_key: str) -> Optional[str]
         return None
 
     return f"{parts[1]}-{parts[2]}"
+
+
+def _serial_identity_from_legacy_hardware_id(identity_key: str) -> Optional[str]:
+    """Return the canonical serial identity key for a legacy Name-Serial key."""
+    if ":" in identity_key or "-" not in identity_key:
+        return None
+
+    hardware_name, serial_number = identity_key.rsplit("-", 1)
+    if not hardware_name or not serial_number:
+        return None
+
+    return f"serial:{hardware_name}:{serial_number}"
+
+
+def _equivalent_ignore_keys(identity_key: str) -> Tuple[str, ...]:
+    """Return canonical and legacy keys that may refer to the same serial camera."""
+    keys = [identity_key]
+
+    legacy_hardware_id = _legacy_hardware_id_from_serial_identity(identity_key)
+    if legacy_hardware_id and legacy_hardware_id not in keys:
+        keys.append(legacy_hardware_id)
+
+    serial_identity = _serial_identity_from_legacy_hardware_id(identity_key)
+    if serial_identity and serial_identity not in keys:
+        keys.append(serial_identity)
+
+    return tuple(keys)
 
 
 def init_db():
@@ -811,40 +844,16 @@ def is_camera_ignored(identity_key: str) -> bool:
     legacy hardware_id, and old rows may still store only legacy keys. Bridge
     canonical serial identities and legacy hardware IDs in both directions.
     """
+    equivalent_keys = _equivalent_ignore_keys(identity_key)
+    placeholders = ",".join("?" for _ in equivalent_keys)
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            "SELECT id FROM ignored_cameras WHERE identity_key = ?",
-            (identity_key,)
-        )
-        if cursor.fetchone() is not None:
-            return True
-
-        legacy_hardware_id = _legacy_hardware_id_from_serial_identity(identity_key)
-        if legacy_hardware_id:
-            cursor.execute("""
-                SELECT id FROM ignored_cameras
-                WHERE identity_key = ? OR hardware_id = ?
-            """, (legacy_hardware_id, legacy_hardware_id))
-            if cursor.fetchone() is not None:
-                return True
-
-        cursor.execute(
-            "SELECT id FROM ignored_cameras WHERE hardware_id = ?",
-            (identity_key,)
-        )
-        if cursor.fetchone() is not None:
-            return True
-
         cursor.execute("""
-            SELECT identity_key FROM ignored_cameras
-            WHERE identity_key LIKE 'serial:%'
-        """)
-        for row in cursor.fetchall():
-            if _legacy_hardware_id_from_serial_identity(row["identity_key"]) == identity_key:
-                return True
-
-        return False
+            SELECT id FROM ignored_cameras
+            WHERE identity_key IN ({placeholders})
+               OR hardware_id IN ({placeholders})
+        """.format(placeholders=placeholders), equivalent_keys + equivalent_keys)
+        return cursor.fetchone() is not None
 
 
 def ignore_camera(identity_key: str, hardware_name: str = None, reason: str = None) -> bool:
@@ -865,12 +874,15 @@ def ignore_camera(identity_key: str, hardware_name: str = None, reason: str = No
 
 def unignore_camera(identity_key: str) -> bool:
     """Remove an identity key from the ignore list."""
+    equivalent_keys = _equivalent_ignore_keys(identity_key)
+    placeholders = ",".join("?" for _ in equivalent_keys)
     with get_connection() as conn:
         cursor = conn.cursor()
-        cursor.execute(
-            "DELETE FROM ignored_cameras WHERE identity_key = ?",
-            (identity_key,)
-        )
+        cursor.execute("""
+            DELETE FROM ignored_cameras
+            WHERE identity_key IN ({placeholders})
+               OR hardware_id IN ({placeholders})
+        """.format(placeholders=placeholders), equivalent_keys + equivalent_keys)
         conn.commit()
         return cursor.rowcount > 0
 

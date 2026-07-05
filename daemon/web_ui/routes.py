@@ -36,6 +36,7 @@ from ..camera_manager import (
     get_v4l2_controls, set_v4l2_control, get_v4l2_control_value,
     add_rejected_camera, get_rejected_cameras, find_closest_resolution
 )
+from ..camera_identity import IDENTITY_USB_PATH
 from ..bandwidth import get_camera_bandwidth_stats
 from ..usb_topology import get_shared_usb2_camera_warnings
 from ..print_status import get_monitor as get_print_monitor
@@ -1020,7 +1021,9 @@ def delete_camera(camera_id: int):
         unregister_moonraker_camera(camera['moonraker_uid'])
 
     # Check if we should also ignore
-    also_ignore = request.form.get('also_ignore') == 'true'
+    requested_ignore = request.form.get('also_ignore') == 'true'
+    can_ignore = camera.get('identity_strategy') != IDENTITY_USB_PATH
+    also_ignore = requested_ignore and can_ignore
 
     # Delete from database
     success, deleted_identity_key = delete_camera_completely(camera_id)
@@ -1031,6 +1034,8 @@ def delete_camera(camera_id: int):
         if also_ignore and deleted_identity_key:
             ignore_camera(deleted_identity_key, camera_name, "Deleted by user")
             flash(f"Camera '{camera_name}' deleted and added to ignore list", "success")
+        elif requested_ignore and not can_ignore:
+            flash(f"Camera '{camera_name}' deleted. USB path cameras cannot be ignored", "success")
         else:
             flash(f"Camera '{camera_name}' deleted", "success")
     else:
@@ -1049,6 +1054,10 @@ def ignore_camera_route(camera_id: int):
 
     camera_name = camera['friendly_name']
     identity_key = camera.get('identity_key') or camera.get('hardware_id')
+
+    if camera.get('identity_strategy') == IDENTITY_USB_PATH:
+        flash(f"Camera '{camera_name}' uses USB path identity and cannot be ignored", "error")
+        return redirect(url_for('cameras.dashboard'))
 
     # Stop stream if running
     if camera['connected']:

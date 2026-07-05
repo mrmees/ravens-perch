@@ -117,6 +117,33 @@ class CameraIdentityDbTests(unittest.TestCase):
         ):
             db.init_db()
 
+    def test_failed_duplicate_identity_migration_rolls_back_transaction(self):
+        self._create_pre_task3_cameras_table()
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO cameras (hardware_id, hardware_name, serial_number, friendly_name)
+                VALUES ('LegacyCam-A', 'LegacyCam', 'ABC123', 'Legacy Camera A')
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO cameras (hardware_id, hardware_name, serial_number, friendly_name)
+                VALUES ('LegacyCam-B', 'LegacyCam', 'ABC123', 'Legacy Camera B')
+                """
+            )
+            conn.commit()
+
+        with self.assertRaisesRegex(
+            RuntimeError,
+            "Duplicate identity_key values in cameras: serial:LegacyCam:ABC123",
+        ):
+            db.init_db()
+
+        with db.get_connection() as conn:
+            self.assertFalse(conn.in_transaction)
+            conn.execute("SELECT COUNT(*) FROM cameras").fetchone()
+
     def test_pre_task3_no_serial_camera_rows_remain_legacy(self):
         self._create_pre_task3_cameras_table()
         with sqlite3.connect(self.db_path) as conn:
@@ -460,6 +487,29 @@ class CameraIdentityDbTests(unittest.TestCase):
         db.ignore_camera("serial:LegacyCam:ABC123", "LegacyCam", "Ignored by user")
 
         self.assertTrue(db.is_camera_ignored("LegacyCam-ABC123"))
+
+    def test_unignore_camera_accepts_legacy_hardware_id_for_canonical_serial_ignore(self):
+        db.ignore_camera("serial:LegacyCam:ABC123", "LegacyCam", "Ignored by user")
+
+        removed = db.unignore_camera("LegacyCam-ABC123")
+
+        self.assertTrue(removed)
+        self.assertFalse(db.is_camera_ignored("serial:LegacyCam:ABC123"))
+
+    def test_unignore_camera_accepts_canonical_serial_identity_for_legacy_ignore(self):
+        with db.get_connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO ignored_cameras (hardware_id, identity_key, hardware_name, reason)
+                VALUES ('LegacyCam-ABC123', 'LegacyCam-ABC123', 'LegacyCam', 'Ignored before migration')
+                """
+            )
+            conn.commit()
+
+        removed = db.unignore_camera("serial:LegacyCam:ABC123")
+
+        self.assertTrue(removed)
+        self.assertFalse(db.is_camera_ignored("LegacyCam-ABC123"))
 
     def test_delete_camera_completely_returns_identity_key_for_ignore_list(self):
         self._create_pre_task3_cameras_table()
