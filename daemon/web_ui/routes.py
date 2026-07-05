@@ -1032,8 +1032,11 @@ def delete_camera(camera_id: int):
         add_log("INFO", f"Deleted camera: {camera_name}")
 
         if also_ignore and deleted_identity_key:
-            ignore_camera(deleted_identity_key, camera_name, "Deleted by user")
-            flash(f"Camera '{camera_name}' deleted and added to ignore list", "success")
+            ignored = ignore_camera(deleted_identity_key, camera_name, "Deleted by user")
+            if ignored:
+                flash(f"Camera '{camera_name}' deleted and added to ignore list", "success")
+            else:
+                flash(f"Camera '{camera_name}' deleted. This camera cannot be ignored", "success")
         elif requested_ignore and not can_ignore:
             flash(f"Camera '{camera_name}' deleted. USB path cameras cannot be ignored", "success")
         else:
@@ -1059,6 +1062,11 @@ def ignore_camera_route(camera_id: int):
         flash(f"Camera '{camera_name}' uses USB path identity and cannot be ignored", "error")
         return redirect(url_for('cameras.dashboard'))
 
+    # Add to ignore list first
+    if not identity_key or not ignore_camera(identity_key, camera_name, "Ignored by user"):
+        flash(f"Camera '{camera_name}' cannot be ignored", "error")
+        return redirect(url_for('cameras.dashboard'))
+
     # Stop stream if running
     if camera['connected']:
         remove_stream(str(camera_id))
@@ -1066,10 +1074,6 @@ def ignore_camera_route(camera_id: int):
     # Unregister from Moonraker
     if camera.get('moonraker_uid'):
         unregister_moonraker_camera(camera['moonraker_uid'])
-
-    # Add to ignore list first
-    if identity_key:
-        ignore_camera(identity_key, camera_name, "Ignored by user")
 
     # Delete from database
     success, _ = delete_camera_completely(camera_id)

@@ -148,6 +148,37 @@ class ScanRouteTests(unittest.TestCase):
         flash.assert_called_once()
         self.assertEqual(flash.call_args.args[1], "error")
 
+    def test_ignore_camera_route_rejects_when_ignore_helper_refuses_identity(self):
+        app = create_app()
+
+        with (
+            app.test_request_context("/cameras/4/ignore", method="POST"),
+            patch(
+                "daemon.web_ui.routes.get_camera_by_id",
+                return_value={
+                    "id": 4,
+                    "connected": False,
+                    "friendly_name": "Legacy No Serial",
+                    "hardware_id": "LegacyCam",
+                    "identity_key": "LegacyCam",
+                    "identity_strategy": "legacy",
+                    "moonraker_uid": None,
+                },
+            ),
+            patch("daemon.web_ui.routes.ignore_camera", return_value=False) as ignore_camera,
+            patch("daemon.web_ui.routes.delete_camera_completely") as delete_camera_completely,
+            patch("daemon.web_ui.routes.flash") as flash,
+            patch("daemon.web_ui.routes.redirect", return_value="redirected"),
+            patch("daemon.web_ui.routes.url_for", return_value="/cameras/"),
+        ):
+            response = routes.ignore_camera_route(4)
+
+        self.assertEqual(response, "redirected")
+        ignore_camera.assert_called_once_with("LegacyCam", "Legacy No Serial", "Ignored by user")
+        delete_camera_completely.assert_not_called()
+        flash.assert_called_once()
+        self.assertEqual(flash.call_args.args[1], "error")
+
     def test_delete_camera_with_ignore_does_not_ignore_usb_path_camera(self):
         app = create_app()
 
@@ -182,6 +213,42 @@ class ScanRouteTests(unittest.TestCase):
         ignore_camera.assert_not_called()
         flash.assert_called_once()
         self.assertEqual(flash.call_args.args[1], "success")
+
+    def test_delete_camera_with_ignore_does_not_claim_ignore_when_helper_refuses_identity(self):
+        app = create_app()
+
+        with (
+            app.test_request_context("/cameras/4/delete", method="POST", data={"also_ignore": "true"}),
+            patch(
+                "daemon.web_ui.routes.get_camera_by_id",
+                return_value={
+                    "id": 4,
+                    "connected": False,
+                    "friendly_name": "Legacy No Serial",
+                    "hardware_id": "LegacyCam",
+                    "identity_key": "LegacyCam",
+                    "identity_strategy": "legacy",
+                    "moonraker_uid": None,
+                },
+            ),
+            patch("daemon.web_ui.routes.ignore_camera", return_value=False) as ignore_camera,
+            patch(
+                "daemon.web_ui.routes.delete_camera_completely",
+                return_value=(True, "LegacyCam"),
+            ) as delete_camera_completely,
+            patch("daemon.web_ui.routes.add_log"),
+            patch("daemon.web_ui.routes.flash") as flash,
+            patch("daemon.web_ui.routes.redirect", return_value="redirected"),
+            patch("daemon.web_ui.routes.url_for", return_value="/cameras/"),
+        ):
+            response = routes.delete_camera(4)
+
+        self.assertEqual(response, "redirected")
+        delete_camera_completely.assert_called_once_with(4)
+        ignore_camera.assert_called_once_with("LegacyCam", "Legacy No Serial", "Deleted by user")
+        flash.assert_called_once()
+        self.assertEqual(flash.call_args.args[1], "success")
+        self.assertNotIn("added to ignore list", flash.call_args.args[0])
 
 
 if __name__ == "__main__":
