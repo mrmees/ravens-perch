@@ -27,9 +27,10 @@ from .hardware import (
     check_v4l2_utils_available, get_platform_info,
     init_encoder_cache
 )
+from .camera_identity import IDENTITY_SERIAL, ResolvedDevice
 from .camera_manager import (
-    CameraMonitor, DeviceInfo, probe_capabilities,
-    auto_configure, add_rejected_camera, remove_rejected_camera
+    CameraMonitor, probe_capabilities, auto_configure,
+    add_rejected_camera, remove_rejected_camera
 )
 from .stream_manager import (
     wait_for_available as wait_for_mediamtx,
@@ -542,44 +543,31 @@ class RavensPerchDaemon:
         self.web_thread.start()
         logger.info("Web UI thread started")
 
-    def _on_camera_connected(self, device_info: DeviceInfo):
+    def _on_camera_connected(self, resolved_device: ResolvedDevice):
         """Handle camera connection event."""
+        device_info = resolved_device.device
         logger.info(f"Camera connected: {device_info.hardware_name} at {device_info.path}")
 
         try:
-            # Check if camera is on the ignore list
-            if db.is_camera_ignored(device_info.hardware_id):
+            if resolved_device.is_rejected or not resolved_device.identity_key:
+                add_rejected_camera(
+                    device_path=device_info.path,
+                    hardware_name=device_info.hardware_name,
+                    hardware_id=device_info.hardware_id,
+                    reason=resolved_device.rejection_reason or "Unsupported camera",
+                )
+                return
+
+            if (
+                resolved_device.identity_strategy == IDENTITY_SERIAL
+                and db.is_camera_ignored(resolved_device.identity_key)
+            ):
                 logger.info(f"Camera {device_info.hardware_name} is ignored, skipping")
                 return
 
-            # Check if camera exists in database
-            camera = db.get_camera_by_hardware_id(device_info.hardware_id)
+            camera = db.get_camera_by_identity_key(resolved_device.identity_key)
 
             if camera:
-                # Check if this camera is already connected (duplicate hardware_id)
-                if camera['connected'] and camera['device_path'] != device_info.path:
-                    # This is a duplicate camera with no unique serial number
-                    logger.warning(
-                        f"Duplicate camera detected: {device_info.hardware_name} at {device_info.path}. "
-                        f"Another camera with the same identifier is already connected at {camera['device_path']}. "
-                        f"Cameras without unique serial numbers are not supported when multiple are connected."
-                    )
-                    add_log(
-                        "WARNING",
-                        f"Duplicate camera ignored: {device_info.hardware_name}. "
-                        f"Cameras without unique serial numbers are not supported.",
-                        camera['id']
-                    )
-                    # Track this rejected camera for display in the UI
-                    add_rejected_camera(
-                        device_path=device_info.path,
-                        hardware_name=device_info.hardware_name,
-                        hardware_id=device_info.hardware_id,
-                        reason="Duplicate camera - no unique serial number",
-                        existing_camera_id=camera['id']
-                    )
-                    return
-
                 # Existing camera - update connection status
                 camera_id = camera['id']
                 db.mark_camera_connected(camera_id, device_info.path)
@@ -604,7 +592,13 @@ class RavensPerchDaemon:
                 camera_id = db.create_camera(
                     hardware_name=device_info.hardware_name,
                     serial_number=device_info.serial_number,
-                    device_path=device_info.path
+                    friendly_name=resolved_device.friendly_name,
+                    device_path=device_info.path,
+                    identity_key=resolved_device.identity_key,
+                    identity_strategy=resolved_device.identity_strategy,
+                    by_path=device_info.by_path,
+                    by_id=device_info.by_id,
+                    reported_serial_number=device_info.serial_number,
                 )
 
                 # Save settings and capabilities

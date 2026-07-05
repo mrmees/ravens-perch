@@ -4,6 +4,7 @@ import unittest
 from types import SimpleNamespace
 from unittest.mock import Mock, patch
 
+from daemon.camera_identity import IDENTITY_SERIAL, DeviceInfo, ResolvedDevice
 from daemon.main import RavensPerchDaemon
 
 
@@ -47,17 +48,26 @@ class MoonrakerReconcileTests(unittest.TestCase):
     def test_camera_connect_records_effective_standby_framerate(self):
         daemon = RavensPerchDaemon()
         daemon.print_monitor = SimpleNamespace(status=SimpleNamespace(is_printing=False))
-        device = SimpleNamespace(
-            path="/dev/video0",
-            hardware_name="USB Camera",
-            serial_number="abc",
-            hardware_id="usb:abc",
+        device = ResolvedDevice(
+            device=DeviceInfo(
+                path="/dev/video0",
+                hardware_name="USB Camera",
+                serial_number="abc",
+                hardware_id="USB Camera-abc",
+                real_path="/dev/video0",
+                by_path="/dev/v4l/by-path/pci-1-index0",
+                by_id="/dev/v4l/by-id/usb-camera-index0",
+            ),
+            identity_key="serial:USB Camera:abc",
+            identity_strategy=IDENTITY_SERIAL,
+            hardware_id="serial:USB Camera:abc",
+            friendly_name="USB Camera",
         )
 
         with (
             patch("daemon.main.db.is_camera_ignored", return_value=False),
             patch(
-                "daemon.main.db.get_camera_by_hardware_id",
+                "daemon.main.db.get_camera_by_identity_key",
                 return_value={
                     "id": 3,
                     "connected": False,
