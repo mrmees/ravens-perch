@@ -222,6 +222,88 @@ class CameraIdentityDbTests(unittest.TestCase):
         self.assertEqual(row["identity_key"], "serial:LegacyCam:ABC123")
         self.assertTrue(db.is_camera_ignored("serial:LegacyCam:ABC123"))
 
+    def test_pre_task3_equivalent_ignored_rows_dedupe_canonical_then_legacy(self):
+        self._reset_database_file()
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("""
+                CREATE TABLE ignored_cameras (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    hardware_id TEXT UNIQUE NOT NULL,
+                    hardware_name TEXT,
+                    reason TEXT,
+                    ignored_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.execute(
+                """
+                INSERT INTO ignored_cameras (hardware_id, hardware_name, reason)
+                VALUES ('serial:LegacyCam:ABC123', 'LegacyCam', 'Ignored canonical')
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO ignored_cameras (hardware_id, hardware_name, reason)
+                VALUES ('LegacyCam-ABC123', 'LegacyCam', 'Ignored legacy')
+                """
+            )
+            conn.commit()
+
+        db.init_db()
+
+        with db.get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT hardware_id, identity_key
+                FROM ignored_cameras
+                WHERE identity_key = ?
+                """,
+                ("serial:LegacyCam:ABC123",),
+            ).fetchall()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["identity_key"], "serial:LegacyCam:ABC123")
+        self.assertTrue(db.is_camera_ignored("serial:LegacyCam:ABC123"))
+
+    def test_pre_task3_equivalent_ignored_rows_dedupe_legacy_then_canonical(self):
+        self._reset_database_file()
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("""
+                CREATE TABLE ignored_cameras (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    hardware_id TEXT UNIQUE NOT NULL,
+                    hardware_name TEXT,
+                    reason TEXT,
+                    ignored_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.execute(
+                """
+                INSERT INTO ignored_cameras (hardware_id, hardware_name, reason)
+                VALUES ('LegacyCam-ABC123', 'LegacyCam', 'Ignored legacy')
+                """
+            )
+            conn.execute(
+                """
+                INSERT INTO ignored_cameras (hardware_id, hardware_name, reason)
+                VALUES ('serial:LegacyCam:ABC123', 'LegacyCam', 'Ignored canonical')
+                """
+            )
+            conn.commit()
+
+        db.init_db()
+
+        with db.get_connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT hardware_id, identity_key
+                FROM ignored_cameras
+                WHERE identity_key = ?
+                """,
+                ("serial:LegacyCam:ABC123",),
+            ).fetchall()
+        self.assertEqual(len(rows), 1)
+        self.assertEqual(rows[0]["identity_key"], "serial:LegacyCam:ABC123")
+        self.assertTrue(db.is_camera_ignored("LegacyCam-ABC123"))
+
     def test_pre_task3_friendly_named_ignored_serial_row_matches_canonical_identity(self):
         self._reset_database_file()
         with sqlite3.connect(self.db_path) as conn:
@@ -514,6 +596,35 @@ class CameraIdentityDbTests(unittest.TestCase):
             row_count = conn.execute("SELECT COUNT(*) FROM ignored_cameras").fetchone()[0]
             self.assertEqual(row_count, 1)
             self.assertFalse(conn.in_transaction)
+
+    def test_ignore_camera_canonicalizes_legacy_serial_alias_for_new_row(self):
+        result = db.ignore_camera("LegacyCam-ABC123", "LegacyCam", "Ignored by user")
+
+        self.assertTrue(result)
+        with db.get_connection() as conn:
+            row = conn.execute(
+                "SELECT hardware_id, identity_key FROM ignored_cameras"
+            ).fetchone()
+        self.assertEqual(row["hardware_id"], "serial:LegacyCam:ABC123")
+        self.assertEqual(row["identity_key"], "serial:LegacyCam:ABC123")
+
+    def test_ignore_camera_rejects_usb_path_identity_for_new_row(self):
+        result = db.ignore_camera("usb-path:C270:pci-1-index0", "C270", "Ignored by user")
+
+        self.assertFalse(result)
+        self.assertFalse(db.is_camera_ignored("usb-path:C270:pci-1-index0"))
+        with db.get_connection() as conn:
+            row_count = conn.execute("SELECT COUNT(*) FROM ignored_cameras").fetchone()[0]
+        self.assertEqual(row_count, 0)
+
+    def test_ignore_camera_rejects_legacy_no_serial_identity_for_new_row(self):
+        result = db.ignore_camera("LegacyCam", "LegacyCam", "Ignored by user")
+
+        self.assertFalse(result)
+        self.assertFalse(db.is_camera_ignored("LegacyCam"))
+        with db.get_connection() as conn:
+            row_count = conn.execute("SELECT COUNT(*) FROM ignored_cameras").fetchone()[0]
+        self.assertEqual(row_count, 0)
 
     def test_is_camera_ignored_accepts_legacy_hardware_id_for_canonical_serial_ignore(self):
         db.ignore_camera("serial:LegacyCam:ABC123", "LegacyCam", "Ignored by user")

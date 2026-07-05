@@ -135,6 +135,26 @@ def _serial_identity_from_legacy_hardware_id(identity_key: str) -> Optional[str]
     return f"serial:{hardware_name}:{serial_number}"
 
 
+def _canonical_serial_ignore_identity(
+    identity_key: str,
+    hardware_name: Optional[str] = None,
+) -> Optional[str]:
+    """Return a canonical serial identity allowed for new ignore rows."""
+    if _legacy_hardware_id_from_serial_identity(identity_key):
+        return identity_key
+
+    serial_identity = _serial_identity_from_legacy_hardware_id(identity_key)
+    if serial_identity is None:
+        return None
+
+    if hardware_name is not None:
+        legacy_hardware_name = identity_key.rsplit("-", 1)[0]
+        if legacy_hardware_name != hardware_name:
+            return None
+
+    return serial_identity
+
+
 def _equivalent_ignore_keys(identity_key: str) -> Tuple[str, ...]:
     """Return canonical and legacy keys that may refer to the same serial camera."""
     keys = [identity_key]
@@ -148,6 +168,47 @@ def _equivalent_ignore_keys(identity_key: str) -> Tuple[str, ...]:
         keys.append(serial_identity)
 
     return tuple(keys)
+
+
+def _dedupe_equivalent_ignored_serial_identity_keys(cursor: sqlite3.Cursor):
+    """Remove duplicate ignored rows only when they are serial-equivalent aliases."""
+    cursor.execute("""
+        SELECT identity_key
+        FROM ignored_cameras
+        WHERE identity_key IS NOT NULL AND identity_key != ''
+        GROUP BY identity_key
+        HAVING COUNT(*) > 1
+    """)
+    duplicate_identity_keys = [row["identity_key"] for row in cursor.fetchall()]
+
+    for identity_key in duplicate_identity_keys:
+        if _legacy_hardware_id_from_serial_identity(identity_key) is None:
+            continue
+
+        equivalent_keys = set(_equivalent_ignore_keys(identity_key))
+        cursor.execute(
+            """
+            SELECT id, hardware_id
+            FROM ignored_cameras
+            WHERE identity_key = ?
+            ORDER BY
+                CASE WHEN hardware_id = identity_key THEN 0 ELSE 1 END,
+                id
+            """,
+            (identity_key,),
+        )
+        rows = cursor.fetchall()
+        if not rows or any(row["hardware_id"] not in equivalent_keys for row in rows):
+            continue
+
+        keep_id = rows[0]["id"]
+        delete_ids = [row["id"] for row in rows[1:]]
+        if delete_ids:
+            placeholders = ",".join("?" for _ in delete_ids)
+            cursor.execute(
+                f"DELETE FROM ignored_cameras WHERE id IN ({placeholders})",
+                delete_ids,
+            )
 
 
 def init_db():
@@ -399,6 +460,7 @@ def init_db():
             SET identity_key = hardware_id
             WHERE identity_key IS NULL OR identity_key = ''
         """)
+        _dedupe_equivalent_ignored_serial_identity_keys(cursor)
         _raise_if_duplicate_identity_keys(cursor, "ignored_cameras")
         cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_ignored_cameras_identity_key ON ignored_cameras(identity_key)")
 
@@ -858,7 +920,11 @@ def is_camera_ignored(identity_key: str) -> bool:
 
 def ignore_camera(identity_key: str, hardware_name: str = None, reason: str = None) -> bool:
     """Add a serial-identified camera to the ignore list."""
-    equivalent_keys = _equivalent_ignore_keys(identity_key)
+    canonical_identity_key = _canonical_serial_ignore_identity(identity_key, hardware_name)
+    if canonical_identity_key is None:
+        return False
+
+    equivalent_keys = _equivalent_ignore_keys(canonical_identity_key)
     placeholders = ",".join("?" for _ in equivalent_keys)
     with get_connection() as conn:
         cursor = conn.cursor()
@@ -874,10 +940,10 @@ def ignore_camera(identity_key: str, hardware_name: str = None, reason: str = No
         cursor.execute("""
             INSERT OR IGNORE INTO ignored_cameras (hardware_id, identity_key, hardware_name, reason)
             VALUES (?, ?, ?, ?)
-        """, (identity_key, identity_key, hardware_name, reason))
+        """, (canonical_identity_key, canonical_identity_key, hardware_name, reason))
         conn.commit()
         if cursor.rowcount:
-            logger.info(f"Added camera to ignore list: {identity_key}")
+            logger.info(f"Added camera to ignore list: {canonical_identity_key}")
         return True
 
 
