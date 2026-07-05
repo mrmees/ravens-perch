@@ -83,6 +83,27 @@ def close_thread_connection():
             _thread_local.connection = None
 
 
+def _raise_if_duplicate_identity_keys(cursor: sqlite3.Cursor, table_name: str):
+    """Raise a clear migration error if identity keys are not unique."""
+    cursor.execute(f"""
+        SELECT identity_key, COUNT(*) AS duplicate_count
+        FROM {table_name}
+        WHERE identity_key IS NOT NULL AND identity_key != ''
+        GROUP BY identity_key
+        HAVING COUNT(*) > 1
+        LIMIT 5
+    """)
+    duplicates = cursor.fetchall()
+    if duplicates:
+        examples = ", ".join(
+            f"{row['identity_key']} ({row['duplicate_count']} rows)"
+            for row in duplicates
+        )
+        message = f"Duplicate identity_key values in {table_name}: {examples}"
+        logger.error(message)
+        raise RuntimeError(message)
+
+
 def init_db():
     """Initialize the database schema."""
     with get_connection() as conn:
@@ -262,19 +283,54 @@ def init_db():
 
         cursor.execute("""
             UPDATE cameras
+            SET identity_key = 'serial:' || hardware_name || ':' || serial_number
+            WHERE serial_number IS NOT NULL
+              AND serial_number != ''
+              AND (
+                  identity_key IS NULL
+                  OR identity_key = ''
+                  OR (
+                      identity_key = hardware_id
+                      AND (
+                          identity_strategy IS NULL
+                          OR identity_strategy = ''
+                          OR identity_strategy = 'legacy'
+                      )
+                  )
+              )
+        """)
+        cursor.execute("""
+            UPDATE cameras
             SET identity_key = hardware_id
-            WHERE identity_key IS NULL OR identity_key = ''
+            WHERE (identity_key IS NULL OR identity_key = '')
+              AND (serial_number IS NULL OR serial_number = '')
+        """)
+        cursor.execute("""
+            UPDATE cameras
+            SET identity_strategy = 'serial'
+            WHERE serial_number IS NOT NULL
+              AND serial_number != ''
+              AND identity_key = 'serial:' || hardware_name || ':' || serial_number
+              AND (
+                  identity_strategy IS NULL
+                  OR identity_strategy = ''
+                  OR identity_strategy = 'legacy'
+              )
         """)
         cursor.execute("""
             UPDATE cameras
             SET identity_strategy = 'legacy'
-            WHERE identity_strategy IS NULL OR identity_strategy = ''
+            WHERE (identity_strategy IS NULL OR identity_strategy = '')
+              AND (serial_number IS NULL OR serial_number = '')
         """)
         cursor.execute("""
             UPDATE cameras
             SET reported_serial_number = serial_number
-            WHERE reported_serial_number IS NULL AND serial_number IS NOT NULL
+            WHERE reported_serial_number IS NULL
+              AND serial_number IS NOT NULL
+              AND serial_number != ''
         """)
+        _raise_if_duplicate_identity_keys(cursor, "cameras")
         cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_cameras_identity_key ON cameras(identity_key)")
 
         cursor.execute("PRAGMA table_info(ignored_cameras)")
@@ -287,6 +343,7 @@ def init_db():
             SET identity_key = hardware_id
             WHERE identity_key IS NULL OR identity_key = ''
         """)
+        _raise_if_duplicate_identity_keys(cursor, "ignored_cameras")
         cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_ignored_cameras_identity_key ON ignored_cameras(identity_key)")
 
         conn.commit()
