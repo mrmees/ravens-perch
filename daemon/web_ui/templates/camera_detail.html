@@ -432,6 +432,14 @@
                         <dl class="info-list">
                             <dt>Hardware</dt><dd>{{ camera.hardware_name }}</dd>
                             {% if camera.serial_number %}<dt>Serial</dt><dd>{{ camera.serial_number }}</dd>{% endif %}
+                            {% if camera.identity_strategy == 'usb_path' %}
+                            <dt>Identity</dt><dd>USB port</dd>
+                            <dt>By-path</dt><dd>{{ camera.by_path or 'Unavailable' }}</dd>
+                            <dt>Note</dt><dd>Camera settings follow this USB port/topology, not the physical camera.</dd>
+                            {% elif camera.identity_strategy == 'serial' %}
+                            <dt>Identity</dt><dd>Serial</dd>
+                            {% endif %}
+                            {% if camera.by_id %}<dt>By-id</dt><dd>{{ camera.by_id }}</dd>{% endif %}
                             <dt>Path</dt><dd>{{ camera.device_path or 'Not connected' }}</dd>
                             <dt>First Seen</dt><dd>{{ camera.first_seen }}</dd>
                         </dl>
@@ -456,11 +464,13 @@
                             {{ csrf_field() }}
                             <button type="submit" class="btn btn-danger btn-sm">Delete</button>
                         </form>
+                        {% if camera.identity_strategy != 'usb_path' %}
                         <form action="{{ url_for('cameras.ignore_camera_route', camera_id=camera.id) }}" method="POST"
                               onsubmit="return confirm('Ignore this camera permanently?');">
                             {{ csrf_field() }}
                             <button type="submit" class="btn btn-danger btn-sm">Ignore</button>
                         </form>
+                        {% endif %}
                     </div>
                 </div>
             </div>

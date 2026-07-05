@@ -496,6 +496,19 @@ a:hover {
     color: var(--text-secondary);
 }
 
+.identity-badge {
+    display: inline-flex;
+    align-items: center;
+    width: fit-content;
+    margin-top: 0.35rem;
+    padding: 0.15rem 0.45rem;
+    border: 1px solid var(--border-color);
+    border-radius: 4px;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    line-height: 1.2;
+}
+
 .camera-bandwidth {
     display: flex;
     flex-wrap: wrap;

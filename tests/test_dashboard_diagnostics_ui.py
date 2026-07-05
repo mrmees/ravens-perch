@@ -70,6 +70,20 @@ class DashboardDiagnosticsUITests(unittest.TestCase):
         self.assertIn("volatile /dev/video paths", template)
         self.assertIn("Scan Cameras again", template)
 
+    def test_camera_card_shows_usb_port_identity_badge(self):
+        partial = CAMERA_CARD_TEMPLATE.read_text(encoding="utf-8")
+
+        self.assertIn("identity_strategy == 'usb_path'", partial)
+        self.assertIn("USB port", partial)
+        self.assertIn("identity-badge", partial)
+
+    def test_camera_detail_hides_ignore_for_usb_path_cameras(self):
+        detail = (ROOT / "daemon/web_ui/templates/camera_detail.html").read_text(encoding="utf-8")
+
+        self.assertIn("camera.identity_strategy != 'usb_path'", detail)
+        self.assertIn("By-path", detail)
+        self.assertIn("settings follow this USB port", detail)
+
 
 if __name__ == "__main__":
     unittest.main()

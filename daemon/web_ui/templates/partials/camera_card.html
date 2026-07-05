@@ -32,6 +32,9 @@
                 {{ camera.settings.resolution }} @ {{ camera.settings.framerate }}fps
             </span>
         {% endif %}
+        {% if camera.identity_strategy == 'usb_path' %}
+            <span class="identity-badge" title="Settings follow this USB port">USB port</span>
+        {% endif %}
         {% if camera.connected %}
             <div class="camera-bandwidth" id="bandwidth-{{ camera.id }}">
                 <span class="bandwidth-item" title="Configured network bitrate per viewer">
