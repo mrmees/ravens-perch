@@ -15,18 +15,10 @@ from .config import (
     FORMAT_PRIORITY, FORMAT_ALIASES, QUALITY_TIERS,
     DEBOUNCE_DELAY
 )
+from .camera_identity import DeviceInfo, legacy_hardware_id, resolve_device_identities
 from .hardware import estimate_cpu_capability
 
 logger = logging.getLogger(__name__)
-
-
-@dataclass
-class DeviceInfo:
-    """Camera device information."""
-    path: str
-    hardware_name: str
-    serial_number: Optional[str]
-    hardware_id: str
 
 
 @dataclass
@@ -87,6 +79,24 @@ def clear_rejected_cameras():
         _rejected_cameras.clear()
 
 
+def _find_v4l_symlink_for_device(device_path: str, symlink_dir: Path) -> Optional[str]:
+    """Return the first symlink in symlink_dir that resolves to device_path."""
+    try:
+        real_device = Path(device_path).resolve()
+        if not symlink_dir.exists():
+            return None
+
+        for link in sorted(symlink_dir.iterdir()):
+            try:
+                if link.resolve() == real_device:
+                    return str(link)
+            except OSError:
+                continue
+    except OSError as e:
+        logger.debug(f"Failed to resolve V4L symlink for {device_path}: {e}")
+    return None
+
+
 def get_device_info(device_path: str) -> Optional[DeviceInfo]:
     """
     Get device information for a V4L2 device.
@@ -140,17 +150,19 @@ def get_device_info(device_path: str) -> Optional[DeviceInfo]:
         except Exception as e:
             logger.debug(f"Serial number lookup failed for {device_path}: {e}")
 
-        # Generate hardware_id
-        if serial_number:
-            hardware_id = f"{hardware_name}-{serial_number}"
-        else:
-            hardware_id = hardware_name
+        hardware_id = legacy_hardware_id(hardware_name, serial_number)
+        real_path = str(Path(device_path).resolve())
+        by_path = _find_v4l_symlink_for_device(device_path, Path("/dev/v4l/by-path"))
+        by_id = _find_v4l_symlink_for_device(device_path, Path("/dev/v4l/by-id"))
 
         return DeviceInfo(
             path=device_path,
             hardware_name=hardware_name,
             serial_number=serial_number,
-            hardware_id=hardware_id
+            hardware_id=hardware_id,
+            real_path=real_path,
+            by_path=by_path,
+            by_id=by_id,
         )
 
     except subprocess.TimeoutExpired:
