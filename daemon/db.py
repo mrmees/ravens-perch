@@ -858,8 +858,19 @@ def is_camera_ignored(identity_key: str) -> bool:
 
 def ignore_camera(identity_key: str, hardware_name: str = None, reason: str = None) -> bool:
     """Add a serial-identified camera to the ignore list."""
+    equivalent_keys = _equivalent_ignore_keys(identity_key)
+    placeholders = ",".join("?" for _ in equivalent_keys)
     with get_connection() as conn:
         cursor = conn.cursor()
+        cursor.execute("""
+            SELECT id FROM ignored_cameras
+            WHERE identity_key IN ({placeholders})
+               OR hardware_id IN ({placeholders})
+        """.format(placeholders=placeholders), equivalent_keys + equivalent_keys)
+        if cursor.fetchone() is not None:
+            conn.commit()
+            return True
+
         cursor.execute("""
             INSERT OR IGNORE INTO ignored_cameras (hardware_id, identity_key, hardware_name, reason)
             VALUES (?, ?, ?, ?)

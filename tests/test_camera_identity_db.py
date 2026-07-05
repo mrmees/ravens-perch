@@ -493,6 +493,28 @@ class CameraIdentityDbTests(unittest.TestCase):
         with db.get_connection() as conn:
             self.assertFalse(conn.in_transaction)
 
+    def test_ignore_camera_deduplicates_canonical_then_legacy_serial_keys(self):
+        first_result = db.ignore_camera("serial:LegacyCam:ABC123", "LegacyCam", "Ignored by user")
+        second_result = db.ignore_camera("LegacyCam-ABC123", "LegacyCam", "Ignored by user")
+
+        self.assertTrue(first_result)
+        self.assertTrue(second_result)
+        with db.get_connection() as conn:
+            row_count = conn.execute("SELECT COUNT(*) FROM ignored_cameras").fetchone()[0]
+            self.assertEqual(row_count, 1)
+            self.assertFalse(conn.in_transaction)
+
+    def test_ignore_camera_deduplicates_legacy_then_canonical_serial_keys(self):
+        first_result = db.ignore_camera("LegacyCam-ABC123", "LegacyCam", "Ignored by user")
+        second_result = db.ignore_camera("serial:LegacyCam:ABC123", "LegacyCam", "Ignored by user")
+
+        self.assertTrue(first_result)
+        self.assertTrue(second_result)
+        with db.get_connection() as conn:
+            row_count = conn.execute("SELECT COUNT(*) FROM ignored_cameras").fetchone()[0]
+            self.assertEqual(row_count, 1)
+            self.assertFalse(conn.in_transaction)
+
     def test_is_camera_ignored_accepts_legacy_hardware_id_for_canonical_serial_ignore(self):
         db.ignore_camera("serial:LegacyCam:ABC123", "LegacyCam", "Ignored by user")
 
