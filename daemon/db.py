@@ -808,7 +808,8 @@ def is_camera_ignored(identity_key: str) -> bool:
     """Check if an identity key is in the ignore list.
 
     During the Task 3 identity transition, daemon/routes may still pass a
-    legacy hardware_id, so fall back to legacy hardware_id compatibility.
+    legacy hardware_id, and old rows may still store only legacy keys. Bridge
+    canonical serial identities and legacy hardware IDs in both directions.
     """
     with get_connection() as conn:
         cursor = conn.cursor()
@@ -818,6 +819,15 @@ def is_camera_ignored(identity_key: str) -> bool:
         )
         if cursor.fetchone() is not None:
             return True
+
+        legacy_hardware_id = _legacy_hardware_id_from_serial_identity(identity_key)
+        if legacy_hardware_id:
+            cursor.execute("""
+                SELECT id FROM ignored_cameras
+                WHERE identity_key = ? OR hardware_id = ?
+            """, (legacy_hardware_id, legacy_hardware_id))
+            if cursor.fetchone() is not None:
+                return True
 
         cursor.execute(
             "SELECT id FROM ignored_cameras WHERE hardware_id = ?",

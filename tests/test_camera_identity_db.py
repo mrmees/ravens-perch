@@ -195,6 +195,31 @@ class CameraIdentityDbTests(unittest.TestCase):
         self.assertEqual(row["identity_key"], "serial:LegacyCam:ABC123")
         self.assertTrue(db.is_camera_ignored("serial:LegacyCam:ABC123"))
 
+    def test_pre_task3_friendly_named_ignored_serial_row_matches_canonical_identity(self):
+        self._reset_database_file()
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute("""
+                CREATE TABLE ignored_cameras (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    hardware_id TEXT UNIQUE NOT NULL,
+                    hardware_name TEXT,
+                    reason TEXT,
+                    ignored_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+            conn.execute(
+                """
+                INSERT INTO ignored_cameras (hardware_id, hardware_name, reason)
+                VALUES ('LegacyCam-ABC123', 'Front Camera', 'Ignored before migration')
+                """
+            )
+            conn.commit()
+
+        db.init_db()
+
+        self.assertTrue(db.is_camera_ignored("serial:LegacyCam:ABC123"))
+        self.assertTrue(db.is_camera_ignored("LegacyCam-ABC123"))
+
     def test_pre_task3_no_serial_ignored_camera_rows_remain_legacy(self):
         self._reset_database_file()
         with sqlite3.connect(self.db_path) as conn:
