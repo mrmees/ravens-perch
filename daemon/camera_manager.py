@@ -28,12 +28,14 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class RejectedCamera:
-    """Information about a camera that was rejected (e.g., duplicate)."""
+    """Information about a camera that was rejected."""
     device_path: str
     hardware_name: str
     hardware_id: str
     reason: str
     existing_camera_id: Optional[int] = None
+    identity_key: Optional[str] = None
+    identity_strategy: Optional[str] = None
 
 
 # Thread-safe storage for rejected cameras
@@ -42,7 +44,9 @@ _rejected_lock = threading.Lock()
 
 
 def add_rejected_camera(device_path: str, hardware_name: str, hardware_id: str,
-                        reason: str, existing_camera_id: Optional[int] = None):
+                        reason: str, existing_camera_id: Optional[int] = None,
+                        identity_key: Optional[str] = None,
+                        identity_strategy: Optional[str] = None):
     """Track a camera that was rejected during setup."""
     with _rejected_lock:
         _rejected_cameras[device_path] = RejectedCamera(
@@ -50,7 +54,9 @@ def add_rejected_camera(device_path: str, hardware_name: str, hardware_id: str,
             hardware_name=hardware_name,
             hardware_id=hardware_id,
             reason=reason,
-            existing_camera_id=existing_camera_id
+            existing_camera_id=existing_camera_id,
+            identity_key=identity_key,
+            identity_strategy=identity_strategy,
         )
     logger.debug(f"Added rejected camera: {device_path} - {reason}")
 
@@ -73,6 +79,8 @@ def get_rejected_cameras() -> List[Dict]:
                 'hardware_id': rc.hardware_id,
                 'reason': rc.reason,
                 'existing_camera_id': rc.existing_camera_id,
+                'identity_key': rc.identity_key,
+                'identity_strategy': rc.identity_strategy,
             }
             for rc in _rejected_cameras.values()
         ]

@@ -63,6 +63,13 @@ class DashboardDiagnosticsUITests(unittest.TestCase):
         self.assertIn("@media (max-width: 600px)", styles)
         self.assertIn("margin-bottom: 6rem;", styles)
 
+    def test_rejected_camera_help_describes_stable_identity_requirements(self):
+        template = DASHBOARD_TEMPLATE.read_text(encoding="utf-8")
+
+        self.assertIn("could not be identified safely", template)
+        self.assertIn("volatile /dev/video paths", template)
+        self.assertIn("Scan Cameras again", template)
+
 
 if __name__ == "__main__":
     unittest.main()

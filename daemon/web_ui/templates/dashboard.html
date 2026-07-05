@@ -129,9 +129,9 @@
         {% endfor %}
     </div>
     <p class="rejected-cameras-help">
-        These cameras have the same identifier as another connected camera.
-        Cameras without unique serial numbers cannot be used simultaneously.
-        Unplug one of the duplicate cameras to resolve this issue.
+        These cameras could not be identified safely. Ravens Perch will not use
+        volatile /dev/video paths because they can change across reboots.
+        Check the reason above, then reconnect the camera or run Scan Cameras again.
     </p>
 </div>
 {% endif %}

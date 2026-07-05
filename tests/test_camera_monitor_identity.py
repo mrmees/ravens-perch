@@ -2,7 +2,12 @@ import unittest
 from unittest.mock import patch
 
 from daemon.camera_identity import IDENTITY_USB_PATH, DeviceInfo, legacy_hardware_id
-from daemon.camera_manager import CameraMonitor
+from daemon.camera_manager import (
+    CameraMonitor,
+    add_rejected_camera,
+    clear_rejected_cameras,
+    get_rejected_cameras,
+)
 
 
 def device(path, by_path):
@@ -19,6 +24,9 @@ def device(path, by_path):
 
 
 class CameraMonitorIdentityTests(unittest.TestCase):
+    def tearDown(self):
+        clear_rejected_cameras()
+
     def test_scan_existing_resolves_batch_before_connecting(self):
         connected = []
         monitor = CameraMonitor(on_connect=connected.append, on_disconnect=lambda _path: None)
@@ -55,6 +63,21 @@ class CameraMonitorIdentityTests(unittest.TestCase):
 
         self.assertEqual(len(connected), 1)
         self.assertIn("/dev/video0", monitor._known_devices)
+
+    def test_rejected_camera_includes_identity_metadata(self):
+        add_rejected_camera(
+            device_path="/dev/video0",
+            hardware_name="C270 HD WEBCAM",
+            hardware_id="C270 HD WEBCAM",
+            reason="No stable USB port path available",
+            identity_key=None,
+            identity_strategy=None,
+        )
+
+        rejected = get_rejected_cameras()
+
+        self.assertEqual(rejected[0]["identity_key"], None)
+        self.assertEqual(rejected[0]["identity_strategy"], None)
 
 
 if __name__ == "__main__":

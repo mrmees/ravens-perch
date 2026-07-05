@@ -555,6 +555,8 @@ class RavensPerchDaemon:
                     hardware_name=device_info.hardware_name,
                     hardware_id=device_info.hardware_id,
                     reason=resolved_device.rejection_reason or "Unsupported camera",
+                    identity_key=resolved_device.identity_key,
+                    identity_strategy=resolved_device.identity_strategy,
                 )
                 return
 
