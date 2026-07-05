@@ -1048,7 +1048,7 @@ def ignore_camera_route(camera_id: int):
         return redirect(url_for('cameras.dashboard'))
 
     camera_name = camera['friendly_name']
-    hardware_id = camera.get('hardware_id')
+    identity_key = camera.get('identity_key') or camera.get('hardware_id')
 
     # Stop stream if running
     if camera['connected']:
@@ -1059,8 +1059,8 @@ def ignore_camera_route(camera_id: int):
         unregister_moonraker_camera(camera['moonraker_uid'])
 
     # Add to ignore list first
-    if hardware_id:
-        ignore_camera(hardware_id, camera_name, "Ignored by user")
+    if identity_key:
+        ignore_camera(identity_key, camera_name, "Ignored by user")
 
     # Delete from database
     success, _ = delete_camera_completely(camera_id)

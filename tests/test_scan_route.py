@@ -81,6 +81,42 @@ class ScanRouteTests(unittest.TestCase):
         )
         self.assertEqual(recorded_framerates, [(4, 5)])
 
+    def test_ignore_camera_route_ignores_migrated_serial_camera_by_identity_key(self):
+        app = create_app()
+
+        with (
+            app.test_request_context("/cameras/4/ignore", method="POST"),
+            patch(
+                "daemon.web_ui.routes.get_camera_by_id",
+                return_value={
+                    "id": 4,
+                    "connected": False,
+                    "friendly_name": "Legacy Camera",
+                    "hardware_id": "LegacyCam-ABC123",
+                    "identity_key": "serial:LegacyCam:ABC123",
+                    "moonraker_uid": None,
+                },
+            ),
+            patch("daemon.web_ui.routes.ignore_camera") as ignore_camera,
+            patch(
+                "daemon.web_ui.routes.delete_camera_completely",
+                return_value=(True, "serial:LegacyCam:ABC123"),
+            ) as delete_camera_completely,
+            patch("daemon.web_ui.routes.add_log"),
+            patch("daemon.web_ui.routes.flash"),
+            patch("daemon.web_ui.routes.redirect", return_value="redirected"),
+            patch("daemon.web_ui.routes.url_for", return_value="/cameras/"),
+        ):
+            response = routes.ignore_camera_route(4)
+
+        self.assertEqual(response, "redirected")
+        ignore_camera.assert_called_once_with(
+            "serial:LegacyCam:ABC123",
+            "Legacy Camera",
+            "Ignored by user",
+        )
+        delete_camera_completely.assert_called_once_with(4)
+
 
 if __name__ == "__main__":
     unittest.main()
