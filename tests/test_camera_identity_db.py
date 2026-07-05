@@ -198,7 +198,7 @@ class CameraIdentityDbTests(unittest.TestCase):
         ):
             db.init_db()
 
-    def test_old_create_camera_signature_uses_legacy_identity(self):
+    def test_old_create_camera_signature_with_serial_uses_serial_identity(self):
         camera_id = db.create_camera(
             "C270 HD WEBCAM",
             "ABC123",
@@ -210,12 +210,40 @@ class CameraIdentityDbTests(unittest.TestCase):
             device_path="/dev/video3",
         )
 
-        camera = db.get_camera_by_identity_key("C270 HD WEBCAM-ABC123")
+        camera = db.get_camera_by_identity_key("serial:C270 HD WEBCAM:ABC123")
         self.assertEqual(reconnected_id, camera_id)
         self.assertEqual(camera["id"], camera_id)
-        self.assertEqual(camera["hardware_id"], "C270 HD WEBCAM-ABC123")
-        self.assertEqual(camera["identity_strategy"], "legacy")
+        self.assertEqual(camera["hardware_id"], "serial:C270 HD WEBCAM:ABC123")
+        self.assertEqual(camera["identity_strategy"], "serial")
         self.assertEqual(camera["device_path"], "/dev/video3")
+
+    def test_old_create_camera_signature_reconnects_migrated_serial_row(self):
+        self._create_pre_task3_cameras_table()
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO cameras (hardware_id, hardware_name, serial_number, friendly_name)
+                VALUES ('LegacyCam-ABC123', 'LegacyCam', 'ABC123', 'Legacy Camera')
+                """
+            )
+            conn.commit()
+
+        db.init_db()
+        migrated = db.get_camera_by_identity_key("serial:LegacyCam:ABC123")
+
+        reconnected_id = db.create_camera(
+            "LegacyCam",
+            "ABC123",
+            device_path="/dev/video2",
+        )
+
+        camera = db.get_camera_by_identity_key("serial:LegacyCam:ABC123")
+        with db.get_connection() as conn:
+            camera_count = conn.execute("SELECT COUNT(*) FROM cameras").fetchone()[0]
+        self.assertEqual(reconnected_id, migrated["id"])
+        self.assertEqual(camera["id"], migrated["id"])
+        self.assertEqual(camera["device_path"], "/dev/video2")
+        self.assertEqual(camera_count, 1)
 
     def test_create_camera_reconnects_by_identity_key_and_refreshes_metadata(self):
         first_id = db.create_camera(

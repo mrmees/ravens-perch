@@ -404,8 +404,12 @@ def create_camera(hardware_name: str, serial_number: Optional[str],
     If camera with same identity_key already exists, returns existing ID.
     """
     if identity_key is None:
-        identity_key = f"{hardware_name}-{serial_number}" if serial_number else hardware_name
-        identity_strategy = "legacy"
+        if serial_number:
+            identity_key = f"serial:{hardware_name}:{serial_number}"
+            identity_strategy = "serial"
+        else:
+            identity_key = hardware_name
+            identity_strategy = "legacy"
     hardware_id = identity_key
     if reported_serial_number is None:
         reported_serial_number = serial_number
