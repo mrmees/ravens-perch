@@ -2,9 +2,9 @@
 # This file stores user preferences for camera setup
 # MediaMTX and Moonraker are configured via API from these settings
 #
-# NOTE: Each camera must have a unique combination of hardware_name AND serial_number.
-# Cameras that share both values are considered non-compliant with USB standards
-# and cannot be reliably distinguished - they will be rejected by the configuration tool.
+# NOTE: Cameras with reliable unique serial numbers are tracked by serial.
+# Identical cameras with missing or duplicate serials are tracked by USB port
+# when Linux exposes a stable /dev/v4l/by-path entry.
 
 version: 2
 
