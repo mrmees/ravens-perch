@@ -217,6 +217,33 @@ class CameraIdentityDbTests(unittest.TestCase):
         self.assertEqual(camera["identity_strategy"], "serial")
         self.assertEqual(camera["device_path"], "/dev/video3")
 
+    def test_old_create_camera_signature_without_serial_reconnects_legacy_identity(self):
+        camera_id = db.create_camera(
+            "NoSerialCam",
+            None,
+            device_path="/dev/video0",
+        )
+
+        camera = db.get_camera_by_identity_key("NoSerialCam")
+        self.assertEqual(camera["id"], camera_id)
+        self.assertEqual(camera["identity_key"], "NoSerialCam")
+        self.assertEqual(camera["identity_strategy"], "legacy")
+        self.assertEqual(camera["hardware_id"], "NoSerialCam")
+        self.assertEqual(camera["device_path"], "/dev/video0")
+
+        reconnected_id = db.create_camera(
+            "NoSerialCam",
+            None,
+            device_path="/dev/video2",
+        )
+
+        camera = db.get_camera_by_identity_key("NoSerialCam")
+        with db.get_connection() as conn:
+            camera_count = conn.execute("SELECT COUNT(*) FROM cameras").fetchone()[0]
+        self.assertEqual(reconnected_id, camera_id)
+        self.assertEqual(camera["device_path"], "/dev/video2")
+        self.assertEqual(camera_count, 1)
+
     def test_old_create_camera_signature_reconnects_migrated_serial_row(self):
         self._create_pre_task3_cameras_table()
         with sqlite3.connect(self.db_path) as conn:
