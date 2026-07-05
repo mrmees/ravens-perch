@@ -483,6 +483,16 @@ class CameraIdentityDbTests(unittest.TestCase):
         self.assertTrue(db.is_camera_ignored("serial:C270 HD WEBCAM:ABC123"))
         self.assertFalse(db.is_camera_ignored("serial:C270 HD WEBCAM:OTHER"))
 
+    def test_ignore_camera_duplicate_calls_are_idempotent_and_leave_clean_transaction(self):
+        first_result = db.ignore_camera("serial:LegacyCam:ABC123", "LegacyCam", "Ignored by user")
+        second_result = db.ignore_camera("serial:LegacyCam:ABC123", "LegacyCam", "Ignored by user")
+
+        self.assertTrue(first_result)
+        self.assertTrue(second_result)
+        self.assertTrue(db.is_camera_ignored("serial:LegacyCam:ABC123"))
+        with db.get_connection() as conn:
+            self.assertFalse(conn.in_transaction)
+
     def test_is_camera_ignored_accepts_legacy_hardware_id_for_canonical_serial_ignore(self):
         db.ignore_camera("serial:LegacyCam:ABC123", "LegacyCam", "Ignored by user")
 

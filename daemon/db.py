@@ -860,16 +860,14 @@ def ignore_camera(identity_key: str, hardware_name: str = None, reason: str = No
     """Add a serial-identified camera to the ignore list."""
     with get_connection() as conn:
         cursor = conn.cursor()
-        try:
-            cursor.execute("""
-                INSERT INTO ignored_cameras (hardware_id, identity_key, hardware_name, reason)
-                VALUES (?, ?, ?, ?)
-            """, (identity_key, identity_key, hardware_name, reason))
-            conn.commit()
+        cursor.execute("""
+            INSERT OR IGNORE INTO ignored_cameras (hardware_id, identity_key, hardware_name, reason)
+            VALUES (?, ?, ?, ?)
+        """, (identity_key, identity_key, hardware_name, reason))
+        conn.commit()
+        if cursor.rowcount:
             logger.info(f"Added camera to ignore list: {identity_key}")
-            return True
-        except sqlite3.IntegrityError:
-            return True
+        return True
 
 
 def unignore_camera(identity_key: str) -> bool:
