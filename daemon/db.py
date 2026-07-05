@@ -104,6 +104,19 @@ def _raise_if_duplicate_identity_keys(cursor: sqlite3.Cursor, table_name: str):
         raise RuntimeError(message)
 
 
+def _legacy_hardware_id_from_serial_identity(identity_key: str) -> Optional[str]:
+    """Return the legacy hardware ID form for a canonical serial identity key."""
+    prefix = "serial:"
+    if not identity_key.startswith(prefix):
+        return None
+
+    parts = identity_key.split(":", 2)
+    if len(parts) != 3 or not parts[1] or not parts[2]:
+        return None
+
+    return f"{parts[1]}-{parts[2]}"
+
+
 def init_db():
     """Initialize the database schema."""
     with get_connection() as conn:
@@ -338,6 +351,16 @@ def init_db():
         if "identity_key" not in ignored_columns:
             cursor.execute("ALTER TABLE ignored_cameras ADD COLUMN identity_key TEXT")
             logger.info("Added column identity_key to ignored_cameras")
+        cursor.execute("""
+            UPDATE ignored_cameras
+            SET identity_key = 'serial:' || hardware_name || ':' ||
+                substr(hardware_id, length(hardware_name) + 2)
+            WHERE (identity_key IS NULL OR identity_key = '')
+              AND hardware_name IS NOT NULL
+              AND hardware_name != ''
+              AND substr(hardware_id, 1, length(hardware_name) + 1) = hardware_name || '-'
+              AND substr(hardware_id, length(hardware_name) + 2) != ''
+        """)
         cursor.execute("""
             UPDATE ignored_cameras
             SET identity_key = hardware_id
@@ -782,14 +805,36 @@ def get_all_cameras_with_settings(connected_only: bool = False) -> List[Dict]:
 # ============ Ignored Cameras Functions ============
 
 def is_camera_ignored(identity_key: str) -> bool:
-    """Check if an identity key is in the ignore list."""
+    """Check if an identity key is in the ignore list.
+
+    During the Task 3 identity transition, daemon/routes may still pass a
+    legacy hardware_id, so fall back to legacy hardware_id compatibility.
+    """
     with get_connection() as conn:
         cursor = conn.cursor()
         cursor.execute(
             "SELECT id FROM ignored_cameras WHERE identity_key = ?",
             (identity_key,)
         )
-        return cursor.fetchone() is not None
+        if cursor.fetchone() is not None:
+            return True
+
+        cursor.execute(
+            "SELECT id FROM ignored_cameras WHERE hardware_id = ?",
+            (identity_key,)
+        )
+        if cursor.fetchone() is not None:
+            return True
+
+        cursor.execute("""
+            SELECT identity_key FROM ignored_cameras
+            WHERE identity_key LIKE 'serial:%'
+        """)
+        for row in cursor.fetchall():
+            if _legacy_hardware_id_from_serial_identity(row["identity_key"]) == identity_key:
+                return True
+
+        return False
 
 
 def ignore_camera(identity_key: str, hardware_name: str = None, reason: str = None) -> bool:
