@@ -1023,13 +1023,13 @@ def delete_camera(camera_id: int):
     also_ignore = request.form.get('also_ignore') == 'true'
 
     # Delete from database
-    success, deleted_hardware_id = delete_camera_completely(camera_id)
+    success, deleted_identity_key = delete_camera_completely(camera_id)
 
     if success:
         add_log("INFO", f"Deleted camera: {camera_name}")
 
-        if also_ignore and deleted_hardware_id:
-            ignore_camera(deleted_hardware_id, camera_name, "Deleted by user")
+        if also_ignore and deleted_identity_key:
+            ignore_camera(deleted_identity_key, camera_name, "Deleted by user")
             flash(f"Camera '{camera_name}' deleted and added to ignore list", "success")
         else:
             flash(f"Camera '{camera_name}' deleted", "success")

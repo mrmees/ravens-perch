@@ -198,24 +198,88 @@ class CameraIdentityDbTests(unittest.TestCase):
         ):
             db.init_db()
 
-    def test_old_create_camera_signature_with_serial_uses_serial_identity(self):
+    def test_old_create_camera_signature_with_serial_preserves_legacy_hardware_id(self):
         camera_id = db.create_camera(
-            "C270 HD WEBCAM",
+            "LegacyCam",
             "ABC123",
             device_path="/dev/video0",
         )
+
+        camera = db.get_camera_by_identity_key("serial:LegacyCam:ABC123")
+        self.assertEqual(camera["id"], camera_id)
+        self.assertEqual(camera["identity_key"], "serial:LegacyCam:ABC123")
+        self.assertEqual(camera["identity_strategy"], "serial")
+        self.assertEqual(camera["hardware_id"], "LegacyCam-ABC123")
+
+    def test_old_create_camera_signature_with_serial_can_be_found_by_legacy_hardware_id(self):
+        camera_id = db.create_camera(
+            "LegacyCam",
+            "ABC123",
+            device_path="/dev/video0",
+        )
+
+        camera = db.get_camera_by_hardware_id("LegacyCam-ABC123")
+        self.assertEqual(camera["id"], camera_id)
+        self.assertEqual(camera["identity_key"], "serial:LegacyCam:ABC123")
+
+    def test_old_create_camera_signature_with_serial_reconnect_preserves_settings(self):
+        camera_id = db.create_camera(
+            "LegacyCam",
+            "ABC123",
+            device_path="/dev/video0",
+        )
+        db.save_camera_settings(
+            camera_id,
+            {
+                "resolution": "1920x1080",
+                "framerate": 15,
+            },
+        )
+
         reconnected_id = db.create_camera(
-            "C270 HD WEBCAM",
+            "LegacyCam",
             "ABC123",
             device_path="/dev/video3",
         )
 
-        camera = db.get_camera_by_identity_key("serial:C270 HD WEBCAM:ABC123")
+        camera = db.get_camera_by_identity_key("serial:LegacyCam:ABC123")
+        settings = db.get_camera_settings(camera_id)
         self.assertEqual(reconnected_id, camera_id)
         self.assertEqual(camera["id"], camera_id)
-        self.assertEqual(camera["hardware_id"], "serial:C270 HD WEBCAM:ABC123")
+        self.assertEqual(camera["hardware_id"], "LegacyCam-ABC123")
         self.assertEqual(camera["identity_strategy"], "serial")
         self.assertEqual(camera["device_path"], "/dev/video3")
+        self.assertEqual(settings["resolution"], "1920x1080")
+        self.assertEqual(settings["framerate"], 15)
+
+    def test_create_camera_falls_back_to_hardware_id_after_legacy_unique_collision(self):
+        with db.get_connection() as conn:
+            cursor = conn.cursor()
+            cursor.execute(
+                """
+                INSERT INTO cameras (
+                    hardware_id, identity_key, identity_strategy, hardware_name,
+                    serial_number, friendly_name
+                )
+                VALUES (
+                    'LegacyCam-ABC123', 'legacy-row-before-identity-migration',
+                    'legacy', 'LegacyCam', 'ABC123', 'Legacy Camera'
+                )
+                """
+            )
+            existing_id = cursor.lastrowid
+            conn.commit()
+
+        camera_id = db.create_camera(
+            "LegacyCam",
+            "ABC123",
+            device_path="/dev/video2",
+        )
+
+        camera = db.get_camera_by_hardware_id("LegacyCam-ABC123")
+        self.assertEqual(camera_id, existing_id)
+        self.assertEqual(camera["id"], existing_id)
+        self.assertEqual(camera["device_path"], "/dev/video2")
 
     def test_old_create_camera_signature_without_serial_reconnects_legacy_identity(self):
         camera_id = db.create_camera(
@@ -306,6 +370,27 @@ class CameraIdentityDbTests(unittest.TestCase):
 
         self.assertTrue(db.is_camera_ignored("serial:C270 HD WEBCAM:ABC123"))
         self.assertFalse(db.is_camera_ignored("serial:C270 HD WEBCAM:OTHER"))
+
+    def test_delete_camera_completely_returns_identity_key_for_ignore_list(self):
+        self._create_pre_task3_cameras_table()
+        with sqlite3.connect(self.db_path) as conn:
+            conn.execute(
+                """
+                INSERT INTO cameras (hardware_id, hardware_name, serial_number, friendly_name)
+                VALUES ('LegacyCam-ABC123', 'LegacyCam', 'ABC123', 'Legacy Camera')
+                """
+            )
+            conn.commit()
+
+        db.init_db()
+        camera = db.get_camera_by_identity_key("serial:LegacyCam:ABC123")
+
+        success, deleted_identity_key = db.delete_camera_completely(camera["id"])
+        db.ignore_camera(deleted_identity_key, "LegacyCam", "Deleted by user")
+
+        self.assertTrue(success)
+        self.assertEqual(deleted_identity_key, "serial:LegacyCam:ABC123")
+        self.assertTrue(db.is_camera_ignored("serial:LegacyCam:ABC123"))
 
 
 if __name__ == "__main__":

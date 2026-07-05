@@ -407,10 +407,13 @@ def create_camera(hardware_name: str, serial_number: Optional[str],
         if serial_number:
             identity_key = f"serial:{hardware_name}:{serial_number}"
             identity_strategy = "serial"
+            hardware_id = f"{hardware_name}-{serial_number}"
         else:
             identity_key = hardware_name
             identity_strategy = "legacy"
-    hardware_id = identity_key
+            hardware_id = hardware_name
+    else:
+        hardware_id = identity_key
     if reported_serial_number is None:
         reported_serial_number = serial_number
     if not friendly_name:
@@ -436,7 +439,16 @@ def create_camera(hardware_name: str, serial_number: Optional[str],
         if cursor.rowcount == 0:
             # Camera already exists, get its ID
             cursor.execute("SELECT id FROM cameras WHERE identity_key = ?", (identity_key,))
-            camera_id = cursor.fetchone()[0]
+            row = cursor.fetchone()
+            if row is None:
+                cursor.execute("SELECT id FROM cameras WHERE hardware_id = ?", (hardware_id,))
+                row = cursor.fetchone()
+            if row is None:
+                raise RuntimeError(
+                    f"Camera insert was ignored but no existing camera matched "
+                    f"identity_key={identity_key!r} or hardware_id={hardware_id!r}"
+                )
+            camera_id = row[0]
             # Update connection status
             cursor.execute("""
                 UPDATE cameras
@@ -820,13 +832,14 @@ def delete_camera_completely(camera_id: int) -> Tuple[bool, Optional[str]]:
     """
     Delete a camera and all related data completely.
 
-    Returns: (success, hardware_id) - hardware_id for optional ignore list
+    Returns: (success, identity_key) - identity key for optional ignore list.
+    Falls back to hardware_id for rows without identity_key.
     """
     camera = get_camera_by_id(camera_id)
     if not camera:
         return False, None
 
-    hardware_id = camera.get('hardware_id')
+    identity_key = camera.get('identity_key') or camera.get('hardware_id')
 
     with get_connection() as conn:
         cursor = conn.cursor()
@@ -835,8 +848,8 @@ def delete_camera_completely(camera_id: int) -> Tuple[bool, Optional[str]]:
         conn.commit()
 
         if cursor.rowcount > 0:
-            logger.info(f"Deleted camera {camera_id} ({hardware_id})")
-            return True, hardware_id
+            logger.info(f"Deleted camera {camera_id} ({identity_key})")
+            return True, identity_key
         return False, None
 
 
