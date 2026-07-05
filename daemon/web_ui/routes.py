@@ -11,7 +11,7 @@ from flask import (
 
 from ..db import (
     get_all_cameras, get_all_cameras_with_settings,
-    get_camera_with_settings, get_camera_by_id, get_camera_by_hardware_id,
+    get_camera_with_settings, get_camera_by_id, get_camera_by_identity_key,
     update_camera, save_camera_settings, get_camera_settings,
     get_camera_capabilities, get_logs, get_all_settings,
     set_setting, add_log, delete_camera_completely, delete_all_cameras,
@@ -36,7 +36,7 @@ from ..camera_manager import (
     get_v4l2_controls, set_v4l2_control, get_v4l2_control_value,
     add_rejected_camera, get_rejected_cameras, find_closest_resolution
 )
-from ..camera_identity import IDENTITY_USB_PATH
+from ..camera_identity import IDENTITY_SERIAL, IDENTITY_USB_PATH, resolve_device_identities
 from ..bandwidth import get_camera_bandwidth_stats
 from ..usb_topology import get_shared_usb2_camera_warnings
 from ..print_status import get_monitor as get_print_monitor
@@ -517,31 +517,37 @@ def scan_cameras():
     """Scan for and add connected cameras."""
     try:
         devices = find_video_devices()
+        device_infos = []
+        for device_path in devices:
+            device_info = get_device_info(device_path)
+            if device_info:
+                device_infos.append(device_info)
+
+        resolved_devices = resolve_device_identities(device_infos)
         added = 0
         updated = 0
 
-        for device_path in devices:
-            device_info = get_device_info(device_path)
-            if not device_info:
+        for resolved_device in resolved_devices:
+            device_info = resolved_device.device
+            device_path = device_info.path
+
+            if resolved_device.is_rejected or not resolved_device.identity_key:
+                add_rejected_camera(
+                    device_path=device_path,
+                    hardware_name=device_info.hardware_name,
+                    hardware_id=device_info.hardware_id,
+                    reason=resolved_device.rejection_reason or "Unsupported camera",
+                )
                 continue
 
-            # Check if camera is ignored
-            if is_camera_ignored(device_info.hardware_id):
+            if (
+                resolved_device.identity_strategy == IDENTITY_SERIAL
+                and is_camera_ignored(resolved_device.identity_key)
+            ):
                 continue
 
-            # Check if camera already exists
-            existing = get_camera_by_hardware_id(device_info.hardware_id)
+            existing = get_camera_by_identity_key(resolved_device.identity_key)
             if existing:
-                if existing['connected'] and existing['device_path'] != device_path:
-                    add_rejected_camera(
-                        device_path=device_path,
-                        hardware_name=device_info.hardware_name,
-                        hardware_id=device_info.hardware_id,
-                        reason="Duplicate camera - no unique serial number",
-                        existing_camera_id=existing['id']
-                    )
-                    continue
-
                 # Update connection status
                 mark_camera_connected(existing['id'], device_path)
                 capabilities = probe_capabilities(device_path)
@@ -576,7 +582,13 @@ def scan_cameras():
             camera_id = create_camera(
                 hardware_name=device_info.hardware_name,
                 serial_number=device_info.serial_number,
-                device_path=device_path
+                friendly_name=resolved_device.friendly_name,
+                device_path=device_path,
+                identity_key=resolved_device.identity_key,
+                identity_strategy=resolved_device.identity_strategy,
+                by_path=device_info.by_path,
+                by_id=device_info.by_id,
+                reported_serial_number=device_info.serial_number,
             )
 
             # Save settings and capabilities

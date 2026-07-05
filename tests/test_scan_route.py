@@ -14,7 +14,10 @@ class ScanRouteTests(unittest.TestCase):
             path="/dev/video2",
             hardware_name="USB Camera",
             serial_number="abc",
-            hardware_id="usb:abc",
+            hardware_id="USB Camera-abc",
+            real_path="/dev/video2",
+            by_path="/dev/v4l/by-path/pci-1-index0",
+            by_id="/dev/v4l/by-id/usb-camera-index0",
         )
 
         with (
@@ -26,6 +29,11 @@ class ScanRouteTests(unittest.TestCase):
             patch("daemon.web_ui.routes.is_camera_ignored", return_value=False),
             patch(
                 "daemon.web_ui.routes.get_camera_by_hardware_id",
+                side_effect=AssertionError("scan must use identity-key lookup"),
+                create=True,
+            ),
+            patch(
+                "daemon.web_ui.routes.get_camera_by_identity_key",
                 return_value={
                     "id": 4,
                     "connected": False,
@@ -33,6 +41,7 @@ class ScanRouteTests(unittest.TestCase):
                     "friendly_name": "USB Camera",
                     "enabled": True,
                 },
+                create=True,
             ),
             patch("daemon.web_ui.routes.mark_camera_connected"),
             patch(
@@ -80,6 +89,73 @@ class ScanRouteTests(unittest.TestCase):
             SimpleNamespace(effective_state="standby"),
         )
         self.assertEqual(recorded_framerates, [(4, 5)])
+
+    def test_scan_adds_two_same_model_no_serial_cameras_by_usb_path(self):
+        app = create_app()
+
+        def device(path, by_path):
+            return SimpleNamespace(
+                path=path,
+                hardware_name="C270 HD WEBCAM",
+                serial_number=None,
+                hardware_id="C270 HD WEBCAM",
+                real_path=path,
+                by_path=by_path,
+                by_id=None,
+            )
+
+        created = []
+
+        def create_camera(**kwargs):
+            created.append(kwargs)
+            return len(created)
+
+        with (
+            app.test_request_context("/cameras/scan", method="POST"),
+            patch("daemon.web_ui.routes.find_video_devices", return_value=["/dev/video0", "/dev/video2"]),
+            patch(
+                "daemon.web_ui.routes.get_device_info",
+                side_effect=[
+                    device("/dev/video0", "/dev/v4l/by-path/pci-1-index0"),
+                    device("/dev/video2", "/dev/v4l/by-path/pci-2-index0"),
+                ],
+            ),
+            patch("daemon.web_ui.routes.probe_capabilities", return_value={"mjpeg": {"640x480": [30]}}),
+            patch("daemon.web_ui.routes.is_camera_ignored", return_value=False),
+            patch(
+                "daemon.web_ui.routes.get_camera_by_hardware_id",
+                side_effect=AssertionError("scan must use identity-key lookup"),
+                create=True,
+            ),
+            patch("daemon.web_ui.routes.get_camera_by_identity_key", return_value=None, create=True),
+            patch("daemon.web_ui.routes.create_camera", side_effect=create_camera),
+            patch("daemon.web_ui.routes.save_camera_settings"),
+            patch("daemon.web_ui.routes.save_camera_capabilities"),
+            patch("daemon.web_ui.routes.auto_configure", return_value={"framerate": 30}),
+            patch("daemon.web_ui.routes.get_all_cameras", return_value=[]),
+            patch("daemon.web_ui.routes._start_camera_from_route", return_value=(True, None)),
+            patch("daemon.web_ui.routes.get_camera_by_id", return_value={"friendly_name": "USB: C270 HD WEBCAM"}),
+            patch("daemon.web_ui.routes._register_camera_with_moonraker"),
+            patch("daemon.web_ui.routes.add_log"),
+            patch("daemon.web_ui.routes.flash"),
+            patch("daemon.web_ui.routes.redirect", return_value="redirected"),
+            patch("daemon.web_ui.routes.url_for", return_value="/cameras/"),
+        ):
+            response = routes.scan_cameras()
+
+        self.assertEqual(response, "redirected")
+        self.assertEqual(len(created), 2)
+        self.assertEqual(
+            [camera["identity_key"] for camera in created],
+            [
+                "usb-path:C270 HD WEBCAM:pci-1-index0",
+                "usb-path:C270 HD WEBCAM:pci-2-index0",
+            ],
+        )
+        self.assertEqual(
+            [camera["friendly_name"] for camera in created],
+            ["USB: C270 HD WEBCAM", "USB: C270 HD WEBCAM"],
+        )
 
     def test_ignore_camera_route_ignores_migrated_serial_camera_by_identity_key(self):
         app = create_app()
